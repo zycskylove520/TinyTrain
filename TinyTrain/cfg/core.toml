@@ -1,0 +1,51 @@
+# 查看每个参数的使用限制，请查看cfg/config_checker.py
+
+#------------------------------------------base-------------------------------------------
+project_name = ""
+task = "detect" # (str) YOLO task, i.e. detect, segment, classify, pose, obb
+save_dir = "runs"
+
+#------------------------------------------Train settings----------------------------------
+epochs = 10
+batch_size = 32
+device = 0
+workers = 2
+resume = false
+amp = true
+accumulate = 4
+patience = 50
+save_period = 0
+time = 0
+seed = 0
+deterministic = false
+ema = true  # 是否保存ema模型，true将启用ema模型，并在训练结束后保存ema模型
+shuffle_val_dataloader = true  # 是否打乱验证数据集，这在绘制验证图片结果时有效
+launch_tb = true  # 是否启动tensorboard可视化训练过程
+grad_clip = 10   # 梯度裁剪阈值
+bf16 = true  # 是否使用bfloat16精度进行训练
+only_val=false   # 不训练只做验证
+
+#------------------------------------------validation settings----------------------------------
+conf_threshold = 0.001
+nms_threshold = 0.7
+
+#------------------------------------------Hyperparameters------------------------------------------
+# optimizer
+optimizer = "SGD"
+scheduler = "LinearLR"
+lr0 = 0.001  # 初始学习率
+lr1 = 0.01 # 最终学习率=lr1*lr0
+warmup_lr = 0.0001
+warmup_epochs = 3
+l1_norm = 0  # L1正则化
+momentum = 0.99
+weight_decay = 0.0005
+
+#------------------------------------------DDP settings----------------------------------
+master_addr = "127.0.0.1"
+master_port = 29500
+nodes = 1
+node_rank = 0
+
+
+

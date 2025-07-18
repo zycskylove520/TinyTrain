@@ -1,0 +1,13 @@
+img_size = 640
+cache = true
+
+path = "datasets/firework"
+train = "images/train"
+val = "images/val"
+test = ""
+
+nc = 3
+[names]
+0 = "人"
+1 = "药桶"
+2 = "药饼"

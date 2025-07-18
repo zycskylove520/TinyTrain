@@ -1,0 +1,6 @@
+core = "cfg\\core\\core.toml"
+model = "cfg\\model\\11\\yolo11-det.toml"
+loss = "cfg\\loss\\loss-det.toml"
+dataset = "cfg\\dataset\\my_dataset-det.toml"
+augment = "cfg\\augment\\augment-det.toml"
+export = "cfg\\export\\export.toml"

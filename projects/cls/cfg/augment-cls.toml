@@ -1,0 +1,23 @@
+rgb = true
+img_crop_fraction = 1  # 有bug，会影响验证集的速度
+
+# ColorJitter
+hsv_h = 0.5
+hsv_s = 0.0
+hsv_v = 0.0
+color_jitter = 0.5
+
+# Normalize
+mean = 0
+std = 1
+
+# RandomResizedCrop
+scale = [0.08, 1.0]
+ratio = [0.75, 1.33]
+
+# Flip
+hflip = 0.0
+vflip = 0.0
+
+# Erasing
+erasing = 0.0

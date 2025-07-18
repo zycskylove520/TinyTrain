@@ -1,0 +1,114 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+"""Model head modules."""
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from .conv import Conv, DWConv
+from ..utils.tal import make_anchors, dist2bbox
+
+
+class Classify(nn.Module):
+    """YOLO classification head, i.e. x(b,c1,20,20) to x(b,c2)."""
+
+    def __init__(self, in_channels, nc, kernel_size=1, stride=1, padding=None, groups=1):
+        """Initializes YOLO classification head to transform input tensor from (b,c1,20,20) to (b,c2) shape."""
+        super().__init__()
+        c_ = 1280  # efficientnet_b0 size
+        self.conv = Conv(in_channels, c_, kernel_size, stride, padding, groups)
+        self.pool = nn.AdaptiveAvgPool2d(1)  # to x(b,c_,1,1)
+        self.drop = nn.Dropout(p=0.0, inplace=True)
+        self.linear = nn.Linear(c_, nc)  # to x(b,c2)
+
+    def forward(self, x):
+        """Performs a forward pass of the YOLO model_config on input image data."""
+        if isinstance(x, list):
+            x = torch.cat(x, 1)
+        x = self.linear(self.drop(self.pool(self.conv(x)).flatten(1)))
+
+        if not self.training:
+            x = self.inference(x)
+
+        return x
+
+    def inference(self, x):
+        x = F.softmax(x, dim=1)
+        return x
+
+
+class YOLODetect(nn.Module):
+    """YOLO detection head."""
+    # anchors = torch.empty(0)  # init
+    # strides = torch.empty(0)  # init
+
+    def __init__(self, nc, from_channels: list):
+        """
+        @param nc: 输出类别个数
+        @param from_channels: 接受的输入通道列表
+        """
+        super().__init__()
+        self.nc = nc
+        self.from_channels = from_channels
+        self.reg_max = 16  # DFL channels (ch[0] // 16 to scale 4/8/12/16/20 for n/s/m/l/x)
+        self.no = self.nc + self.reg_max * 4  # number of outputs per anchor
+        self.proj = torch.arange(self.reg_max, dtype=torch.float)
+
+        c2, c3 = max((16, from_channels[0] // 4, self.reg_max * 4)), max(from_channels[0], min(self.nc, 100))  # channels
+
+        # cv2用于DFLoss和IOULoss计算
+        self.cv2 = nn.ModuleList(
+            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1))
+            for x in from_channels
+        )
+        # cv3用于类别损失计算
+        self.cv3 = nn.ModuleList(
+            nn.Sequential(
+                nn.Sequential(DWConv(x, x, 3), Conv(x, c3, 1)),
+                nn.Sequential(DWConv(c3, c3, 3), Conv(c3, c3, 1)),
+                nn.Conv2d(c3, self.nc, 1),
+            )
+            for x in from_channels
+        )
+
+        self.bias_init()
+
+    def forward(self, x: list[torch.Tensor]):
+        """
+        训练模式返回的shape为：[batch,
+        """
+        for i, (cv2_module, cv3_module) in enumerate(zip(self.cv2, self.cv3)):
+            x[i] = torch.cat((cv2_module(x[i]), cv3_module(x[i])), 1)
+
+        if self.training:
+            return x
+        x = self.inference(x)
+        return x
+
+
+    def inference(self, x: list[torch.Tensor]):
+        # inference模式下，bboxes已解码
+
+        # 解码锚框,self.stride是在构建模型时添加的属性，详见TinyTrain\models\yolo\detect\model中的__init__函数
+        anchors, strides = make_anchors(x, self.stride)
+
+        shape = x[0].shape  # BCHW
+        x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
+        box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
+        box = box.permute(0, 2, 1).contiguous()
+        cls = cls.permute(0, 2, 1).contiguous()
+        b, a, c = box.shape  # batch, anchors, channels
+        # [batch, num_anchors, 4]
+        pred_dist = box.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.view(-1, 1).to(box.device)).squeeze(-1)
+        decode_box = dist2bbox(pred_dist, anchors, xywh=True, dim=-1) * strides  # [batch, num_anchors, 4]
+        # decode_box为cxcywh格式
+        return torch.cat((decode_box, cls.sigmoid()), -1)
+
+    def bias_init(self):
+        """Initialize Detect() biases, WARNING: requires stride availability."""
+        # 如果不做bias初始化，输出的cls loss会非常大，这会导致反向传播让权重参数迅速归0的问题
+        # cf = torch.bincount(torch.tensor(np.concatenate(dataset.labels, 0)[:, 0]).long(), minlength=nc) + 1
+        # ncf = math.log(0.6 / (m.nc - 0.999999)) if cf is None else torch.log(cf / cf.sum())  # nominal class frequency
+        for a, b, s in zip(self.cv2, self.cv3, [8, 16, 32]):  # from
+            a[-1].bias.data[:] = 1.0  # box
+            b[-1].bias.data[: self.nc] = math.log(5 / self.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
