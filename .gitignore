@@ -4,6 +4,7 @@
 # 忽略特定目录
 dist/
 datasets/
+tinytrain.egg-info/
 
 # 忽略特定类型的文件
 .env
