@@ -35,6 +35,7 @@ yolo = YOLOCore(r"link.toml")
 # 配置core相关参数
 yolo.set_config_overrides(link_type="core",
                           epochs=10,
+                          # resume=False, 恢复训练
                           # device=[0,1]  支持多卡训练
                           )
 # 配置dataset相关参数
@@ -42,7 +43,10 @@ yolo.set_config_overrides(
         link_type="dataset",
         img_size=640
     )
+# 直接训练
 yolo.train(model_scale='n')
+# 使用pt文件进行训练,如果设置了resume为True，则为恢复训练
+yolo.train(model_scale="n", model="xxx.pt")
 ```
 所有 AI 训练配置均通过 link.toml 文件指定，可从该文件访问所有可配置参数，并可通过 set_config_overrides 函数进行覆盖。若未指定训练结果目录，则默认生成在当前脚本执行的 runs 目录下。
 
