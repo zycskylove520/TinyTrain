@@ -529,10 +529,10 @@ def modify_category(source_label_folder, target_label_folder, category_mapping):
 
 
 if __name__ == '__main__':
-    image_folder = r"E:\coco\coco-detection-yolo\images\train"  # 原始图片目录
-    label_folder = r"E:\coco\coco-detection-yolo\labels\train"  # 原始标签目录
-    new_image_folder = r"E:\coco\yolo_train\images"
-    new_label_folder = r"E:\coco\yolo_train\labels"
+    image_folder = r"D:\project\python_code\TinyTrain-main\datasets\fire\images"  # 原始图片目录
+    label_folder = r"D:\project\python_code\TinyTrain-main\datasets\fire\labels"  # 原始标签目录
+    # new_image_folder = r"E:\coco\yolo_train\images"
+    # new_label_folder = r"E:\coco\yolo_train\labels"
 
     # 设置类别映射，键为原始类别索引，值为目标类别索引
     category_mapping = {
@@ -542,8 +542,8 @@ if __name__ == '__main__':
     }
     # modify_category(label_folder, new_label_folder, category_mapping)
     # count_label_types(new_label_folder)
-    select_assign_label_img(image_folder, label_folder, new_image_folder, new_label_folder, [0, 1, 2, 3, 5, 7])
+    # select_assign_label_img(image_folder, label_folder, new_image_folder, new_label_folder, [0, 1, 2, 3, 5, 7])
     # rename_and_move_files(image_folder, label_folder, new_image_folder, new_label_folder)
     # remove_extra(image_folder,label_folder)
-    # split_dataset(image_folder, label_folder, r"E:\DownLoad\火灾数据集\news", split_ratios=[0.8,0.2,0.0])
+    split_dataset(image_folder, label_folder, r"D:\project\python_code\TinyTrain-main\datasets\fire\sss", split_ratios=[0.8,0.2,0.0])
     # count_boxes(label_folder)

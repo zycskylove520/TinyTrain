@@ -297,6 +297,7 @@ class TTClassificationDataset(ImageFolder):
         return len(self.samples)
 
     def init(self):
+        self.check_class_names()
         self.img_size = self.config_manager.dataset["img_size"] = check_img_size(self.img_size)
         self.samples = self.check_images()
 
