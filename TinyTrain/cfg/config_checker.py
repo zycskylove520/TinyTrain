@@ -1,10 +1,8 @@
 from pathlib import Path
 from typing import Literal, List
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel
 
-from TinyTrain.utils import LOGGER
-from TinyTrain.utils.checks import check_file
 
 
 class CoreConfig(BaseModel):

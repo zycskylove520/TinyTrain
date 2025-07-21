@@ -3,7 +3,6 @@ import torch
 from torch import nn
 
 from TinyTrain.data.data_format import ClassifyBatchDataInfo, DetectBatchDataInfo
-from TinyTrain.global_var import RANK
 from TinyTrain.loss.subloss import BboxLossWithDFL
 from TinyTrain.utils.box_utils import cxcywh_2_lxlyrxry
 from TinyTrain.utils.tal import TaskAlignedAssigner, make_anchors, dist2bbox

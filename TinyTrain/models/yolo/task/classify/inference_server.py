@@ -9,4 +9,4 @@ class YOLOClassificationOnnxInferenceServer(BaseOnnxInferenceServer):
         data = data.to("cpu").numpy()
         ort_inputs = {self.ort_session.get_inputs()[0].name: data}
         ort_outs: list = self.ort_session.run(None, ort_inputs)
-        return [torch.tensor(x) for x in ort_outs]
+        return torch.tensor(ort_outs[0])

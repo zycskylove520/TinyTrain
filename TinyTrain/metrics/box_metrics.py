@@ -7,8 +7,6 @@ import matplotlib.pyplot as plt
 
 from pathlib import Path
 
-from TinyTrain.utils import LOGGER
-
 
 class BoxMetrics:
     def __init__(self,

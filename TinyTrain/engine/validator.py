@@ -7,7 +7,6 @@ from TinyTrain.data.data_format import BaseBatchDataInfo
 
 from TinyTrain.utils.TT_progress_bar import TTProgressBar
 from TinyTrain.cfg.config_manager import ConfigManager
-from ..global_var import RANK
 
 if TYPE_CHECKING:
     from .trainer import BaseTrainer
