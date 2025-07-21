@@ -21,10 +21,9 @@ class YOLODetectionPredictor(BasePredictor):
                  model,
                  callback,
                  backend_map=None,
-                 img_shape: tuple[int, int] | None = None,
                  **kwargs):
         super().__init__(config_manager, model, callback, backend_map, **kwargs)
-        self.img_shape = img_shape
+        self.img_shape = kwargs.get("img_shape")
 
         # 注册解析器可以在 __init__ 里做，也可以放到首次调用时懒加载
         self.register_parsers()

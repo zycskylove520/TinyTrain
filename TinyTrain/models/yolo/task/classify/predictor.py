@@ -21,11 +21,10 @@ class YOLOClassificationPredictor(BasePredictor):
                  model,
                  callback,
                  backend=None,
-                 img_shape: tuple[int, int] | None = None,
                  **kwargs
                  ):
         super().__init__(config_manager=config_manager, model=model, callback=callback, backend=backend, **kwargs)
-        self.img_shape = img_shape
+        self.img_shape = kwargs.get("img_shape")
 
         # ---------- 注册专用解析器 ----------
         SourceParserHub.register("jpg", ImageParser)
