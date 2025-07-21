@@ -20,11 +20,11 @@ class YOLOClassificationPredictor(BasePredictor):
                  config_manager,
                  model,
                  callback,
-                 backend_map=None,
+                 backend=None,
                  img_shape: tuple[int, int] | None = None,
                  **kwargs
                  ):
-        super().__init__(config_manager, model, callback, backend_map, **kwargs)
+        super().__init__(config_manager=config_manager, model=model, callback=callback, backend=backend, **kwargs)
         self.img_shape = img_shape
 
         # ---------- 注册专用解析器 ----------

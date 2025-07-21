@@ -210,6 +210,7 @@ class Core:
 
         # 场景 3：直接推理后端文件（onnx、engine、tensorrt...）
         if backend is not None:
+            self.task = self.config_manager.core["task"]
             self.predictor = TTRegistry.get(self.task, "predictor")(
                 config_manager=self.config_manager,
                 model=model_path,  # 直接把文件路径传进去

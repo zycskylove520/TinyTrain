@@ -9,8 +9,8 @@ from ...utils import LOGGER
 
 
 class BaseOnnxInferenceServer(BaseInferenceServer):
-    def __init__(self, model_file, **kwargs):
-        super().__init__(model_file)
+    def __init__(self, model_file, device, **kwargs):
+        super().__init__(model_file, device)
         self.prepare()
         # 创建onnxruntime session
         self.ort_session = ort.InferenceSession(self.model_file)
