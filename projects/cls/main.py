@@ -6,24 +6,25 @@ def train(model):
     model.set_config_overrides(
         link_type="core",
         warmup_epochs=0,
-        epochs=1,
+        epochs=2,
         batch_size=16,
         lr0=0.01,
         lr1=0.01,
-        scheduler="auto",
+        scheduler="auto"
     )
 
     model.set_config_overrides(
         link_type="dataset",
         cache=False,
     )
-    model.train(model_scale='n', use_last_pt=False)
+    model.train(model_scale='n')
 
 
 def predict(model):
     results = model.predict(
-        use_last_pt=True,
-        source=r"D:\project\python_code\TinyTrain-main\datasets\firework\images\val\2f730a7b97ef51dcbba8fe15aee67092.jpg",
+        backend="onnx",
+        model=r"model.onnx",
+        source=r"mnist\val\0\3.png",
         img_shape=(32,32)
     )
     for result in results:
@@ -32,7 +33,7 @@ def predict(model):
 
 def export(model):
     model.export(
-        use_last_pt=True,
+        use_best_pt=True,
         backend="onnx",
         input_shapes=[(1, 3, 32, 32)],
         # jit_export=True
@@ -41,6 +42,6 @@ def export(model):
 
 if __name__ == '__main__':
     yolo = YOLOCore(link_file=r"link.toml")
-    train(yolo)
-    # predict(yolo)
+    # train(yolo)
+    predict(yolo)
     # export(yolo)

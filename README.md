@@ -76,7 +76,7 @@ yolo = YOLOCore(r"link.toml")
 # 指定pt文件进行推理
 results =yolo.predict(source=r"xxx.jpg", model=r"xxx.pt")
 # 使用最新训练的pt文件进行推理
-results =yolo.predict(source=r"xxx.jpg", use_last_pt=True)
+results =yolo.predict(source=r"xxx.jpg", use_best_pt=True)
 ```
 
 3. 使用onnx文件进行推理
@@ -104,7 +104,7 @@ yolo = YOLOCore(r"link.toml")
 
 # 导出onnx
 yolo.export(
-        use_last_pt=True,
+        use_best_pt=True,
         backend="onnx",
         input_shapes=[(1, 3, 640, 640)],
         # jit_export=True  # 支持jit导出

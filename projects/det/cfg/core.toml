@@ -2,7 +2,7 @@
 
 #------------------------------------------base-------------------------------------------
 project_name = ""
-task = "classify" # (str)  detect, segment, classify, pose, obb
+task = "detect" # (str)  detect, segment, classify, pose, obb
 save_dir = "runs"
 
 #------------------------------------------Train settings----------------------------------

@@ -4,4 +4,3 @@ loss = "cfg\\loss-cls.toml"
 dataset = "cfg\\my_dataset-cls.toml"
 augment = "cfg\\augment-cls.toml"
 export = "cfg\\export.toml"
-
