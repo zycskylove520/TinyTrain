@@ -94,10 +94,10 @@ class Core:
         LOGGER.info("Training completed. Waiting for garbage collection...")
         gc.collect()
 
-    def predict(self, source, model: str | Path | None = None, backend: str | None = None, use_last_pt=False, **kwargs) -> Generator[Any, None, None]:
+    def predict(self, source, model: str | Path | None = None, backend: str | None = None, use_best_pt=False, **kwargs) -> Generator[Any, None, None]:
         # find last pt file
-        if use_last_pt and model is None:
-            model = self._find_last_pt_file()
+        if use_best_pt and model is None:
+            model = self._find_best_pt_file()
 
         # bind predictor
         self._bind_predictor(model, backend, **kwargs)
@@ -105,10 +105,10 @@ class Core:
         # predict
         yield from self.predictor.predict(source)
 
-    def export(self, backend: str, model: str | Path | None = None, export_dir=None, use_last_pt=False, **kwargs):
+    def export(self, backend: str, model: str | Path | None = None, export_dir=None, use_best_pt=False, **kwargs):
         # find last pt file
-        if use_last_pt and model is None:
-            model = self._find_last_pt_file()
+        if use_best_pt and model is None:
+            model = self._find_best_pt_file()
 
         # bind predictor
         self._bind_exporter(backend=backend, model=model, **kwargs)
@@ -285,5 +285,34 @@ class Core:
         if pt_model is None:
             raise FileNotFoundError(
                 f"在 {task_dir} 及其子目录中均未找到可用的 last.pt"
+            )
+        return pt_model
+
+    def _find_best_pt_file(self):
+        save_dir = Path(self.config_manager.core["save_dir"]).resolve()
+        project_name = self.config_manager.core["project_name"]
+        if project_name == "":
+            project_name = self.config_manager.core["project_name"] = "default_project"
+
+        task_dir = save_dir / project_name / self.config_manager.core["task"]
+        if not task_dir.exists():
+            raise FileNotFoundError(f"{task_dir} 不存在，无法加载 best.pt")
+        # 按时间升序排列所有 run 目录（可根据需要改成按名称排序）
+        run_dirs = sorted(
+            [d for d in task_dir.iterdir() if d.is_dir()],
+            key=lambda d: d.stat().st_mtime,  # 也可以改为按目录名排序
+            reverse=True  # 最新的在前
+        )
+
+        pt_model = None
+        for run_dir in run_dirs:
+            candidate = run_dir / "weights" / "best.pt"
+            if candidate.exists() and candidate.is_file():
+                pt_model = candidate
+                break
+
+        if pt_model is None:
+            raise FileNotFoundError(
+                f"在 {task_dir} 及其子目录中均未找到可用的 best.pt"
             )
         return pt_model

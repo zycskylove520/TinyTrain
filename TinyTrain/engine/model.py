@@ -1,5 +1,4 @@
 import os
-
 import torch
 
 from torch import nn
@@ -9,6 +8,7 @@ from TinyTrain.cfg.config_manager import ConfigManager
 from TinyTrain.data.data_format import BaseBatchDataInfo
 from TinyTrain.utils import LOGGER
 
+from TinyTrain.modules import *
 
 class BaseModel(nn.Module):
     """The BaseModel class serves as a base class for all the models."""
@@ -236,7 +236,7 @@ class BaseModel(nn.Module):
         LOGGER.info(f"start parse model...")
         print(f'model scale:{scale},'
               f' depth:{scale_info["depth"]},'
-              f' width:{scale_info["width"]}.')
+              f' width:{scale_info.get("width", None)}.')
         print(f"{self.__class__.__name__} struct:")
         print(
             f'|{'layer':^{align_len["layer"]}}'
