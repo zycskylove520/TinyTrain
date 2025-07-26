@@ -1,14 +1,15 @@
 import os
+
 import torch
 
 from torch import nn
 from copy import deepcopy
+from queue import Queue
 
 from TinyTrain.cfg.config_manager import ConfigManager
 from TinyTrain.data.data_format import BaseBatchDataInfo
 from TinyTrain.utils import LOGGER
 
-from TinyTrain.modules import *
 
 class BaseModel(nn.Module):
     """The BaseModel class serves as a base class for all the models."""
@@ -30,10 +31,53 @@ class BaseModel(nn.Module):
             return self.inference(data, **kwargs)
 
     def inference(self, data, **kwargs):
+        # 检查输入是否为多输入（list 或 tuple）
+        if isinstance(data, (list, tuple)):
+            inputs = {index: item for index, item in enumerate(data)}
+        else:
+            inputs = {0: data}
+        inputs_idx = 0
+        entry_idx_mapping = dict()
+
         outputs: list[torch.Tensor] = []  # 存放模型推理最终的输出
         for i, layer in enumerate(self.module_list):
             try:
+                # 拿到第i层的info
                 record_info = self.record_list[i]
+
+                # entry层特殊部分
+                if record_info["type"] == "entry":
+                    try:
+                        entry_idx_mapping[i] = inputs_idx
+                    except KeyError as e:
+                        LOGGER.error(f"model input num != entry num, inputs num: {len(inputs)}, entry num: {inputs_idx}")
+                        raise e
+                    inputs_idx += 1
+
+                    if len(record_info["from"]) == 1:
+                        rf = record_info["from"][0]
+                        assert rf == -1, f"if entry type from_list only have one element, must be -1."
+                        # 拿对应的input的输入数据
+                        data = layer(inputs[entry_idx_mapping[i]])
+                    elif len(record_info["from"]) > 1:
+                        rfs = record_info["from"]
+                        for rf in [j for j in rfs if j != -1]:
+                            assert rf in self.ask_set, f"from index {rf} not found in ask_set {sorted(self.ask_set)}"
+                        temp_list: list = []
+                        for rf in rfs:
+                            if rf != -1:
+                                temp_list.append(self.record_list[rf]["data"])
+                            else:
+                                temp_list.append(inputs[entry_idx_mapping[i]])
+                        data = layer(temp_list)
+                    else:
+                        raise ValueError(f"from length must >=1.")
+
+                    if i in self.ask_set:
+                        self.record_list[i]["data"] = data  # add new key-value to record_list
+
+                    continue
+
                 if len(record_info["from"]) == 1:
                     rf = record_info["from"][0]
                     if rf == -1:
@@ -46,29 +90,15 @@ class BaseModel(nn.Module):
                     for rf in [j for j in rfs if j != -1]:
                         assert rf in self.ask_set, f"from index {rf} not found in ask_set {sorted(self.ask_set)}"
 
-                    # concat module or combine or add combine
-                    if (
-                            record_info["module"] == "Concat" or
-                            record_info["module"] == "Combine" or
-                            record_info["module"] == "Add"
-                    ):
-                        # concat做的是channel维度的拼接
-                        # concat操作必须按照from列表的顺序来concat
-                        temp_list: list = []
-                        for rf in rfs:
-                            if rf != -1:
-                                temp_list.append(self.record_list[rf]["data"])
-                            else:
-                                temp_list.append(data)
-                        data = layer(temp_list)
-                    # sum operator 等价于 add module
-                    else:
-                        if -1 in rfs:
-                            # 注意这里要求output的维度和data的维度一致
-                            data = layer(data + sum([self.record_list[j]["data"] for j in rfs if j != -1]))
+                    temp_list: list = []
+                    for rf in rfs:
+                        if rf != -1:
+                            temp_list.append(self.record_list[rf]["data"])
                         else:
-                            # 注意这里要求output的维度要一致
-                            data = layer(sum([self.record_list[j]["data"] for j in rfs]))
+                            temp_list.append(data)
+                    data = layer(temp_list)
+                else:
+                    raise ValueError(f"from length must >=1.")
 
                 if record_info["type"] == "head":
                     outputs.append(data)
@@ -157,8 +187,6 @@ class BaseModel(nn.Module):
                 if level == 0:
                     assert _type == "entry", f"level_0: {_module} 'type' must be 'entry'"
                     _from = [-1]
-                else:
-                    assert _type != "entry", f"level_{level}: {_module} 'type' cannot be 'entry'"
 
                 if _type == "entry":  # entry层
                     # 子类可定制

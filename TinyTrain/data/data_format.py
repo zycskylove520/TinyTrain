@@ -58,6 +58,7 @@ class ImgDataInfo(BaseDataInfo):
     """
 
     def __init__(self,
+                 frame_id: int | None = None,
                  img: np.ndarray | None = None,
                  origin_shape: tuple[int, int] | None = None,
                  current_shape: tuple[int, int] | None = None,
@@ -71,6 +72,7 @@ class ImgDataInfo(BaseDataInfo):
         """
         初始化基础图像信息。
 
+        :param frame_id:图像如果来源于视频，对应视频的第几帧
         :param img: 图像数据（NumPy数组）
         :param origin_shape: 图像最初的尺寸 (宽度, 高度)
         :param current_shape: 图像经过一次图像增强算子变换结束后的尺寸 (宽度, 高度)
@@ -81,6 +83,7 @@ class ImgDataInfo(BaseDataInfo):
         :param kwargs: 其他关键字参数（传递给父类）
         """
         super().__init__(**kwargs)
+        self.frame_id = frame_id
         self.img = img
         self.origin_shape = origin_shape
         self.current_shape = current_shape
