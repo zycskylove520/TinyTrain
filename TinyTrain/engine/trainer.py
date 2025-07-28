@@ -1028,13 +1028,6 @@ class BaseTrainer:
         """
         执行优化器步骤，包括梯度裁剪和 EMA 更新。
         """
-        # 检查梯度中的 NaN 或 Inf
-        model = self.model if WORLD_SIZE <= 1 else self.model.module
-        for name, param in model.named_parameters():
-            if param.grad is not None:
-                if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-                    return
-
         self.scaler.unscale_(self.optimizer)  # unscale gradients
         grad_clip = self.config_manager.core["grad_clip"]
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=grad_clip)  # clip gradients

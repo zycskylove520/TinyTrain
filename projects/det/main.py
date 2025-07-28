@@ -10,9 +10,11 @@ def train(model):
         epochs=5,
         batch_size=16,
         lr0=0.01,
+        lr1=0.01,
         scheduler="auto",
         workers=4,
-        launch_tb=False
+        launch_tb=False,
+        amp=True,
     )
 
     model.set_config_overrides(
@@ -61,7 +63,7 @@ def export(model):
 
 if __name__ == '__main__':
     yolo = YOLOCore(link_file=r"link.toml")
-    # train(yolo)
+    train(yolo)
     # predict(yolo)
-    track(yolo)
+    # track(yolo)
     # export(yolo)

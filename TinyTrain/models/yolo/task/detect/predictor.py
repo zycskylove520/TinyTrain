@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING
 
 from TinyTrain.data import ImgDataInfo, DetectDataInfo
 from TinyTrain.engine.predictor import BasePredictor
-from TinyTrain.server.track_server.track_server_core import TrackServerCore
 from TinyTrain.utils.box_utils import cxcywh_2_lxlyrxry
+from TinyTrain.utils.register import TTRegistry
 
 if TYPE_CHECKING:
     import torch
@@ -32,7 +32,8 @@ class YOLODetectionPredictor(BasePredictor):
         if kwargs.get("track", False):
             assert isinstance(kwargs["track"], bool)
             track_backend = kwargs.get("track_backend", "bytetrack")
-            self.tracker_server = TrackServerCore(config_manager=config_manager, callback=callback, backend=track_backend)
+            task = self.config_manager.core["task"]
+            self.tracker_server =TTRegistry.get(task, "track_server", track_backend)(config_manager=self.config_manager, callback=self.callback)
 
         # 注册解析器可以在 __init__ 里做，也可以放到首次调用时懒加载
         self.register_parsers()
@@ -104,7 +105,7 @@ class YOLODetectionPredictor(BasePredictor):
     # ---------- 可视化 ----------
     def show(self, data_info: ImgDataInfo, result: DetectDataInfo):
         if self.tracker_server is not None:
-            return self.tracker_server.get_server().track_results
+            return self.tracker_server.track_results
 
         return self.show_predict_result(data_info, result)
 

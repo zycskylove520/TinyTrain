@@ -1,4 +1,5 @@
 import os
+
 import torch
 import numpy as np
 
@@ -121,8 +122,6 @@ def check_amp(trainer, model, dataset):
     """
 
     device = next(model.parameters()).device  # Get the model's device
-    if device.type == "mps":
-        return False  # AMP is only supported on CUDA or CPU devices
 
     def amp_allclose(model: torch.nn.Module, batch: torch.Tensor):
         """

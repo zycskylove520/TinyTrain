@@ -1,12 +1,13 @@
 img_size = 640
 cache = true
 
-path = "datasets\\sleep"
+path = "D:\\project\\python_code\\TinyTrain-main\\datasets\\firework"
 train = "images/train"
 val = "images/val"
 test = ""
 
-nc = 2
+nc = 3
 [names]
-0= "awake"
-1= "sleep"
+0 = "awake"
+1 = "sleep"
+2 = "kkk"
