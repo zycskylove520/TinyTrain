@@ -1,4 +1,4 @@
-from TinyTrain import YOLOCore
+from tinytrain import YOLOCore
 
 
 def train(model):

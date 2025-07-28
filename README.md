@@ -18,7 +18,7 @@ TinyTrain 是一个基于 PyTorch 的轻量级弹性可扩展 AI 框架，易于
 - tracker:不同的跟踪器目录
 - utils:其他目录
 
-# 安装TinyTrain
+# 安装tinytrain
 项目提供了 whl 文件，可直接安装。建议安装后配合源码使用。
 你也可以通过以下命令从源码安装（在 TinyTrain-main 目录下）：
 ```shell
@@ -29,8 +29,9 @@ pip install -e .
 ***
 TinyTrain 提供了 project 目录，可用于直接训练模型。
 你也可以创建一个新的脚本，使用以下代码开启模型训练：
+
 ```python
-from TinyTrain import YOLOCore
+from tinytrain import YOLOCore
 
 yolo = YOLOCore(r"link.toml")
 # 配置core相关参数
@@ -41,9 +42,9 @@ yolo.set_config_overrides(link_type="core",
                           )
 # 配置dataset相关参数
 yolo.set_config_overrides(
-        link_type="dataset",
-        img_size=640
-    )
+    link_type="dataset",
+    img_size=640
+)
 # 直接训练
 yolo.train(model_scale='n')
 # 使用pt文件进行训练,如果设置了resume为True，则为恢复训练
@@ -54,8 +55,9 @@ yolo.train(model_scale="n", model="xxx.pt")
 # 模型推理
 ***
 1. 训练完后直接推理
+
 ```python
-from TinyTrain import YOLOCore
+from tinytrain import YOLOCore
 
 yolo = YOLOCore(r"link.toml")
 yolo.set_config_overrides(link_type="core",
@@ -69,45 +71,55 @@ for result in results:
 ```
 
 2. 使用pt文件进行推理
+
 ```python
-from TinyTrain import YOLOCore
+from tinytrain import YOLOCore
 
 yolo = YOLOCore(r"link.toml")
 
 # 指定pt文件进行推理
-results =yolo.predict(source=r"xxx.jpg", model=r"xxx.pt")
+results = yolo.predict(source=r"xxx.jpg", model=r"xxx.pt")
+for result in results:
+    print(result)
+    
 # 使用最新训练的pt文件进行推理
-results =yolo.predict(source=r"xxx.jpg", use_best_pt=True)
+results = yolo.predict(source=r"xxx.jpg", use_best_pt=True)
+for result in results:
+    print(result)
 ```
 
 3. 使用onnx文件进行推理
+
 ```python
-from TinyTrain import YOLOCore
+from tinytrain import YOLOCore
 
 yolo = YOLOCore(r"link.toml")
 
 # 使用onnx进行推理
 results = yolo.predict(
-        model="xxx.onnx",
-        engine="onnx",
-        source=r"D:\project\python_code\TinyTrain-main\datasets\firework\images\val\2f730a7b97ef51dcbba8fe15aee67092.jpg",
-        img_shape=(640, 640)
-    )
+    model="xxx.onnx",
+    engine="onnx",
+    source=r"D:\project\python_code\TinyTrain-main\datasets\firework\images\val\2f730a7b97ef51dcbba8fe15aee67092.jpg",
+    img_shape=(640, 640)
+)
+for result in results:
+    print(result)
 ```
 
 # 模型导出
 ***
 目前只做了onnx导出适配。
+
 ```python
-from TinyTrain import YOLOCore
+from tinytrain import YOLOCore
 
 yolo = YOLOCore(r"link.toml")
 
 # 导出onnx
 yolo.export(
-        use_best_pt=True,
-        backend="onnx",
-        input_shapes=[(1, 3, 640, 640)],
-        # jit_export=True  # 支持jit导出
-    )
+    use_best_pt=True,
+    backend="onnx",
+    input_shapes=[(1, 3, 640, 640)],
+    # jit_export=True  # 支持jit导出
+)
 ```

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tinytrain"
-version = "0.1.0"
+version = "0.1.1"
 description = "A tiny training framework with PyTorch"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -46,4 +46,4 @@ Repository = "https://github.com/yourname/TinyTrain"
 
 [tool.setuptools.packages.find]
 where = ["."]              # 从当前目录查找
-include = ["TinyTrain*"]   # 只打包 TinyTrain 目录
+include = ["tinytrain*"]   # 只打包 tinytrain 目录
