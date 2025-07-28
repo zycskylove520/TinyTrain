@@ -12,9 +12,10 @@ TinyTrain 是一个基于 PyTorch 的轻量级弹性可扩展 AI 框架，易于
 - loss:损失目录
 - metrics:评估指标目录
 - modules:神经网络模块目录
-- server:后端推理服务和导出服务
+- server:各种后端服务
 - test:测试示例目录
 - tools:工具目录
+- tracker:不同的跟踪器目录
 - utils:其他目录
 
 # 安装TinyTrain
