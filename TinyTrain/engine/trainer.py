@@ -22,7 +22,7 @@ from TinyTrain.global_var import RANK, NUM_THREADS, LOCAL_RANK, WORLD_SIZE
 from TinyTrain.metrics.train_result import TrainResult
 from TinyTrain.utils import LOGGER
 from TinyTrain.utils.TT_progress_bar import TTProgressBar
-from TinyTrain.utils.any_utils import set_random_seed, create_train_directory
+from TinyTrain.utils.any_utils import set_random_seed, create_iter_directory
 from TinyTrain.utils.callback import Callback
 from TinyTrain.utils.checks import check_amp
 from TinyTrain.utils.dist import generate_ddp_command
@@ -555,7 +555,7 @@ class BaseTrainer:
             project_name = config_core["project_name"] or "default_project"
             config_core["project_name"] = project_name
             save_dir = save_dir / project_name / config_core["task"]
-            self.save_dir = create_train_directory(save_dir)
+            self.save_dir = create_iter_directory(save_dir)
 
         # 节点内广播 save_dir
         if world_size > 1 and dist.is_initialized():
@@ -989,7 +989,7 @@ class BaseTrainer:
             dataset=dataset,
             batch_size=batch_size,
             shuffle=shuffle and sampler is None,  # 由 sampler 控制 shuffle
-            num_workers=num_workers,
+            num_workers=num_workers if mode == "train" else min(1, num_workers//2),
             sampler=sampler,
             collate_fn=getattr(dataset, "collate_fn", None),
             generator=generator,

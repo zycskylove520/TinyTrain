@@ -66,9 +66,10 @@ def cxcywh_2_lxlywh(x):
     lxly = cxcy - 0.5 * wh
     y[..., :2] = lxly
     y[..., 2:] = wh
+    return y
 
 
-def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
+def bbox_iou_torch(box1: torch.Tensor, box2: torch.Tensor, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
     """
     Calculate Intersection over Union (IoU) of box1(1, 4) to box2(n, 4).
 
@@ -131,6 +132,34 @@ def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7
         return iou - (c_area - union) / c_area  # GIoU https://arxiv.org/pdf/1902.09630.pdf
     return iou  # IoU
 
+def bbox_iou_numpy(box1, box2, eps=1e-7):
+    """
+    box1: np.ndarray, shape [N, 4]  (x1, y1, x2, y2)
+    box2: np.ndarray, shape [M, 4]  (x1, y1, x2, y2)
+    return: np.ndarray, shape [N, M]
+    """
+    N = box1.shape[0]
+    M = box2.shape[0]
+
+    # reshape 成 (N,1,4) 和 (1,M,4) 以便广播
+    b1 = box1.reshape(N, 1, 4)
+    b2 = box2.reshape(1, M, 4)
+
+    # 分别取坐标
+    b1_x1, b1_y1, b1_x2, b1_y2 = b1[..., 0], b1[..., 1], b1[..., 2], b1[..., 3]
+    b2_x1, b2_y1, b2_x2, b2_y2 = b2[..., 0], b2[..., 1], b2[..., 2], b2[..., 3]
+
+    # 交集
+    inter_w = np.maximum(np.minimum(b1_x2, b2_x2) - np.maximum(b1_x1, b2_x1), 0)
+    inter_h = np.maximum(np.minimum(b1_y2, b2_y2) - np.maximum(b1_y1, b2_y1), 0)
+    inter = inter_w * inter_h
+
+    # 并集
+    area1 = (b1_x2 - b1_x1) * (b1_y2 - b1_y1)
+    area2 = (b2_x2 - b2_x1) * (b2_y2 - b2_y1)
+    union = area1 + area2 - inter + eps
+
+    return inter / union
 
 def box_invert_affine_transform(boxes: np.ndarray, affine_matrix: np.ndarray) -> np.ndarray:
     """

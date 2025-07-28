@@ -109,12 +109,36 @@ class PredictorCallback:
     def __init__(self):
         self.callbacks = {
             "on_predict_start": [self.on_predict_start],
+            "on_predict_batch_start": [self.on_predict_batch_start],
+            "on_predict_preprocess_end": [self.on_predict_preprocess_end],
+            "on_predict_inference_end": [self.on_predict_inference_end],
+            "on_predict_batch_end": [self.on_predict_batch_end],
             "on_predict_end": [self.on_predict_end],
         }
 
     @staticmethod
     def on_predict_start(predictor):
         """Called when the prediction starts."""
+        pass
+
+    @staticmethod
+    def on_predict_batch_start(predictor):
+        """Called when the prediction batch starts."""
+        pass
+
+    @staticmethod
+    def on_predict_preprocess_end(predictor):
+        """Called when the prediction preprocess ends."""
+        pass
+
+    @staticmethod
+    def on_predict_inference_end(predictor):
+        """Called when the prediction inference ends."""
+        pass
+
+    @staticmethod
+    def on_predict_batch_end(predictor):
+        """Called when the prediction batch ends."""
         pass
 
     @staticmethod

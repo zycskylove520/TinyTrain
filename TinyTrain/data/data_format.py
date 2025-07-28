@@ -58,7 +58,7 @@ class ImgDataInfo(BaseDataInfo):
     """
 
     def __init__(self,
-                 frame_id: int | None = None,
+                 frame_id: int = 0,
                  img: np.ndarray | None = None,
                  origin_shape: tuple[int, int] | None = None,
                  current_shape: tuple[int, int] | None = None,
@@ -120,6 +120,7 @@ class DetectDataInfo(ClassifyDataInfo):
     """
 
     def __init__(self,
+                 scores: np.ndarray | None = None,
                  bboxes: np.ndarray | None = None,
                  bbox_format: Literal["lxlyrxry", "lxlywh", "cxcywh"] = "cxcywh",
                  normalized: bool = True,
@@ -128,12 +129,14 @@ class DetectDataInfo(ClassifyDataInfo):
         """
         初始化检测数据信息。
 
+        :param scores: 每个目标框的置信度分数
         :param bboxes: 边界框坐标
         :param bbox_format: 边界框格式（"lxlyrxry"、"lxlywh" 或 "cxcywh"）
         :param normalized: 边界框坐标是否归一化
         :param kwargs: 其他关键字参数（传递给父类）
         """
         super().__init__(**kwargs)
+        self.scores = scores
         self.bboxes = bboxes
         self.bbox_format = bbox_format
         self.normalized = normalized

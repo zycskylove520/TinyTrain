@@ -64,6 +64,4 @@ class YOLOClassificationPredictor(BasePredictor):
     def show(self, sample: Any, result: torch.Tensor):
         prob = torch.softmax(result, dim=0)
         pred_cls = int(prob.argmax())
-        # print(f"per-class prob: {prob.tolist()}")
-        print(f"predict class : {pred_cls}")
-        return prob.tolist()
+        return {"class_idx": pred_cls, "per_class_probability": prob.tolist()}

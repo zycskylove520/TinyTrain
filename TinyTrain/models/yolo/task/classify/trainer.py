@@ -44,7 +44,7 @@ class YOLOClassificationTrainer(BaseTrainer):
             dataset=dataset,
             batch_size=batch_size if mode == "train" else batch_size // 2,
             shuffle=shuffle and sampler is None,
-            num_workers=num_workers,
+            num_workers=num_workers if mode == "train" else min(1, num_workers//2),
             sampler=sampler,
             collate_fn=getattr(dataset, "collate_fn", None),
             generator=generator,

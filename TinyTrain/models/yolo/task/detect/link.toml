@@ -1,7 +1,7 @@
 core = "cfg\\core.toml"
-model = "cfg\\yolo11-det.toml"
+model = "cfg\\11\\yolo11-det.toml"
 loss = "cfg\\loss-det.toml"
 dataset = "cfg\\my_dataset-det.toml"
 augment = "cfg\\augment-det.toml"
 export = "cfg\\export.toml"
-tracker="cfg\\byte_tracker.toml"
+

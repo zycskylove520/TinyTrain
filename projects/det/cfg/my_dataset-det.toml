@@ -8,5 +8,5 @@ test = ""
 
 nc = 2
 [names]
-0 = "awake"
-1 = "sleep"
+0= "awake"
+1= "sleep"

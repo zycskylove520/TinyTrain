@@ -16,10 +16,8 @@ class ImageParser(SourceParser):
     def stream(self, source):
         from TinyTrain.data import ImgDataInfo
         from TinyTrain.utils.data_utils import cv_imread
-        import cv2
 
         img = cv_imread(str(source))
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         yield ImgDataInfo(
             img=img,
@@ -41,7 +39,10 @@ class VideoParser(SourceParser):
             ret, frame = cap.read()
             if not ret:
                 break
+
+            frame_id = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1  # 从0开始计数
             yield ImgDataInfo(
+                frame_id=frame_id,
                 img=frame,
                 origin_shape=frame.shape[:2][::-1],
                 current_shape=frame.shape[:2][::-1],

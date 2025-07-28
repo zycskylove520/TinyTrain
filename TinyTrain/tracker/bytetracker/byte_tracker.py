@@ -1,8 +1,9 @@
 import numpy as np
 import torch
 
-from TinyTrain.tracker.bytetracker.basetracker import TrackState, BaseTrack
-from TinyTrain.tracker.bytetracker.kalman_filter import KalmanFilter
+from TinyTrain.tracker.bytetracker import matching
+from .base_tracker import TrackState, BaseTrack
+from .kalman_filter import KalmanFilter
 
 
 class STrack(BaseTrack):
@@ -15,7 +16,7 @@ class STrack(BaseTrack):
         """
 
         # wait activate
-        self._lxlywh = np.asarray(box, dtype=np.float16)
+        self._lxlywh = np.asarray(box, dtype=np.float64)
         self.kalman_filter = None
         self.mean, self.covariance = None, None
         self.is_activated = False
@@ -151,7 +152,7 @@ class STrack(BaseTrack):
 
 
 class BYTETracker(object):
-    def __init__(self, config_manager, frame_rate=30):
+    def __init__(self, config_manager):
         self.tracked_stracks: list[STrack] = []
         self.lost_stracks: list[STrack] = []
         self.removed_stracks: list[STrack] = []
@@ -159,16 +160,16 @@ class BYTETracker(object):
         self.frame_id = 0
         self.config_manager = config_manager
         self.track_threshold = config_manager.tracker["track_threshold"]
-        self.det_threshold = config_manager.tracker["track_threshold"] + 0.1
-        self.buffer_size = int(frame_rate / 30.0 * config_manager.tracker["track_buffer"])
-        self.max_time_lost = self.buffer_size
+        self.det_threshold = self.track_threshold + 0.1
+        self.max_time_lost = config_manager.tracker["track_buffer"]
         self.kalman_filter = KalmanFilter()
 
-    def update(self, output_result: torch.Tensor) -> list[STrack]:
+    def update(self, bboxes: np.ndarray, scores:np.ndarray) -> list[STrack]:
         """
         update只允许进行单张图片结果进行更新
 
-        @param output_result: 单张图片的检测结果，其shape为：[num_anchors, lxlyrxry+conf+score]，要求box已反归一化
+        @param bboxes: 单张图片检测的bboxes结果，其shape为：[num_anchors, lxlyrxry]，要求box已反归一化
+        @param scores: 单张图片检测的置信度结果，其shape为：[num_anchors, conf]
         """
         self.frame_id += 1
         activated_starcks: list[STrack] = []
@@ -176,13 +177,8 @@ class BYTETracker(object):
         lost_stracks: list[STrack] = []
         removed_stracks: list[STrack] = []
 
-        # 一张图片
-        output_result = output_result.cpu().numpy()
-        scores = output_result[:, 4] * output_result[:, 5]
-        bboxes = output_result[:, :4]
-
         # 置信度高于跟踪阈值的检测框。
-        remain_inds = scores > self.config_manager.tracker["track_thresh"]
+        remain_inds = scores > self.track_threshold
         # 高置信度检测框与分数
         dets = bboxes[remain_inds]
         scores_keep = scores[remain_inds]
@@ -213,7 +209,7 @@ class BYTETracker(object):
 
         ''' Step 2: First association, with high score detection boxes'''
         # 合并正在跟踪的目标和丢失目标
-        strack_pool = joint_stracks(tracked_stracks, self.lost_stracks)
+        strack_pool = self.joint_stracks(tracked_stracks, self.lost_stracks)
         # Predict the current location with KF
         STrack.multi_predict(strack_pool)
         # 将新的目标和跟踪池中已有的目标计算距离
@@ -302,57 +298,57 @@ class BYTETracker(object):
                 removed_stracks.append(track)
 
         self.tracked_stracks = [t for t in self.tracked_stracks if t.state == TrackState.Tracked]
-        self.tracked_stracks = joint_stracks(self.tracked_stracks, activated_starcks)
-        self.tracked_stracks = joint_stracks(self.tracked_stracks, refind_stracks)
+        self.tracked_stracks = self.joint_stracks(self.tracked_stracks, activated_starcks)
+        self.tracked_stracks = self.joint_stracks(self.tracked_stracks, refind_stracks)
         # 从lost_stracks中剔除那些处于tracked_stracks中的轨迹
-        self.lost_stracks = sub_stracks(self.lost_stracks, self.tracked_stracks)
+        self.lost_stracks = self.sub_stracks(self.lost_stracks, self.tracked_stracks)
         self.lost_stracks.extend(lost_stracks)
         # 从lost_stracks中剔除那些处于removed_stracks中的轨迹
-        self.lost_stracks = sub_stracks(self.lost_stracks, self.removed_stracks)
+        self.lost_stracks = self.sub_stracks(self.lost_stracks, self.removed_stracks)
         self.removed_stracks.extend(removed_stracks)
-        self.tracked_stracks, self.lost_stracks = remove_duplicate_stracks(self.tracked_stracks, self.lost_stracks)
+        self.tracked_stracks, self.lost_stracks = self.remove_duplicate_stracks(self.tracked_stracks, self.lost_stracks)
         # get scores of lost tracks
         output_stracks = [track for track in self.tracked_stracks if track.is_activated]
 
         return output_stracks
 
-
-def joint_stracks(tlista, tlistb):
-    exists = {}
-    res = []
-    for t in tlista:
-        exists[t.track_id] = 1
-        res.append(t)
-    for t in tlistb:
-        tid = t.track_id
-        if not exists.get(tid, 0):
-            exists[tid] = 1
+    @staticmethod
+    def joint_stracks(tlista, tlistb):
+        exists = {}
+        res = []
+        for t in tlista:
+            exists[t.track_id] = 1
             res.append(t)
-    return res
+        for t in tlistb:
+            tid = t.track_id
+            if not exists.get(tid, 0):
+                exists[tid] = 1
+                res.append(t)
+        return res
 
+    @staticmethod
+    def sub_stracks(tlista, tlistb):
+        stracks = {}
+        for t in tlista:
+            stracks[t.track_id] = t
+        for t in tlistb:
+            tid = t.track_id
+            if stracks.get(tid, 0):
+                del stracks[tid]
+        return list(stracks.values())
 
-def sub_stracks(tlista, tlistb):
-    stracks = {}
-    for t in tlista:
-        stracks[t.track_id] = t
-    for t in tlistb:
-        tid = t.track_id
-        if stracks.get(tid, 0):
-            del stracks[tid]
-    return list(stracks.values())
-
-
-def remove_duplicate_stracks(stracksa, stracksb):
-    pdist = matching.iou_distance(stracksa, stracksb)
-    pairs = np.where(pdist < 0.15)
-    dupa, dupb = list(), list()
-    for p, q in zip(*pairs):
-        timep = stracksa[p].frame_id - stracksa[p].start_frame
-        timeq = stracksb[q].frame_id - stracksb[q].start_frame
-        if timep > timeq:
-            dupb.append(q)
-        else:
-            dupa.append(p)
-    resa = [t for i, t in enumerate(stracksa) if not i in dupa]
-    resb = [t for i, t in enumerate(stracksb) if not i in dupb]
-    return resa, resb
+    @staticmethod
+    def remove_duplicate_stracks(stracksa, stracksb):
+        pdist = matching.iou_distance(stracksa, stracksb)
+        pairs = np.where(pdist < 0.15)
+        dupa, dupb = list(), list()
+        for p, q in zip(*pairs):
+            timep = stracksa[p].frame_id - stracksa[p].start_frame
+            timeq = stracksb[q].frame_id - stracksb[q].start_frame
+            if timep > timeq:
+                dupb.append(q)
+            else:
+                dupa.append(p)
+        resa = [t for i, t in enumerate(stracksa) if not i in dupa]
+        resb = [t for i, t in enumerate(stracksb) if not i in dupb]
+        return resa, resb

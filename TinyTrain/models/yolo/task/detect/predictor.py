@@ -1,9 +1,10 @@
 from __future__ import annotations
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from TinyTrain.data import ImgDataInfo, DetectDataInfo
 from TinyTrain.engine.predictor import BasePredictor
+from TinyTrain.server.track_server.track_server_core import TrackServerCore
+from TinyTrain.utils.box_utils import cxcywh_2_lxlyrxry
 
 if TYPE_CHECKING:
     import torch
@@ -20,10 +21,18 @@ class YOLODetectionPredictor(BasePredictor):
                  config_manager,
                  model,
                  callback,
-                 backend_map=None,
+                 backend=None,
                  **kwargs):
-        super().__init__(config_manager, model, callback, backend_map, **kwargs)
+        super().__init__(config_manager, model, callback, backend, **kwargs)
+
         self.img_shape = kwargs.get("img_shape")
+
+        # 绑定跟踪服务
+        self.tracker_server = None
+        if kwargs.get("track", False):
+            assert isinstance(kwargs["track"], bool)
+            track_backend = kwargs.get("track_backend", "bytetrack")
+            self.tracker_server = TrackServerCore(config_manager=config_manager, callback=callback, backend=track_backend)
 
         # 注册解析器可以在 __init__ 里做，也可以放到首次调用时懒加载
         self.register_parsers()
@@ -41,6 +50,7 @@ class YOLODetectionPredictor(BasePredictor):
         import torchvision.transforms as T
         from PIL import Image
         from TinyTrain.utils.checks import check_img_size
+        import cv2
 
         if self.img_shape is None:
             data_info.target_shape = self.config_manager.dataset["img_size"] = check_img_size(data_info.origin_shape, 32)
@@ -52,58 +62,59 @@ class YOLODetectionPredictor(BasePredictor):
             T.ToTensor(),
             T.Normalize(mean=0, std=1),
         ])
-        img = Image.fromarray(data_info.img)
+        img = Image.fromarray(cv2.cvtColor(data_info.img, cv2.COLOR_BGR2RGB))
         tensor = transform(img).unsqueeze(0).to(self.device)  # [1,C,H,W]
         return tensor
 
     # ---------- 后处理 ----------
-    def postprocess(self, data_info: ImgDataInfo, preds: list[torch.Tensor]) -> DetectDataInfo:
+    def postprocess(self, data_info: ImgDataInfo, inference_result: list[torch.Tensor]) -> DetectDataInfo:
         """
-        preds: list[Tensor] 来自推理后端
+        inference_result: list[Tensor] 来自推理后端
         返回 DetectDataInfo（包含 img + bboxes）
         """
         from TinyTrain.utils.nms import detect_nms
+        import numpy as np
 
         # detect_nms 输出: List[Tensor] 每张图的 [N,6] (x,y,w,h,conf,cls)
-        dets = detect_nms(preds[0], conf_threshold=0.25, nms_threshold=0.5)[0]  # [N,6]
+        dets = detect_nms(inference_result[0], conf_threshold=0.25, nms_threshold=0.5)[0]  # [N,6]
+
+        # bboxes恢复原图尺寸，并转为lxlyrxry
+        bboxes = dets[:, :4].cpu().numpy()
+        target_w, target_h = data_info.target_shape
+        origin_w, origin_h = data_info.origin_shape
+        lxlyrxry_bboxes = cxcywh_2_lxlyrxry(bboxes)
+        decode_bboxes = np.zeros_like(lxlyrxry_bboxes, dtype=np.int32)
+
+        for i, box in enumerate(lxlyrxry_bboxes):
+            decode_bboxes[i][0] = int(box[0] / target_w * origin_w)
+            decode_bboxes[i][1] = int(box[1] / target_h * origin_h)
+            decode_bboxes[i][2] = int(box[2] / target_w * origin_w)
+            decode_bboxes[i][3] = int(box[3] / target_h * origin_h)
 
         # 构建 DetectDataInfo
         detect_info = DetectDataInfo(
-            img=data_info.img,
-            origin_shape=data_info.origin_shape,
-            current_shape=data_info.current_shape,
-            target_shape=data_info.target_shape,
-            img_file=data_info.img_file,
-            bboxes=dets[:, :4].cpu().numpy(),  # [N,4]  (x,y,w,h)
-            bbox_format="cxcywh",
+            **data_info.__dict__,
+            scores=dets[:, 4].cpu().numpy(),
+            bboxes=decode_bboxes,
+            bbox_format="lxlyrxry",
             normalized=False  # 已反归一化
         )
         return detect_info
 
     # ---------- 可视化 ----------
     def show(self, data_info: ImgDataInfo, result: DetectDataInfo):
+        if self.tracker_server is not None:
+            return self.tracker_server.get_server().track_results
+
+        return self.show_predict_result(data_info, result)
+
+    def show_predict_result(self, data_info: ImgDataInfo, result: DetectDataInfo):
         import cv2
-
-        img = data_info.img.copy()
-        target_w, target_h = data_info.target_shape
-        origin_w, origin_h = data_info.origin_shape
+        img = data_info.img
         for box in result.bboxes:
-            cx = box[0]
-            cy = box[1]
-            w = box[2]
-            h = box[3]
-            decode_cx = cx / target_w * origin_w
-            decode_cy = cy / target_h * origin_h
-            decode_w = w / target_w * origin_w
-            decode_h = h / target_h * origin_h
+            cv2.rectangle(img, (box[0], box[1]), (box[2], box[3]), (0, 255, 0), 2)
 
-            decode_lx = int((decode_cx - decode_w / 2))
-            decode_ly = int((decode_cy - decode_h / 2))
-            decode_rx = int((decode_cx + decode_w / 2))
-            decode_ry = int((decode_cy + decode_h / 2))
-            cv2.rectangle(img, (decode_lx, decode_ly), (decode_rx, decode_ry), (0, 255, 0), 2)
-        out_path = Path("result.jpg")
-        cv2.imwrite(str(out_path), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+        out_path = self.output_dir / f"result_{data_info.frame_id}.jpg"
+        cv2.imwrite(str(out_path), img)
         print(f"saved -> {out_path.resolve()}")
-
-        return result.bboxes
+        return result.__dict__

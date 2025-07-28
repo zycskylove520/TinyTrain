@@ -5,7 +5,6 @@
 dist/
 datasets/
 tinytrain.egg-info/
-projects/
 
 # 忽略特定类型的文件
 .env

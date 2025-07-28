@@ -39,7 +39,7 @@ class BaseModel(nn.Module):
         inputs_idx = 0
         entry_idx_mapping = dict()
 
-        outputs: list[torch.Tensor] = []  # 存放模型推理最终的输出
+        outputs: list = []  # 存放模型推理最终的输出
         for i, layer in enumerate(self.module_list):
             try:
                 # 拿到第i层的info
@@ -75,7 +75,6 @@ class BaseModel(nn.Module):
 
                     if i in self.ask_set:
                         self.record_list[i]["data"] = data  # add new key-value to record_list
-
                     continue
 
                 if len(record_info["from"]) == 1:

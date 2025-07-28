@@ -69,7 +69,7 @@ def torch_distributed_zero_first(local_rank: int):
         dist.barrier(device_ids=[local_rank])
 
 
-def create_train_directory(base_dir, start_string="train_"):
+def create_iter_directory(base_dir, start_string="train_"):
     """
     在指定的基础目录下创建新的训练目录。
     如果基础目录下没有以 start_string 开头的目录，则创建 start_string0。

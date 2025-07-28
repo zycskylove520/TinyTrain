@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Generator, Union
 from TinyTrain.cfg.config_manager import ConfigManager
 from TinyTrain.data import BaseDataInfo
 from TinyTrain.utils import LOGGER
+from TinyTrain.utils.any_utils import create_iter_directory
 from TinyTrain.utils.callback import Callback
 
 if TYPE_CHECKING:
@@ -46,11 +47,22 @@ class BasePredictor:
         # register parser
         self.register_parsers()
 
-        # result
+        # source queue
         self.source = None
         self.data_stream: "Queue[Any]" = Queue(max_qsize)
         self.batch_size = batch_size
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
+
+        # result
+        self.preprocess_result = None
+        self.inference_result = None
+        self.postprocess_result = None
+
+        # save dir
+        save_dir = Path(config_manager.core["save_dir"]).resolve()
+        project_name = config_manager.core["project_name"] or "default_project"
+        save_dir = save_dir / project_name
+        self.output_dir = create_iter_directory(save_dir, start_string="predict_")
 
     def predict(self, source) -> Generator[Any, None, None]:
         from TinyTrain.utils.source_loader import SourceParserHub
@@ -98,10 +110,14 @@ class BasePredictor:
     def _infer_batch(self, batch: list[Any]) -> Generator[Any, None, None]:
         """通用推理：可被子类覆盖做真正的 batch / async"""
         for data_info in batch:
-            x = self.preprocess(data_info)
-            preds = self.model.inference(x)
-            result = self.postprocess(data_info, preds)
-            yield self.show(data_info, result)
+            self.callback.run_callback(self, "on_predict_batch_start")
+            self.preprocess_result = self.preprocess(data_info)
+            self.callback.run_callback(self, "on_predict_preprocess_end")
+            self.inference_result = self.model.inference(self.preprocess_result)
+            self.callback.run_callback(self, "on_predict_inference_end")
+            self.postprocess_result = self.postprocess(data_info, self.inference_result)
+            self.callback.run_callback(self, "on_predict_batch_end")
+            yield self.show(data_info, self.postprocess_result)
 
     def register_parsers(self) -> None:
         # 注册解析器
@@ -110,10 +126,10 @@ class BasePredictor:
     def preprocess(self, data_info: BaseDataInfo) -> Any:
         return data_info
 
-    def postprocess(self, data_info: BaseDataInfo, preds: list[torch.Tensor]):
-        return preds[0]
+    def postprocess(self, data_info: BaseDataInfo, inference_result: list[torch.Tensor]):
+        return inference_result[0]
 
-    def show(self, data_info: BaseDataInfo, result) -> Any:
+    def show(self, data_info: BaseDataInfo, postprocess_result) -> Any:
         return data_info
 
     def _setup_inference_server(self, model: Union[nn.Module, str, Path], **kwargs) -> Union[nn.Module, InferenceServerCore]:
