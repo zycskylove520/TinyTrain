@@ -89,6 +89,7 @@ class ByteTrackServer(BaseTrackServer):
 
         if self.config_manager.tracker["save_img"]:
             out_path = self.output_dir / f"img/frame_{detect_info.frame_id}.jpg"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
             cv2.imwrite(out_path, img)
 
         # ----------- 新增：边推理边显示 -----------
