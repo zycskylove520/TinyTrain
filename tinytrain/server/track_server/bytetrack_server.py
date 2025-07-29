@@ -105,4 +105,4 @@ class ByteTrackServer(BaseTrackServer):
         video_out = self.output_dir / "video/result.mp4"
         video_out.parent.mkdir(parents=True, exist_ok=True)
         fps = self.config_manager.tracker["save_video_fps"]
-        images_to_video(self.output_dir, video_out, fps)
+        images_to_video(self.output_dir/"img", video_out, fps)

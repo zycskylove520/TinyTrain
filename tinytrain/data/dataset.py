@@ -1,7 +1,6 @@
 import glob
 import random
 import shutil
-from typing import Any, AnyStr
 
 import numpy as np
 import torch
@@ -59,11 +58,13 @@ class TTBaseVisionDataset(TTBaseDataset):
         self.bg_npy_files = []  # npy路径为绝对路径，都为背景图片的缓存
 
         self.img_files = []  # 图片路径为绝对路径，都为有标签对应的图片
-        self.label_files = []  # 标签文件路径为绝对路径，都为有图片对应的标签文件
         self.npy_files = []  # npy路径为绝对路径，都为有标签对应的图片的缓存
+
+        self.label_files = []  # 标签文件路径为绝对路径，都为有图片对应的标签文件
 
         self.init()
         self.crop_samples()
+
         # 用户增加自定义检查
         self.custom_check()
 

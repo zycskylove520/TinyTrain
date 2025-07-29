@@ -26,6 +26,7 @@ class YOLOClassificationPredictor(BasePredictor):
         super().__init__(config_manager=config_manager, model=model, callback=callback, backend=backend, **kwargs)
         self.img_shape = kwargs.get("img_shape")
 
+    def register_parsers(self) -> None:
         # ---------- 注册专用解析器 ----------
         SourceParserHub.register("jpg", ImageParser)
         SourceParserHub.register("jpeg", ImageParser)

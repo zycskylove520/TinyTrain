@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import torch
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -14,7 +15,6 @@ from tinytrain.utils.any_utils import create_iter_directory
 from tinytrain.utils.callback import Callback
 
 if TYPE_CHECKING:
-    import torch
     from torch import nn
     from tinytrain.server.inference_server import InferenceServerCore
     from tinytrain.utils.source_loader import SourceParser, SourceParserHub
@@ -66,7 +66,6 @@ class BasePredictor:
 
     def predict(self, source) -> Generator[Any, None, None]:
         from tinytrain.utils.source_loader import SourceParserHub
-        import torch
 
         self.callback.run_callback(self, "on_predict_start")
         try:

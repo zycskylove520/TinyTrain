@@ -334,7 +334,7 @@ class BaseBatchDataInfo:
     """
 
     def __init__(self,
-                 data: torch.Tensor | list[torch.Tensor] | None = None
+                 data: torch.Tensor | list[torch.Tensor] | Any | None = None
                  ):
         """
         初始化基础批量数据信息。

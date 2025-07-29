@@ -1,5 +1,6 @@
 from tinytrain import YOLOCore
 
+
 def train(model):
     # train
     model.set_config_overrides(
@@ -15,12 +16,12 @@ def train(model):
         launch_tb=False,
         amp=True,
     )
-
     model.set_config_overrides(
         link_type="dataset",
         img_size=640,
         cache=False
     )
+
     # use_last_pt为True则自动搜索最新训练的pt文件进行训练
     model.train(model_scale='n', use_last_pt=False)
 
@@ -62,7 +63,9 @@ def export(model):
 
 if __name__ == '__main__':
     yolo = YOLOCore(link_file=r"link.toml")
-    train(yolo)
+    # train(yolo)
     # predict(yolo)
     # track(yolo)
     # export(yolo)
+    print(1)
+
