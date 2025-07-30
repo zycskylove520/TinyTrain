@@ -15,11 +15,46 @@ if TYPE_CHECKING:
 
 
 class BaseOnnxExportServer(BaseExportServer):
+    """
+    通用 ONNX 导出服务器，支持 torch → ONNX → onnxslim 完整链路。
+    """
     def __init__(self,
                  model: nn.Module,
                  device: torch.device,
                  **kwargs
                  ):
+        """
+        初始化 ONNX 导出服务器。
+
+        Args
+        ----
+        model : nn.Module
+            已加载权重的 PyTorch 模型。
+        device : torch.device
+            当前模型所在的计算设备（cpu / cuda）。
+        **kwargs
+            导出超参与开关：
+            - input_shapes : list[tuple[int, ...]]
+                用于 tracing 的 dummy 输入形状（必填）。
+            - use_onnxslim : bool, default True
+                是否使用 onnxslim 精简与优化模型。
+            - jit_export : bool, default False
+                是否先用 torch.jit.trace 后再导出。
+            - input_names / output_names : list[str] | None
+                输入/输出节点名称，用于动态轴。
+            - do_constant_folding : bool, default True
+                是否折叠常量节点。
+            - opset_version : int | None
+                导出 ONNX 的 opset 版本。
+            - dynamic_axes : dict[str, dict[int, str]] | None
+                动态轴描述。
+            - dynamic_shapes : bool | None
+                是否启用动态 shape（与 dynamic_axes 二选一即可）。
+        Raises
+        ------
+        ValueError
+            未提供 `input_shapes` 时抛出。
+        """
         super().__init__(model, device)
         LOGGER.info(
             f"PyTorch {torch.__version__} | "
@@ -44,10 +79,30 @@ class BaseOnnxExportServer(BaseExportServer):
         self.prepare()
 
     def prepare(self):
-        # 准备一个示例输入，用于模型转换和推理
+        """
+        根据 input_shapes 生成 dummy 输入张量，用于 tracing 与验证。
+        所有张量默认移动到与模型相同的 device，且无需梯度。
+        """
         self.dummy_inputs = tuple(torch.rand(input_shape, dtype=torch.float, requires_grad=False).to(self.device) for input_shape in self.input_shapes)
 
     def export(self, export_dir: str | Path = None):
+        """
+        执行 torch → ONNX → onnxslim 的完整导出流程。
+
+        Args
+        ----
+        export_dir : str | Path | None
+            导出目录，若为空则保存到当前目录下的 model.onnx。
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        RuntimeError
+            torch.onnx.export 或 onnxslim 任意环节失败时抛出。
+        """
         onnx_model_path = Path(export_dir) / "model.onnx" if export_dir else Path("model.onnx")
         onnx_model_path.parent.mkdir(parents=True, exist_ok=True)
 

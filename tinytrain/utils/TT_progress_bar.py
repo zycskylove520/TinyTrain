@@ -70,7 +70,7 @@ class TTProgressBar:
     4. 单线程 fast-path 无锁
     5. 其他细节：% 格式化、预生成颜色表
 
-    参数
+    Args
     ----
     iterable : Iterable, optional
         需要迭代的对象。若提供，可直接在 for 循环中使用；否则需手动调用 update。
@@ -121,7 +121,7 @@ class TTProgressBar:
             disable: bool = False,
             disable_color: bool = False,
     ):
-        # 新增：在非主进程中直接退出初始化，避免后续逻辑报错
+        # 在非主进程中直接退出初始化，避免后续逻辑报错
         if RANK not in {-1, 0}:
             self._passthrough = True
             self.iterable = iterable

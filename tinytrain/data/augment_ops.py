@@ -13,13 +13,47 @@ if TYPE_CHECKING:
     import cv2
 
 
+# -----------------------------------------------------------------------------
+# 工具函数
+# -----------------------------------------------------------------------------
 def normalize(img, mean, std, max_pixel_value=255.) -> np.ndarray:
+    """
+    将图像像素值归一化到 [0, 1] 后再标准化。
+
+    Args:
+        img (np.ndarray): HWC 格式的 uint8 或 float32 图像。
+        mean: 每个通道的均值。
+        std : 每个通道的标准差。
+        max_pixel_value: 原始像素最大值，用于将数据先缩放到 [0, 1]。
+
+    Returns:
+        np.ndarray: 归一化并标准化后的图像（float32）。
+    """
+
     import albucore
     denominator = np.reciprocal(np.array(std, dtype=np.float32) * max_pixel_value)
     return albucore.normalize(img, mean, denominator)
 
 
+# -----------------------------------------------------------------------------
+# 动态填充 / 调整尺寸
+# -----------------------------------------------------------------------------
 class DynamicFilling:
+    """
+    支持 **保持宽高比 + 填充** 与 **直接拉伸** 两种策略的实时变换类，
+    用于分类 / 检测任务。
+
+    策略选择
+    --------
+    - 概率 `p` 触发 **保持宽高比 + 填充**（PadIfNeeded）。
+    - 否则 **直接拉伸**（Resize）。
+
+    注意
+    ----
+    1. 检测任务会自动同步 bbox 与 label。
+    2. 填充值默认 114（YOLO 系列常用灰色）。
+    """
+
     def __init__(
             self,
             target_size: tuple[int, int],
@@ -27,6 +61,13 @@ class DynamicFilling:
             task: str = "classify",
             fill_value=114,
     ):
+        """
+        Args:
+            target_size (tuple[int, int]): 目标输出尺寸 (width, height)。
+            p (float): 0~1 之间，触发“保持宽高比 + 填充”的概率。
+            task (str): 任务类型，目前支持 "classify" / "detect"。
+            fill_value (int): 填充像素值，默认 114。
+        """
         assert 0.0 <= p <= 1.0, "p should be in [0, 1]"
         assert task in {"classify", "detect"}, "only classify / detect supported now"
         self.target_size = target_size  # (w, h)
@@ -35,6 +76,15 @@ class DynamicFilling:
         self.fill_value = fill_value
 
     def __call__(self, sample: BaseDataInfo) -> BaseDataInfo:
+        """
+        根据概率选择策略并执行变换，同步更新 sample.current_shape。
+
+        Args:
+            sample (BaseDataInfo): 输入样本，需与 task 类型匹配。
+
+        Returns:
+            BaseDataInfo: 同一样本实例，字段已更新。
+        """
         if random.random() < self.p:
             transform = self._pad_branch()
         else:
@@ -63,7 +113,7 @@ class DynamicFilling:
         return sample
 
     def _pad_branch(self):
-        """保持宽高比 + 填充"""
+        """构建“保持宽高比 + 填充”的 albumentations 流水线。"""
         import albumentations as A
         import cv2
 
@@ -92,7 +142,7 @@ class DynamicFilling:
             return A.Compose(tf, p=1.0)
 
     def _resize_branch(self):
-        """直接拉伸"""
+        """构建“直接拉伸”的 albumentations 流水线。"""
         import albumentations as A
         import cv2
 
@@ -114,6 +164,12 @@ class DynamicFilling:
 
 
 class Mosaic:
+    """
+    Mosaic 增强：将多张图像拼接成一张大图，用于提升小目标检测性能。
+
+    目前仅预留接口，实际逻辑待实现。
+    """
+
     def __init__(self,
                  task: str = "detect",
                  layout: str = "3x3"
@@ -131,35 +187,3 @@ class Mosaic:
 
     def mosaic_3x3(self, sample: ImgDataInfo):
         pass
-
-
-if __name__ == '__main__':
-
-    from tinytrain.data import DetectDataInfo, DynamicFilling
-    from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry
-    from tinytrain.utils.data_utils import cv_imread
-
-    img = cv_imread(r"9.jpg")
-    img_data = DetectDataInfo(
-        img=img,
-        origin_shape=img.shape[:2][::-1],
-        current_shape=img.shape[:2][::-1],
-        target_shape=(320, 608),
-        bboxes=np.array([[0.398133, 0.339827, 0.060877, 0.080808],
-                         [0.474432, 0.329726, 0.060877, 0.101010]]),
-        label=np.array([0, 1]),
-    )
-    w, h = img_data.target_shape
-
-    df = DynamicFilling(target_size=img_data.target_shape, p=1, task="detect")
-    res = df(img_data)
-    bboxes = cxcywh_2_lxlyrxry(res.bboxes)
-    for bbox in bboxes:
-        decode_lx = int(bbox[0] * w)
-        decode_ly = int(bbox[1] * h)
-        decode_rx = int(bbox[2] * w)
-        decode_ry = int(bbox[3] * h)
-        print(decode_lx, decode_ly, decode_rx, decode_ry)
-
-        cv2.rectangle(res.img, (decode_lx, decode_ly), (decode_rx, decode_ry), (255, 0, 0), 2)
-    cv2.imwrite(f"test2.jpg", res.img)

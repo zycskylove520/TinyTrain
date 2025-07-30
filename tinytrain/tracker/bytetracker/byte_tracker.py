@@ -1,5 +1,19 @@
+"""
+ByteTrack 单目标跟踪器实现
+- 基于卡尔曼滤波 + IoU 匹配的多目标跟踪器
+- 采用高低置信度双阈值策略，提高遮挡场景鲁棒性
+- 支持轨迹生命周期管理（激活/丢失/移除）
+
+核心组件：
+┌──────────────┬─────────────────────────────┐
+│ 类名         │ 功能描述                    │
+├──────────────┼─────────────────────────────┤
+│ STrack       │ 单条轨迹，封装状态与滤波器 │
+│ BYTETracker  │ 轨迹管理器，负责匹配与更新  │
+└──────────────┴─────────────────────────────┘
+"""
+
 import numpy as np
-import torch
 
 from tinytrain.tracker.bytetracker import matching
 from .base_tracker import TrackState, BaseTrack
@@ -7,57 +21,70 @@ from .kalman_filter import KalmanFilter
 
 
 class STrack(BaseTrack):
+    """
+    单条轨迹，继承 BaseTrack，集成卡尔曼滤波器状态估计
+    支持坐标格式转换（lxlywh/cxcyah/lxlyrxry）
+    """
+
+    # 全局共享卡尔曼滤波器实例，减少内存开销
     shared_kalman = KalmanFilter()
 
     def __init__(self, box, score):
         """
-        @param box: 单个检测框，要求为lxlywh格式。
-        @param score: 置信度分数。
+        Args:
+            box: lxlywh 格式检测框 [x, y, w, h]
+            score: 检测置信度
         """
-
-        # wait activate
+        # 原始检测框存储
         self._lxlywh = np.asarray(box, dtype=np.float64)
+
+        # 卡尔曼滤波器相关
         self.kalman_filter = None
-        self.mean, self.covariance = None, None
+        self.mean = None
+        self.covariance = None
+
+        # 轨迹激活状态
         self.is_activated = False
 
+        # 轨迹属性
         self.score = score
-        self.tracklet_len = 0
+        self.tracklet_len = 0  # 轨迹持续帧数
 
     def predict(self):
+        """使用卡尔曼滤波器预测下一帧位置"""
         mean_state = self.mean.copy()
         if self.state != TrackState.Tracked:
-            mean_state[7] = 0
+            mean_state[7] = 0  # 重置速度
         self.mean, self.covariance = self.kalman_filter.predict(mean_state, self.covariance)
 
     @staticmethod
     def multi_predict(stracks):
         """
-        对多个目标进行卡尔曼滤波器预测。
+        批量预测多个轨迹的位置
 
         Args:
-            stracks (list): 包含多个 STrack 对象的列表。
+            stracks: STrack 列表
         """
         if len(stracks) > 0:
-            # 提取每个 STrack 的卡尔曼滤波器均值和协方差矩阵
+            # 收集所有轨迹的状态和协方差
             multi_mean = np.asarray([st.mean.copy() for st in stracks])
             multi_covariance = np.asarray([st.covariance for st in stracks])
 
-            # 对于非跟踪状态的目标，将其速度置为 0
+            # 非跟踪状态轨迹重置速度
             for i, st in enumerate(stracks):
                 if st.state != TrackState.Tracked:
-                    multi_mean[i][7] = 0  # 假设速度信息在均值向量的第8个位置
+                    multi_mean[i][7] = 0
 
-            # 使用共享的卡尔曼滤波器进行批量预测
+            # 批量卡尔曼预测
             multi_mean, multi_covariance = STrack.shared_kalman.multi_predict(multi_mean, multi_covariance)
 
-            # 更新每个 STrack 的卡尔曼滤波器状态
+            # 更新所有轨迹状态
             for i, (mean, cov) in enumerate(zip(multi_mean, multi_covariance)):
                 stracks[i].mean = mean
                 stracks[i].covariance = cov
 
     def activate(self, kalman_filter, frame_id):
-        """Start a new tracklet"""
+        """激活新轨迹，初始化卡尔曼滤波器"""
         self.kalman_filter = kalman_filter
         self.track_id = self.next_id()
         self.mean, self.covariance = self.kalman_filter.initiate(self.lxlywh_2_cxcyah(self._lxlywh))
@@ -66,11 +93,12 @@ class STrack(BaseTrack):
         self.state = TrackState.Tracked
         if frame_id == 1:
             self.is_activated = True
-        # self.is_activated = True
+
         self.frame_id = frame_id
         self.start_frame = frame_id
 
     def re_activate(self, new_track, frame_id, new_id=False):
+        """重新激活丢失轨迹"""
         self.mean, self.covariance = self.kalman_filter.update(
             self.mean, self.covariance, self.lxlywh_2_cxcyah(new_track.lxlywh)
         )
@@ -78,24 +106,20 @@ class STrack(BaseTrack):
         self.state = TrackState.Tracked
         self.is_activated = True
         self.frame_id = frame_id
+
         if new_id:
             self.track_id = self.next_id()
         self.score = new_track.score
 
     def update(self, new_track, frame_id):
-        """
-        Update a matched track
-        :type new_track: STrack
-        :type frame_id: int
-        :type update_feature: bool
-        :return:
-        """
+        """更新已匹配轨迹"""
         self.frame_id = frame_id
         self.tracklet_len += 1
 
         new_lxlywh = new_track.lxlywh
         self.mean, self.covariance = self.kalman_filter.update(
-            self.mean, self.covariance, self.lxlywh_2_cxcyah(new_lxlywh))
+            self.mean, self.covariance, self.lxlywh_2_cxcyah(new_lxlywh)
+        )
         self.state = TrackState.Tracked
         self.is_activated = True
 
@@ -103,9 +127,7 @@ class STrack(BaseTrack):
 
     @property
     def lxlywh(self):
-        """Get current position in bounding box format `(top left x, top left y,
-                width, height)`.
-        """
+        """获取当前框 lxlywh 格式 [x, y, w, h]"""
         if self.mean is None:
             return self._lxlywh.copy()
         ret = self.mean[:4].copy()
@@ -115,44 +137,55 @@ class STrack(BaseTrack):
 
     @property
     def lxlyrxry(self):
-        """Convert bounding box to format `(min x, min y, max x, max y)`, i.e.,
-        `(top left, bottom right)`.
-        """
+        """获取 lxlyrxry 格式 [x1, y1, x2, y2]"""
         ret = self.lxlywh.copy()
         ret[2:] += ret[:2]
         return ret
 
     @staticmethod
     def lxlywh_2_cxcyah(lxlywh):
-        """Convert bounding box to format `(center x, center y, aspect ratio,
-        height)`, where the aspect ratio is `width / height`.
-        """
+        """转换为 cxcyah 格式 [cx, cy, aspect_ratio, height]"""
         ret = np.asarray(lxlywh).copy()
         ret[:2] += ret[2:] / 2
         ret[2] /= ret[3]
         return ret
 
     def to_lxlyah(self):
+        """当前框转换为 cxcyah 格式"""
         return self.lxlywh_2_cxcyah(self.lxlywh)
 
     @staticmethod
     def lxlyrxry_2_lxlywh(lxlyrxry):
+        """从 lxlyrxry 转 lxlywh"""
         ret = np.asarray(lxlyrxry).copy()
         ret[2:] -= ret[:2]
         return ret
 
     @staticmethod
     def lxlywh_2_lxlyrxry(lxlywh):
+        """从 lxlywh 转 lxlyrxry"""
         ret = np.asarray(lxlywh).copy()
         ret[2:] += ret[:2]
         return ret
 
     def __repr__(self):
-        return 'OT_{}_({}-{})'.format(self.track_id, self.start_frame, self.end_frame)
+        return f'OT_{self.track_id}_({self.start_frame}-{self.end_frame})'
 
 
 class BYTETracker(object):
+    """
+    ByteTrack 多目标跟踪器实现
+    - 采用高低置信度双阈值策略
+    - 支持轨迹生命周期管理
+    - 提供轨迹合并/去重工具方法
+    """
     def __init__(self, config_manager):
+        """
+        初始化 BYTETracker 跟踪器，读取配置参数并创建三类轨迹容器。
+
+        Args:
+            config_manager: 配置管理器，提供 tracker.track_threshold、tracker.track_buffer 等超参
+        """
         self.tracked_stracks: list[STrack] = []
         self.lost_stracks: list[STrack] = []
         self.removed_stracks: list[STrack] = []
@@ -166,10 +199,14 @@ class BYTETracker(object):
 
     def update(self, bboxes: np.ndarray, scores:np.ndarray) -> list[STrack]:
         """
-        update只允许进行单张图片结果进行更新
+        单帧更新接口
 
-        @param bboxes: 单张图片检测的bboxes结果，其shape为：[num_anchors, lxlyrxry]，要求box已反归一化
-        @param scores: 单张图片检测的置信度结果，其shape为：[num_anchors, conf]
+        Args:
+            bboxes: 检测框 lxlyrxry 格式 [N, 4]，已反归一化
+            scores: 置信度 [N]
+
+        Returns:
+            激活的轨迹列表
         """
         self.frame_id += 1
         activated_starcks: list[STrack] = []
@@ -314,6 +351,7 @@ class BYTETracker(object):
 
     @staticmethod
     def joint_stracks(tlista, tlistb):
+        """合并两个轨迹列表，去重"""
         exists = {}
         res = []
         for t in tlista:
@@ -328,6 +366,7 @@ class BYTETracker(object):
 
     @staticmethod
     def sub_stracks(tlista, tlistb):
+        """从 tlista 中移除与 tlistb 重复的轨迹"""
         stracks = {}
         for t in tlista:
             stracks[t.track_id] = t
@@ -339,6 +378,7 @@ class BYTETracker(object):
 
     @staticmethod
     def remove_duplicate_stracks(stracksa, stracksb):
+        """基于 IoU 去重，保留轨迹长度更长的那个"""
         pdist = matching.iou_distance(stracksa, stracksb)
         pairs = np.where(pdist < 0.15)
         dupa, dupb = list(), list()

@@ -1,11 +1,27 @@
-import lap
+"""
+匹配工具模块：基于 IoU 的线性分配实现
+提供两条轨迹集合之间的最优匹配及未匹配项拆分功能，零外部依赖（除 lap 求解器）。
+"""
 
+import lap
 import numpy as np
+
 from tinytrain.utils.box_utils import bbox_iou_numpy
 
 
-
 def linear_assignment(cost_matrix, thresh):
+    """
+    使用 Jonker-Volgenant 算法求解带阈值约束的线性分配问题。
+
+    Args:
+        cost_matrix: 代价矩阵，形状 (M, N)
+        thresh: 最大允许代价，超过该阈值的边会被视为不可匹配
+
+    Returns:
+        matches:   ndarray, 形状 (K, 2)，成功匹配的 (行索引, 列索引) 对
+        unmatched_a: ndarray，未匹配的行索引
+        unmatched_b: ndarray，未匹配的列索引
+    """
     if cost_matrix.size == 0:
         return np.empty((0, 2), dtype=int), tuple(range(cost_matrix.shape[0])), tuple(range(cost_matrix.shape[1]))
     matches, unmatched_a, unmatched_b = [], [], []
@@ -21,11 +37,15 @@ def linear_assignment(cost_matrix, thresh):
 
 def iou_distance(atracks, btracks):
     """
-    Compute cost based on IoU
-    :type atracks: list[STrack]
-    :type btracks: list[STrack]
+    计算两条轨迹集合之间的 IoU 距离矩阵（1 - IoU）。
 
-    :rtype cost_matrix np.ndarray
+    Args:
+        atracks: list[STrack]，轨迹 A
+        btracks: list[STrack]，轨迹 B
+
+    Returns:
+        cost_matrix: ndarray，形状 (len(atracks), len(btracks))
+                     值为 1 - IoU，范围 [0, 1]
     """
     ious = np.zeros((len(atracks), len(btracks)), dtype=np.float64)
     if ious.size != 0:

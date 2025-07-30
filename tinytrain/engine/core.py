@@ -19,13 +19,25 @@ if TYPE_CHECKING:
 
 class Core:
     """
-    Core类用于集成所有的engine
+    Core 是 TinyTrain 的核心门面类，负责把「配置、模型、训练器、推理器、导出器」
+    等所有 engine 统一调度起来，对外暴露简洁的 train / predict / export 等接口。
+
+    主要功能：
+    1. 统一管理 ConfigManager，支持链式配置（link 文件）。
+    2. 根据场景自动绑定并实例化：
+       - 训练：BaseTrainer
+       - 推理：BasePredictor
+       - 导出：BaseExporter
+    3. 自动搜索 last.pt / best.pt 等权重文件。
+    4. 支持进程名修改、回调钩子、DDP 启动路径保存等辅助特性。
     """
 
-    def __init__(self, link_file: str | Path = DEFAULT_CORE_CONFIG_FILE):
+    def __init__(self, link_file: str | Path):
         """
-        初始化所有Core需要的附加engine和manager
-        :param link_file: link配置文件,支持yaml格式和toml格式
+        初始化 Core，加载 link 配置并注册各 engine 的占位符。
+
+        Args:
+            link_file (str | Path, optional): link 配置文件路径（yaml / toml）。
         """
         self.task: str | None = None
 
@@ -46,10 +58,21 @@ class Core:
         frame = inspect.stack()[-1]
         self.main_script_path = Path(frame.filename).resolve()
 
-    def __call__(self, source, model: str | Path | None = None, **kwargs) -> Generator[Any, None, None]:
-        yield from self.predict(source, model, **kwargs)
-
+    # ------------------------------------------------------------------
+    # 外部调用主要 API
+    # ------------------------------------------------------------------
     def set_config_overrides(self, link_type: str = 'core', **kwargs):
+        """
+        在运行时动态覆盖指定配置段（link 除外）。
+
+        Args:
+            link_type (str): 配置段名称，如 "core"、"model"、"dataset" 等。
+            **kwargs: 需要覆盖的键值对。
+
+        Raises:
+            KeyError: 试图覆盖 link 段。
+            AttributeError: 不存在的配置段。
+        """
         if link_type == 'link':
             raise KeyError("The 'set_config_overrides' function does not support setting link files. Please set them manually.")
         try:
@@ -67,12 +90,19 @@ class Core:
 
     def train(self, model_scale: str = None, model: str | Path = None, use_last_pt=False, process_name: str = None):
         """
-        调用该函数将启动模型的训练。
-        @param model_scale:
-        @param model:
-        @param use_last_pt:
-        @param process_name:
+        启动训练。
+
+        Args:
+            model_scale (str | None):
+                模型规模标识（如 "n", "s", "m", "l", "x"），将覆盖配置文件。
+            model (str | Path | None):
+                权重文件路径（.pt/.pth）。为 None 时根据 use_last_pt 自动搜索。
+            use_last_pt (bool):
+                是否自动寻找最新的 last.pt，优先级低于显式 model。
+            process_name (str | None):
+                进程名，便于在系统监控中区分。
         """
+
         # 修改进程名，从而避免与其他脚本混淆
         if process_name:
             setproctitle.setproctitle(process_name)
@@ -95,7 +125,21 @@ class Core:
         gc.collect()
 
     def predict(self, source, model: str | Path | None = None, backend: str | None = None, use_best_pt=False, **kwargs) -> Generator[Any, None, None]:
-        # find last pt file
+        """
+        启动推理。
+
+        Args:
+            source: 输入源（路径、URL、摄像头索引等）。
+            model (str | Path | None): 权重或后端文件路径。
+            backend (str | None): 后端名称（onnx / tensorrt / torchscript ...）。
+            use_best_pt (bool): 是否自动寻找 best.pt。
+            **kwargs: 透传给 predictor。
+
+        Yields:
+            Any: 单条推理结果。
+        """
+
+        # find best.pt file
         if use_best_pt and model is None:
             model = self._find_best_pt_file()
 
@@ -105,8 +149,25 @@ class Core:
         # predict
         yield from self.predictor.predict(source)
 
+    def __call__(self, source, model: str | Path | None = None, **kwargs) -> Generator[Any, None, None]:
+        """
+        允许 Core 实例直接当函数用：core(source) 等价于 predict(source)。
+        """
+        yield from self.predict(source, model, **kwargs)
+
     def export(self, backend: str, model: str | Path | None = None, export_dir=None, use_best_pt=False, **kwargs):
-        # find last pt file
+        """
+        启动导出。
+
+        Args:
+            backend (str): 导出后端名称（onnx / tensorrt / torchscript ...）。
+            model (str | Path | None): 权重文件路径。
+            export_dir (str | Path | None): 导出目录，默认为配置中的 save_dir。
+            use_best_pt (bool): 是否自动寻找 best.pt。
+            **kwargs: 透传给 exporter。
+        """
+
+        # find best.pt file
         if use_best_pt and model is None:
             model = self._find_best_pt_file()
 
@@ -117,9 +178,12 @@ class Core:
 
     def _bind_model(self, model_scale: str | None = None, model: str | Path = None, force_load=True) -> None:
         """
-        绑定模型，支持toml类型的模型配置文件和pt/pth类型的模型参数文件
-        @param model_scale: 模型的大小。比如"n","s"等，由model的toml文件里指定的scales决定，这里可进行覆盖。
-        @return:
+        根据权重或配置文件绑定模型。
+
+        Args:
+            model_scale (str | None): 规模标识，仅新建模型时生效。
+            model (str | Path | None): 权重文件（.pt/.pth）。
+            force_load (bool): 是否强制形状匹配。
         """
         import torch
 
@@ -161,8 +225,7 @@ class Core:
 
     def _bind_trainer(self) -> None:
         """
-        为Core绑定trainer，以便于进行模型训练。
-        @return:
+        实例化并绑定 trainer。
         """
         self.trainer = TTRegistry.get(self.task, "trainer")(
             config_manager=self.config_manager,
@@ -173,12 +236,12 @@ class Core:
 
     def _bind_predictor(self, model, backend: str | None = None, **kwargs):
         """
-       为 Core 绑定 predictor。
-       支持三种场景：
-       1. 直接加载 .pt/.pth 后预测；
-       2. 传入非权重文件（如 onnx）后预测；
-       3. 训练完直接预测（self.model 已存在）。
-       """
+        实例化并绑定 predictor，支持三种场景：
+        1. 训练完直接预测；
+        2. 加载 .pt/.pth 后预测；
+        3. 使用第三方后端文件直接推理。
+        """
+
         # 场景 1：训练完直接预测
         if self.model is not None:
             self.predictor = TTRegistry.get(self.task, "predictor")(
@@ -221,11 +284,11 @@ class Core:
 
     def _bind_exporter(self, backend: str, model: str | Path | None = None, **kwargs):
         """
-        为 Core 绑定 exporter。
-        支持两种场景：
+        实例化并绑定 exporter，支持：
         1. 训练完直接导出；
         2. 加载 .pt/.pth 后导出。
         """
+
         # 场景 1：训练完直接导出
         if self.model is not None:
             self.exporter = TTRegistry.get(self.task, "exporter")(
@@ -260,6 +323,16 @@ class Core:
         )
 
     def _find_last_pt_file(self):
+        """
+        自动搜索最近一次训练生成的 last.pt。
+
+        Returns:
+            Path: last.pt 的绝对路径。
+
+        Raises:
+            FileNotFoundError: 如果任何 run 目录下都找不到 last.pt。
+        """
+
         save_dir = Path(self.config_manager.core["save_dir"]).resolve()
         project_name = self.config_manager.core["project_name"]
         if project_name == "":
@@ -289,6 +362,16 @@ class Core:
         return pt_model
 
     def _find_best_pt_file(self):
+        """
+        自动搜索最近一次训练生成的 best.pt（逻辑与 _find_last_pt_file 一致）。
+
+        Returns:
+            Path: best.pt 的绝对路径。
+
+        Raises:
+            FileNotFoundError: 如果任何 run 目录下都找不到 best.pt。
+        """
+
         save_dir = Path(self.config_manager.core["save_dir"]).resolve()
         project_name = self.config_manager.core["project_name"]
         if project_name == "":

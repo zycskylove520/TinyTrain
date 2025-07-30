@@ -13,7 +13,34 @@ if TYPE_CHECKING:
 
 
 class BaseValidator:
+    """
+    BaseValidator 是验证器的抽象基类，负责在训练过程中或训练结束后对模型进行验证。
+    它提供了完整的验证流程骨架，包括数据预处理、推理、后处理以及指标计算与汇总。
+    子类只需按需实现/重写特定方法即可快速适配不同任务（如分类、检测、分割等）。
+
+    验证时机：
+    1. 训练阶段：每个 epoch 结束后立即验证（用于早停、调度器、日志记录）。
+    2. 训练完成：所有 epoch 结束后最终验证（用于报告最终性能）。
+
+    主要流程：
+        start_metrics_*   -> 初始化指标
+        update_metrics_*  -> 逐 batch 更新指标
+        end_metrics_*     -> 汇总并输出指标
+        get_fitness       -> 返回一个标量，用于衡量模型好坏（越大越好）
+
+    注意：
+    - 所有耗时运算应放在 @torch.inference_mode() 下执行，以关闭梯度计算。
+    - 支持 DDP；若需跨进程聚合指标，请在子类中自行实现。
+    """
     def __init__(self, trainer: BaseTrainer, world_size: int):
+        """
+        初始化验证器。
+
+        Args:
+            trainer (BaseTrainer): 训练器实例，用于获取配置、模型、数据加载器等。
+            world_size (int): 分布式训练中的总进程数（用于 DDP）。
+        """
+
         self.trainer: BaseTrainer = trainer
         self.world_size = world_size
         self.config_manager: ConfigManager = trainer.config_manager
@@ -28,10 +55,20 @@ class BaseValidator:
         self.callbacks = trainer.callbacks
 
     def __call__(self, *args, **kwargs):
+        """
+        使验证器实例可调用，等价于 self.validate(*args, **kwargs)。
+        """
         self.validate(*args, **kwargs)
 
     @torch.inference_mode()
     def validate(self):
+        """
+        执行验证流程。
+
+        Returns:
+            float: fitness 值，越大表示模型越好。
+        """
+
         # 用于判断训练何时结束
         stop = self.trainer.stop
 
@@ -77,73 +114,103 @@ class BaseValidator:
 
         return fitness
 
+    # ------------------------------------------------------------------
+    # 以下子类可重写的方法
+    # ------------------------------------------------------------------
     def preprocess(self, batch_samples: BaseBatchDataInfo) -> BaseBatchDataInfo:
         """
-        对batch_samples进行数据预处理，比如将data移到对于的device上
-        @param batch_samples:
-        @return:
+        对输入 batch 进行预处理，如将数据移到目标设备。
+
+        Args:
+            batch_samples (BaseBatchDataInfo): 原始 batch 数据。
+
+        Returns:
+            BaseBatchDataInfo: 预处理后的 batch 数据。
         """
         return batch_samples
 
     def postprocess(self, preds: list[torch.Tensor]) -> list[torch.Tensor]:
         """
-        对预测结果preds进行数据后处理
-        @param preds:
-        @return:
+        对模型原始输出进行后处理，如 NMS、阈值过滤、softmax 等。
+
+        Args:
+            preds (list[torch.Tensor]): 模型输出张量列表。
+
+        Returns:
+            list[torch.Tensor]: 后处理后的张量列表。
         """
         return preds
 
+    # ------------------------------------------------------------------
+    # 指标生命周期：训练过程中验证
+    # ------------------------------------------------------------------
     def start_metrics_on_training(self, pbar: TTProgressBar):
         """
-        训练过程中，每个epoch结束后，在进行验证前先使用该函数做metrics初始化。
-        @return:
+        训练阶段验证开始前，初始化或重置指标。
+
+        Args:
+            pbar (TTProgressBar): 进度条实例，可用于动态展示信息。
         """
         pass
 
     def update_metrics_on_training(self, outputs: list[torch.Tensor], batch_samples: BaseBatchDataInfo, pbar: TTProgressBar):
         """
-        训练过程中，每个epoch结束后，在验证过程中循环验证数据集时，使用该函数更新metrics。
-        @param outputs:
-        @param batch_samples:
-        @param pbar:
-        @return:
+        训练阶段验证过程中，每处理一个 batch 即更新指标。
+
+        Args:
+            outputs (list[torch.Tensor]): 当前 batch 的后处理输出。
+            batch_samples (BaseBatchDataInfo): 当前 batch 的输入与标签。
+            pbar (TTProgressBar): 进度条实例。
         """
         pass
 
     def end_metrics_on_training(self, pbar: TTProgressBar):
         """
-        训练过程中，每个epoch结束后，在验证过程结束时，使用该函数进行最终的metrics处理。
-        @return:
+        训练阶段验证结束时，汇总指标并输出（例如打印、写日志、更新 TensorBoard）。
+
+        Args:
+            pbar (TTProgressBar): 进度条实例。
         """
         pass
 
+    # ------------------------------------------------------------------
+    # 指标生命周期：训练完成后最终验证
+    # ------------------------------------------------------------------
     def start_metrics_on_train_completed(self, pbar: TTProgressBar):
         """
-        训练的所有epoch结束后，在验证过程中循环验证数据集时，使用该函数更新metrics。
-        @return:
+        训练全部完成后验证开始前，初始化或重置指标。
+
+        Args:
+            pbar (TTProgressBar): 进度条实例。
         """
         pass
 
     def update_metrics_on_train_completed(self, outputs: list[torch.Tensor], batch_samples: BaseBatchDataInfo, pbar: TTProgressBar):
         """
-        训练的所有epoch结束后，每个epoch结束后，在验证过程中循环验证数据集时，使用该函数更新metrics。
-        @param outputs:
-        @param batch_samples:
-        @param pbar:
-        @return:
+        训练完成后验证过程中，每处理一个 batch 即更新指标。
+
+        Args:
+            outputs (list[torch.Tensor]): 当前 batch 的后处理输出。
+            batch_samples (BaseBatchDataInfo): 当前 batch 的输入与标签。
+            pbar (TTProgressBar): 进度条实例。
         """
         pass
 
     def end_metrics_on_train_completed(self, pbar: TTProgressBar):
         """
-        训练的所有epoch结束后，每个epoch结束后，在验证过程结束时，使用该函数进行最终的metrics处理。
-        @return:
+        训练完成后验证结束时，汇总指标并输出。
+
+        Args:
+            pbar (TTProgressBar): 进度条实例。
         """
         pass
 
     def get_fitness(self) -> float:
         """
-        用于评估验证集好坏的评估指标，要求返回一个浮点数。
-        @return:
+        返回一个标量，用于衡量当前模型在验证集上的优劣。
+        训练器会把该值用于 checkpoint 选择、早停、学习率调度等。
+
+        Returns:
+            float: 越大表示模型越好；默认返回 0（子类必须重写以提供有效指标）。
         """
         return 0

@@ -9,13 +9,29 @@ from typing import TYPE_CHECKING, Literal, Dict, Any
 if TYPE_CHECKING:
     import torch
 
-
+# -----------------------------------------------------------------------------
+# 基础数据容器
+# -----------------------------------------------------------------------------
 class BaseDataInfo:
     """
-    基础数据信息类，用于存储基本的数据信息，提供通用的深拷贝方法。。
+    所有数据信息类的 **根容器**。
+
+    功能
+    ----
+    - **动态字段管理**：构造函数支持任意关键字参数，自动绑定为成员变量。
+    - **智能深拷贝**：通过 __deepcopy__ 跳过指定字段，避免多进程/多线程拷贝大对象或共享资源。
+
+    使用示例
+    --------
+    >>> data = BaseDataInfo(img=img_tensor, path=Path("a.jpg"))
+    >>> data_copy = deepcopy(data)  # 跳过 _exclude_from_deepcopy 中的字段
     """
 
     def __init__(self, **kwargs):
+        """
+        Args:
+            **kwargs: 任意键值对，将动态绑定为成员变量。
+        """
         super().__init__()
         self._exclude_from_deepcopy = set()  # 定义不参与深拷贝的字段集合
         for key, value in kwargs.items():
@@ -23,7 +39,13 @@ class BaseDataInfo:
 
     def __deepcopy__(self, memodict: Dict[int, Any]) -> 'BaseDataInfo':
         """
-        自定义深拷贝方法，动态处理所有字段。
+        自定义深拷贝，跳过 _exclude_from_deepcopy 中的字段。
+
+        Args:
+            memodict: deepcopy 内部缓存字典。
+
+        Returns:
+            BaseDataInfo: 深拷贝后的新实例。
         """
         new_instance = self.__class__.__new__(self.__class__)  # 创建一个新的实例
         for key, value in self.__dict__.items():
@@ -40,23 +62,41 @@ class AnyDataInfo(BaseDataInfo):
     """透传任意 BaseDataInfo 对象"""
 
     def __init__(self, data: BaseDataInfo, **kwargs):
+        """
+        Args:
+            data (BaseDataInfo): 被包装的原始数据对象。
+            **kwargs: 透传给父类的额外字段。
+        """
         super().__init__(**kwargs)
         self.data = data
 
 
 class TextDataInfo(BaseDataInfo):
+    """
+    纯文本任务的数据容器。
+    """
     def __init__(self,
                  text: str,
                  **kwargs):
+        """
+        Args:
+            text (str): 文本内容。
+            **kwargs: 透传给父类。
+        """
         super().__init__(**kwargs)
         self.text = text
 
 
 class ImgDataInfo(BaseDataInfo):
     """
-    基础图像信息类，用于存储图像相关的基本信息。
-    """
+    单张图像的 **通用元数据** 容器，支持帧号、仿射矩阵、前后帧指针等。
 
+    典型用途
+    --------
+    - 视频帧序列：frame_id + next_ImgDataInfo。
+    - Mosaic/Copy-Paste：next_ImgDataInfo 指向下一张待拼接图像。
+    - 仿射变换：affine_matrix 记录当前图像所有几何变换，推理阶段用于坐标回推。
+    """
     def __init__(self,
                  frame_id: int = 0,
                  img: np.ndarray | None = None,
@@ -70,17 +110,16 @@ class ImgDataInfo(BaseDataInfo):
                  **kwargs
                  ) -> None:
         """
-        初始化基础图像信息。
-
-        :param frame_id:图像如果来源于视频，对应视频的第几帧
-        :param img: 图像数据（NumPy数组）
-        :param origin_shape: 图像最初的尺寸 (宽度, 高度)
-        :param current_shape: 图像经过一次图像增强算子变换结束后的尺寸 (宽度, 高度)
-        :param target_shape: 图像增强结束后的尺寸 (宽度, 高度)
-        :param img_file: 图像文件路径
-        :param next_ImgDataInfo: 下一个ImgDataInfo，如果要做多张图片融合增强等操作则需要
-        :param affine_matrix: 图像所经历的仿射变换矩阵,可用于验证集和推理
-        :param kwargs: 其他关键字参数（传递给父类）
+        Args:
+            frame_id: 视频帧序号（文件/摄像头场景下可设为 0）。
+            img: HWC 格式的 numpy 数组。
+            origin_shape: 原始宽高 (W, H)。
+            current_shape: 经过当前步骤后的宽高 (W, H)。
+            target_shape: 最终模型输入宽高 (W, H)。
+            img_file: 图像文件路径。
+            next_ImgDataInfo: 下一张图（用于 Mosaic 等融合增强）。
+            affine_matrix: 2×3 仿射矩阵，记录所有几何变换。
+            **kwargs: 透传给父类。
         """
         super().__init__(**kwargs)
         self.frame_id = frame_id
@@ -97,7 +136,7 @@ class ImgDataInfo(BaseDataInfo):
 
 class ClassifyDataInfo(ImgDataInfo):
     """
-    分类数据信息类，继承自基础图像信息类，用于存储分类任务相关的数据。
+    分类任务专用单张图像数据容器。
     """
 
     def __init__(self,
@@ -105,10 +144,9 @@ class ClassifyDataInfo(ImgDataInfo):
                  **kwargs
                  ) -> None:
         """
-        初始化分类数据信息。
-
-        :param label: 分类标签
-        :param kwargs: 其他关键字参数（传递给父类）
+        Args:
+            label (np.ndarray | None): 类别索引数组（支持多标签）。
+            **kwargs: 透传给父类。
         """
         super().__init__(**kwargs)
         self.label = label
@@ -116,7 +154,7 @@ class ClassifyDataInfo(ImgDataInfo):
 
 class DetectDataInfo(ClassifyDataInfo):
     """
-    检测数据信息类，继承自分类数据信息类，用于存储目标检测任务相关的数据。
+    检测任务专用单张图像数据容器，支持 bbox 坐标变换与格式转换。
     """
 
     def __init__(self,
@@ -127,14 +165,14 @@ class DetectDataInfo(ClassifyDataInfo):
                  **kwargs
                  ) -> None:
         """
-        初始化检测数据信息。
-
-        :param scores: 每个目标框的置信度分数
-        :param bboxes: 边界框坐标
-        :param bbox_format: 边界框格式（"lxlyrxry"、"lxlywh" 或 "cxcywh"）
-        :param normalized: 边界框坐标是否归一化
-        :param kwargs: 其他关键字参数（传递给父类）
+        Args:
+            scores: 每个 bbox 的置信度。
+            bboxes: 边界框坐标 [N, 4]。
+            bbox_format: bbox 字符串格式。
+            normalized: 坐标是否已归一化到 [0, 1]。
+            **kwargs: 透传给父类。
         """
+
         super().__init__(**kwargs)
         self.scores = scores
         self.bboxes = bboxes
@@ -142,6 +180,7 @@ class DetectDataInfo(ClassifyDataInfo):
         self.normalized = normalized
 
     def move(self, move_x: int, move_y: int):
+        """在像素坐标下平移 bbox（仅当 normalized=False 时有效）。"""
         assert not self.normalized and self.bboxes is not None
 
         # in yolo dataset, background image bboxes shape is: [0, 4]
@@ -160,6 +199,7 @@ class DetectDataInfo(ClassifyDataInfo):
             raise ValueError(f"bbox_format {self.bbox_format} is not supported.")
 
     def scale(self, scale_x: float, scale_y: float):
+        """在像素坐标下缩放 bbox（仅当 normalized=False 时有效）。"""
         assert not self.normalized and self.bboxes is not None
 
         # in yolo dataset, background image bboxes shape is: [0, 4]
@@ -170,6 +210,7 @@ class DetectDataInfo(ClassifyDataInfo):
         self.bboxes[..., 1::2] *= scale_y
 
     def affine_transform(self):
+        """根据 self.affine_matrix 对 bbox 做仿射变换（仅像素坐标下生效）。"""
         assert not self.normalized and self.bboxes is not None
 
         # in yolo dataset, background image bboxes shape is: [0, 4]
@@ -205,6 +246,7 @@ class DetectDataInfo(ClassifyDataInfo):
         self.convert_format(box_format=old_box_format)
 
     def normalize(self, w, h):
+        """将像素坐标归一化到 [0, 1]。"""
         assert self.bboxes is not None
 
         if self.normalized:
@@ -220,6 +262,7 @@ class DetectDataInfo(ClassifyDataInfo):
         self.normalized = True
 
     def denormalize(self, w, h):
+        """将归一化坐标恢复到像素坐标。"""
         if not self.normalized:
             return
 
@@ -234,6 +277,12 @@ class DetectDataInfo(ClassifyDataInfo):
         self.normalized = False
 
     def convert_format(self, box_format="cxcywh"):
+        """
+        在 3 种 bbox 格式间任意转换，同时支持归一化/反归一化保持。
+
+        Args:
+            box_format: 目标格式。
+        """
         from tinytrain.utils.box_utils import (lxlyrxry_2_cxcywh,
                                                lxlywh_2_cxcywh,
                                                cxcywh_2_lxlyrxry,
@@ -279,17 +328,19 @@ class DetectDataInfo(ClassifyDataInfo):
         self.bbox_format = box_format
 
     def __len__(self) -> int:
+        """返回 bbox 数量。"""
         assert self.bboxes is not None
         return len(self.bboxes)
 
     def __getitem__(self, index: int) -> np.ndarray:
+        """按索引返回单个 bbox。"""
         assert self.bboxes is not None
         return self.bboxes[index]
 
 
 class SegmentDataInfo(DetectDataInfo):
     """
-    分割数据信息类，继承自检测数据信息类，用于存储图像分割任务相关的数据。
+    分割任务数据容器，额外携带多边形/掩码。
     """
 
     def __init__(self,
@@ -297,10 +348,10 @@ class SegmentDataInfo(DetectDataInfo):
                  **kwargs
                  ) -> None:
         """
-        初始化分割数据信息。
-
-        :param segments: 分割区域列表
-        :param kwargs: 其他关键字参数（传递给父类）
+        Args:
+            segments (list | None):
+                每个实例的多边形或 RLE 掩码列表，长度等于 bbox 数。
+            **kwargs: 透传给父类。
         """
         super().__init__(**kwargs)
         self.segments = segments
@@ -308,7 +359,7 @@ class SegmentDataInfo(DetectDataInfo):
 
 class PoseDataInfo(DetectDataInfo):
     """
-    姿态估计数据信息类，继承自检测数据信息类，用于存储姿态估计任务相关的数据。
+    姿态估计任务数据容器，额外携带关键点。
     """
 
     def __init__(self,
@@ -317,11 +368,12 @@ class PoseDataInfo(DetectDataInfo):
                  **kwargs
                  ) -> None:
         """
-        初始化姿态估计数据信息。
-
-        :param key_points: 关键点列表
-        :param kpt_shape: 关键点形状
-        :param kwargs: 其他关键字参数（传递给父类）
+        Args:
+            key_points (list | None):
+                每个实例的关键点坐标，形状 [N, K, 3]（x, y, visible）。
+            kpt_shape (list | None):
+                单张图关键点维度信息，如 [17, 3]。
+            **kwargs: 透传给父类。
         """
         super().__init__(**kwargs)
         self.key_points = key_points
@@ -330,26 +382,22 @@ class PoseDataInfo(DetectDataInfo):
 
 class BaseBatchDataInfo:
     """
-    基础批量数据信息类，用于存储批量数据的基本信息。
+    单个 batch 的 **通用容器**，data 字段可存放张量 / 列表 / 任意对象。
     """
 
     def __init__(self,
                  data: torch.Tensor | list[torch.Tensor] | Any | None = None
                  ):
         """
-        初始化基础批量数据信息。
-
-        :param data: 批量数据（PyTorch张量或张量列表）
+        Args:
+            data: 一批原始输入或中间特征。
         """
         self.data = data
 
 
 class ImgBatchDataInfo(BaseBatchDataInfo):
     """
-    图像批量数据信息类，用于存储批量图像数据及其相关属性。
-
-    该类继承自 BaseBatchDataInfo，用于存储批量图像数据的形状信息，包括原始形状和调整后的形状。
-    这些信息通常在图像预处理和后处理阶段非常有用，例如在批量图像大小调整或恢复原始图像大小时。
+    图像 batch 元数据，记录每张图的原始/目标尺寸，便于后处理还原。
     """
 
     def __init__(self,
@@ -358,11 +406,10 @@ class ImgBatchDataInfo(BaseBatchDataInfo):
                  **kwargs  # 其他关键字参数（传递给父类）
                  ) -> None:
         """
-        初始化图像批量数据信息。
-
-        :param origin_shapes: 批量图像的原始尺寸组成的tensor，每一行是一个图像(宽度, 高度)。
-        :param target_shapes: 批量图像经过图像增强变换完成的尺寸组成的tensor，每一行是一个图像(宽度, 高度)。
-        :param kwargs: 其他关键字参数，将传递给父类 BaseBatchDataInfo。
+        Args:
+            origin_shapes: [B, 2] 原始宽高 (W, H)。
+            target_shapes: [B, 2] 增强后宽高 (W, H)。
+            **kwargs: 透传给父类。
         """
         super().__init__(**kwargs)
         self.origin_shapes = origin_shapes
@@ -370,10 +417,7 @@ class ImgBatchDataInfo(BaseBatchDataInfo):
 
 
 class ClassifyBatchDataInfo(ImgBatchDataInfo):
-    """
-    分类批量数据信息类，继承自基础批量数据信息类，用于存储分类任务相关的批量数据。
-    """
-
+    """分类 batch 容器，额外携带标签张量。"""
     def __init__(self,
                  target: torch.Tensor | None = None,
                  **kwargs
@@ -381,8 +425,9 @@ class ClassifyBatchDataInfo(ImgBatchDataInfo):
         """
         初始化分类批量数据信息。
 
-        :param target: 分类目标（PyTorch张量）
-        :param kwargs: 其他关键字参数（传递给父类）
+        Args:
+           target: 分类目标（PyTorch张量）
+           **kwargs: 透传给父类。
         """
         super().__init__(**kwargs)
         self.target = target
@@ -390,7 +435,12 @@ class ClassifyBatchDataInfo(ImgBatchDataInfo):
 
 class DetectBatchDataInfo(ClassifyBatchDataInfo):
     """
-    检测批量数据信息类，继承自分类批量数据信息类，用于存储目标检测任务相关的批量数据。
+    检测 batch 容器，额外携带 bbox 及索引。
+
+    说明
+    ----
+    - bboxes: [N, 4] 全部 bbox，按 cxcywh 或 lxlyrxry 格式。
+    - bboxes_idx: [N] long Tensor，标示每个 bbox 属于 batch 中第几张图。
     """
 
     def __init__(self,
@@ -411,9 +461,7 @@ class DetectBatchDataInfo(ClassifyBatchDataInfo):
 
 
 class SegmentBatchDataInfo(DetectBatchDataInfo):
-    """
-    分割批量数据信息类，继承自检测批量数据信息类，用于存储图像分割任务相关的批量数据。
-    """
+    """分割 batch 容器，目前与检测保持一致，未来可拓展 segments 字段。"""
 
     def __init__(self,
                  **kwargs
@@ -427,9 +475,7 @@ class SegmentBatchDataInfo(DetectBatchDataInfo):
 
 
 class PoseBatchDataInfo(DetectBatchDataInfo):
-    """
-    姿态估计批量数据信息类，继承自检测批量数据信息类，用于存储姿态估计任务相关的批量数据。
-    """
+    """姿态估计 batch 容器，未来可拓展 key_points 字段。"""
 
     def __init__(self,
                  **kwargs

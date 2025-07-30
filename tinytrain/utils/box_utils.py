@@ -4,6 +4,10 @@ import numpy as np
 
 
 def lxlyrxry_2_lxlywh(x):
+    """
+    (lx, ly, rx, ry) → (lx, ly, w, h)
+    不复制内存，返回与输入同类型空张量/数组。
+    """
     assert x.shape[-1] == 4, f"input shape last dimension expected 4 but input shape is {x.shape}"
     y = torch.empty_like(x) if isinstance(x, torch.Tensor) else np.empty_like(x)  # faster than clone/copy
     lxly = x[..., :2]
@@ -14,6 +18,9 @@ def lxlyrxry_2_lxlywh(x):
 
 
 def lxlywh_2_lxlyrxry(x):
+    """
+    (lx, ly, w, h) → (lx, ly, rx, ry)
+    """
     assert x.shape[-1] == 4, f"input shape last dimension expected 4 but input shape is {x.shape}"
     y = torch.empty_like(x) if isinstance(x, torch.Tensor) else np.empty_like(x)  # faster than clone/copy
     lxly = x[..., :2]
@@ -24,6 +31,9 @@ def lxlywh_2_lxlyrxry(x):
 
 
 def lxlyrxry_2_cxcywh(x):
+    """
+    (lx, ly, rx, ry) → (cx, cy, w, h)
+    """
     assert x.shape[-1] == 4, f"input shape last dimension expected 4 but input shape is {x.shape}"
     y = torch.empty_like(x) if isinstance(x, torch.Tensor) else np.empty_like(x)  # faster than clone/copy
     lxly = x[..., :2]
@@ -36,6 +46,9 @@ def lxlyrxry_2_cxcywh(x):
 
 
 def cxcywh_2_lxlyrxry(x):
+    """
+    (cx, cy, w, h) → (lx, ly, rx, ry)
+    """
     assert x.shape[-1] == 4, f"input shape last dimension expected 4 but input shape is {x.shape}"
     y = torch.empty_like(x) if isinstance(x, torch.Tensor) else np.empty_like(x)  # faster than clone/copy
     cxcy = x[..., :2]
@@ -48,6 +61,9 @@ def cxcywh_2_lxlyrxry(x):
 
 
 def lxlywh_2_cxcywh(x):
+    """
+    (lx, ly, w, h) → (cx, cy, w, h)
+    """
     assert x.shape[-1] == 4, f"input shape last dimension expected 4 but input shape is {x.shape}"
     y = torch.empty_like(x) if isinstance(x, torch.Tensor) else np.empty_like(x)  # faster than clone/copy
     lxly = x[..., :2]
@@ -59,6 +75,9 @@ def lxlywh_2_cxcywh(x):
 
 
 def cxcywh_2_lxlywh(x):
+    """
+    (cx, cy, w, h) → (lx, ly, w, h)
+    """
     assert x.shape[-1] == 4, f"input shape last dimension expected 4 but input shape is {x.shape}"
     y = torch.empty_like(x) if isinstance(x, torch.Tensor) else np.empty_like(x)  # faster than clone/copy
     cxcy = x[..., :2]
@@ -71,20 +90,17 @@ def cxcywh_2_lxlywh(x):
 
 def bbox_iou_torch(box1: torch.Tensor, box2: torch.Tensor, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
     """
-    Calculate Intersection over Union (IoU) of box1(1, 4) to box2(n, 4).
+    计算 IoU / GIoU / DIoU / CIoU (PyTorch 版)。
 
     Args:
-        box1 (torch.Tensor): A tensor representing a single bounding box with shape (1, 4).
-        box2 (torch.Tensor): A tensor representing n bounding boxes with shape (n, 4).
-        xywh (bool, optional): If True, input boxes are in (x, y, w, h) format. If False, input boxes are in
-                               (x1, y1, x2, y2) format. Defaults to True.
-        GIoU (bool, optional): If True, calculate Generalized IoU. Defaults to False.
-        DIoU (bool, optional): If True, calculate Distance IoU. Defaults to False.
-        CIoU (bool, optional): If True, calculate Complete IoU. Defaults to False.
-        eps (float, optional): A small value to avoid division by zero. Defaults to 1e-7.
+        box1: (1, 4) 或 (B, 4)
+        box2: (n, 4) 或 (B, n, 4)
+        xywh: 若为 True，输入为 (cx, cy, w, h)；否则为 (x1, y1, x2, y2)
+        GIoU/DIoU/CIoU: 仅可单选其一
+        eps: 数值稳定项
 
     Returns:
-        (torch.Tensor): IoU, GIoU, DIoU, or CIoU values depending on the specified flags.
+        Tensor: 对应指标 (IoU/GIoU/DIoU/CIoU)
     """
     # Get the coordinates of bounding boxes
     if xywh:  # transform from xywh to xyxy
@@ -134,9 +150,15 @@ def bbox_iou_torch(box1: torch.Tensor, box2: torch.Tensor, xywh=True, GIoU=False
 
 def bbox_iou_numpy(box1, box2, eps=1e-7):
     """
-    box1: np.ndarray, shape [N, 4]  (x1, y1, x2, y2)
-    box2: np.ndarray, shape [M, 4]  (x1, y1, x2, y2)
-    return: np.ndarray, shape [N, M]
+    NumPy 版 IoU，输入为 (x1, y1, x2, y2)。
+
+    Args:
+        box1: (N, 4)
+        box2: (M, 4)
+        eps: 数值稳定项
+
+    Returns:
+        ndarray: (N, M) IoU
     """
     N = box1.shape[0]
     M = box2.shape[0]
@@ -163,14 +185,14 @@ def bbox_iou_numpy(box1, box2, eps=1e-7):
 
 def box_invert_affine_transform(boxes: np.ndarray, affine_matrix: np.ndarray) -> np.ndarray:
     """
-    对经过仿射变换的box坐标进行逆变换，恢复原始坐标。
+    将经过仿射变换的框坐标恢复到原图坐标系。
 
     Args:
-        boxes (np.ndarray): 变换后的box坐标，形状为 (N, 8)，每行为 [lx, ly, rx, ry]。
-        affine_matrix (np.ndarray): 仿射变换矩阵，形状为 (2, 3)。
+        boxes: 变换后的框坐标 (N, 8) 或 (N, 4)。
+        affine_matrix: 2×3 仿射矩阵。
 
     Returns:
-        np.ndarray: 恢复后的原始box坐标，形状与输入相同。
+        ndarray: 与输入同形状的原始坐标。
     """
     # 将仿射矩阵扩展为 3x3 矩阵
     affine_matrix_homo = np.vstack([affine_matrix, [0, 0, 1]])

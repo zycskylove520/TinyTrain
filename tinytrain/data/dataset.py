@@ -23,22 +23,58 @@ from .data_format import ClassifyDataInfo, ClassifyBatchDataInfo
 
 
 class TTBaseDataset(Dataset):
+    """
+    所有数据集的 **抽象基类**。
+
+    职责
+    ----
+    1. 定义必须实现的接口：`__getitem__`、`__len__`、`collate_fn`。
+    2. 作为类型标记，便于 `DataLoader` 自动识别。
+
+    子类要求
+    --------
+    - 必须实现 `__getitem__`、`__len__`、`collate_fn`。
+    - 必须返回 **继承自 `BaseDataInfo` 的对象**。
+    """
+
     def __init__(self, config_manager):
+        """
+        Args:
+            config_manager (ConfigManager): 全局配置管理器。
+        """
         self.config_manager = config_manager
 
     def __getitem__(self, index):
+        """子类必须实现：返回单个样本（`BaseDataInfo` 子类）。"""
         raise NotImplementedError
 
     def __len__(self):
+        """子类必须实现：返回数据集大小。"""
         raise NotImplementedError
 
     def collate_fn(self, batch):
+        """
+        子类必须实现：将 `list[BaseDataInfo]` 整理为 `BatchDataInfo`。
+
+        Args:
+            batch (list): 一批样本。
+
+        Returns:
+            BaseBatchDataInfo: 批数据容器。
+        """
         return batch
 
 
 class TTBaseVisionDataset(TTBaseDataset):
     """
-    BaseDataset类只负责检查图片和标签txt文件是否有问题，并根据用户需求做图片缓存。
+    视觉数据集 **通用基类**。
+
+    功能
+    ----
+    1. 检查图片与标签合法性。
+    2. 支持 **磁盘缓存**（npy）加速多进程/多卡训练。
+    3. 支持 **样本裁剪**（crop_fraction）快速缩小训练集。
+    4. 支持 **背景图**（无标签）与 **正样本图**（有标签）分离。
     """
 
     def __init__(
@@ -47,6 +83,12 @@ class TTBaseVisionDataset(TTBaseDataset):
             img_path: Path | list[Path],
             mode: str = "train"
     ):
+        """
+        Args:
+            config_manager (ConfigManager): 全局配置。
+            img_path (Path | list[Path]): 图片根目录或列表。
+            mode (str): 模式，"train"/"val"/"test"。
+        """
         super().__init__(config_manager=config_manager)
         self.img_path = img_path
         self.img_size = self.config_manager.dataset["img_size"]
@@ -74,11 +116,15 @@ class TTBaseVisionDataset(TTBaseDataset):
         raise NotImplementedError
 
     def __len__(self):
+        """缓存模式下返回缓存文件数，否则返回原图文件数。"""
         if self.cache:
             return len(self.npy_files + self.bg_npy_files)
         return len(self.img_files + self.bg_img_files)
 
     def crop_samples(self):
+        """
+        按 crop_fraction 裁剪数据集（训练阶段生效）。
+        """
         # samples clip, reduce training fraction
         if self.mode == "train" and self.crop_fraction < 1.0:
             self.img_files = self.img_files[: round(len(self.img_files) * self.crop_fraction)]
@@ -87,6 +133,7 @@ class TTBaseVisionDataset(TTBaseDataset):
                 self.npy_files = self.npy_files[: round(len(self.npy_files) * self.crop_fraction)]
 
     def init(self):
+        """统一入口：检查尺寸、类别、图片、标签、缓存。"""
         self.img_size = self.config_manager.dataset["img_size"] = check_img_size(self.img_size, mode=self.mode)
         self.check_class_names()
         self.check_images_and_labels()
@@ -144,6 +191,7 @@ class TTBaseVisionDataset(TTBaseDataset):
             LOGGER.info(f"use cache loading...")
 
     def check_class_names(self):
+        """确保类别数量与配置一致，不一致时自动补全。"""
         classes_num = len(self.config_manager.dataset.get("names", dict()).values())
         nc = self.config_manager.dataset["nc"]
         if classes_num != nc:
@@ -151,6 +199,7 @@ class TTBaseVisionDataset(TTBaseDataset):
             self.config_manager.dataset["names"] = {i: i for i in range(nc)}
 
     def check_images_and_labels(self):
+        """构建磁盘缓存（全局哈希 + 单文件缓存），仅 rank-0 执行。"""
         for p in self.img_path if isinstance(self.img_path, list) else [self.img_path]:
             # 获取标签路径
             label_path_parts = p.parts
@@ -191,6 +240,8 @@ class TTBaseVisionDataset(TTBaseDataset):
                     LOGGER.warning(msg)
 
     def make_disk_cache(self):
+        """为每张图片生成单文件缓存（npy），使用内存映射加速 IO。"""
+
         # 制作全局缓存，用于校验文件是否增删
         for p in self.img_path if isinstance(self.img_path, list) else [self.img_path]:
             hash_ = get_hash(sorted([str(img_file) for img_file in self.img_files + self.bg_img_files]))
@@ -217,6 +268,8 @@ class TTBaseVisionDataset(TTBaseDataset):
                     continue
 
     def thread_disk_cache(self, img_file):
+        """单线程任务：将图片转为 npy 缓存。"""
+
         # 获取缓存路径
         img_file_parts = img_file.parts
         cache_file_parts = [part if part != "images" else "caches" for part in img_file_parts]
@@ -225,16 +278,31 @@ class TTBaseVisionDataset(TTBaseDataset):
         save_image_cache_file(cache_file, cv_imread(img_file))  # 加载时走内存映射（省 RAM + 多进程共享）
 
     def custom_check(self):
+        """子类可重写，做额外检查。"""
         raise NotImplementedError("custom_check is not implemented.")
 
     def set_transform(self):
+        """子类可重写，返回增强流水线。"""
         raise NotImplementedError(f"set_transform is not implemented.")
 
     def collate_fn(self, batch):
+        """子类必须实现：将样本列表整理为批数据。"""
         raise NotImplementedError(f"collate_fn is not implemented.")
 
 
 class TTClassificationDataset(ImageFolder):
+    """
+    基于 `torchvision.datasets.ImageFolder` 的分类数据集封装。
+
+    功能
+    ----
+    1. 自动加载目录结构：`root/class_x/xxx.jpg`。
+    2. 支持 **磁盘缓存**（npy）加速训练/验证。
+    3. 支持 **数据集裁剪**（crop_fraction）快速消融。
+    4. 支持 **RGB/BGR 切换**、**尺寸检查**、**类别名校验**。
+    5. 内置 `collate_fn`，返回 `ClassifyBatchDataInfo`。
+    """
+
     def __init__(
             self,
             config_manager,
@@ -242,7 +310,10 @@ class TTClassificationDataset(ImageFolder):
             mode: str = "train"
     ):
         """
-        Initialize object with root, image size, augmentations, and cache settings, etc.
+        Args:
+            config_manager (ConfigManager): 全局配置。
+            root (str | Path): 数据集根目录（ImageFolder 格式）。
+            mode (str): "train"/"val"/"test"。
         """
         if isinstance(root, list):
             root = root[0]
@@ -261,6 +332,15 @@ class TTClassificationDataset(ImageFolder):
         self.set_transform()
 
     def __getitem__(self, index):
+        """
+        返回单张图像及其标签，已做增强。
+
+        Args:
+            index (int): 样本索引。
+
+        Returns:
+            ClassifyDataInfo: 增强后的样本。
+        """
         if self.cache:
             cache_file = self.samples[index]
             sample = load_dict_cache_file(cache_file)
@@ -294,10 +374,11 @@ class TTClassificationDataset(ImageFolder):
         return sample
 
     def __len__(self) -> int:
-        """Return the total number of samples in the dataset_config."""
+        """返回样本总数。"""
         return len(self.samples)
 
     def init(self):
+        """统一初始化：尺寸、类别、缓存。"""
         self.check_class_names()
         self.img_size = self.config_manager.dataset["img_size"] = check_img_size(self.img_size)
         self.samples = self.check_images()
@@ -337,7 +418,7 @@ class TTClassificationDataset(ImageFolder):
             self.samples = glob.glob(str(cache_path / "**" / "*.npy"), recursive=True)
 
     def crop_samples(self):
-        # samples clip, reduce training fraction
+        """训练阶段按 crop_fraction 裁剪数据集。"""
         if self.mode == "train" and self.crop_fraction < 1.0:
             origin_len = len(self.samples)
             # 打乱数据集
@@ -346,13 +427,14 @@ class TTClassificationDataset(ImageFolder):
             LOGGER.info(f"Perform datasets clipping, current {self.mode} dataset size is:{origin_len}x{self.crop_fraction}={len(self.samples)}")
 
     def set_transform(self):
+        """根据模式返回增强流水线。"""
         if self.mode == "train":
             self.transform = self.classification_augmentation.augment()
         else:
             self.transform = self.classification_augmentation.transform()
 
     def check_class_names(self):
-        # 根据class_to_idx设置类别索引
+        """根据 ImageFolder 的 class_to_idx 同步类别名。"""
         # self.names = self.config_manager.dataset["names"]
         names = {value: key for key, value in self.class_to_idx.items()}
         if self.config_manager.dataset.get("names", dict()) != names:
@@ -360,6 +442,7 @@ class TTClassificationDataset(ImageFolder):
             self.config_manager.dataset["names"] = names
 
     def check_images(self):
+        """多线程检查图片合法性，返回合法文件列表。"""
         with ThreadPool(NUM_THREADS) as pool:
             def wrapper(args):
                 return check_image(*args)
@@ -385,6 +468,8 @@ class TTClassificationDataset(ImageFolder):
         return samples
 
     def make_disk_cache(self):
+        """生成磁盘缓存。"""
+
         # 制作全局缓存，用于校验文件是否增删
         global_cache_file = self.root.parent / f"{self.mode}.npy"
         rel_paths = [str(Path(p[0]).relative_to(Path(p[0]).anchor)) for p in self.samples]
@@ -408,6 +493,7 @@ class TTClassificationDataset(ImageFolder):
                 continue
 
     def thread_disk_cache(self, img_file, label):
+        """单线程任务：保存缓存。"""
         sample = {}
         cache_file = (self.root.parent / f"{self.mode}_cache/" / img_file.relative_to(self.root)).with_suffix(".npy")
         cache_file.parent.mkdir(parents=True, exist_ok=True)
@@ -417,6 +503,15 @@ class TTClassificationDataset(ImageFolder):
         save_dict_cache_file(cache_file, sample, allow_pickle=True)
 
     def collate_fn(self, batch: list[ClassifyDataInfo]):
+        """
+        将样本列表整理为批张量。
+
+        Args:
+            batch (list[ClassifyDataInfo]): 样本列表。
+
+        Returns:
+            ClassifyBatchDataInfo: 批数据容器。
+        """
         B = len(batch)
         if B == 0:
             raise ValueError("Empty batch!")

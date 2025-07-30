@@ -12,16 +12,16 @@ from tinytrain.utils.any_utils import generate_unique_id
 
 def rename_and_move_files(source_images_dir, source_labels_dir, target_images_dir, target_labels_dir):
     """
-    将图片与对应的标签文件成对重命名为基于UUID的新文件名，并移动到新目录。
+    将图片与对应标签成对重命名为基于 UUID 的新文件名，并移动到新目录。
     仅处理能一一匹配的文件，忽略多余部分。
 
-    参数:
+    Args:
         source_images_dir (str): 原始图片目录
         source_labels_dir (str): 原始标签目录
         target_images_dir (str): 目标图片目录（自动创建）
         target_labels_dir (str): 目标标签目录（自动创建）
 
-    使用示例:
+    Example:
         >>> rename_and_move_files(
         ...     source_images_dir='./raw/images',
         ...     source_labels_dir='./raw/labels',
@@ -76,14 +76,14 @@ def rename_and_move_files(source_images_dir, source_labels_dir, target_images_di
 
 def draw_rect_from_image(img_path, label_path, out_img_path):
     """
-    读取单张图片及其YOLO格式标签，在图上绘制所有矩形框后保存。
+    读取单张图片及其 YOLO 格式标签，在图上绘制所有矩形框后保存。
 
-    参数:
+    Args:
         img_path (str): 原始图片路径
-        label_path (str): YOLO格式标签路径（每行: class cx cy w h，均为归一化值）
+        label_path (str): YOLO 标签路径（每行: class cx cy w h，均为归一化值）
         out_img_path (str): 绘制后的图片保存路径
 
-    使用示例:
+    Example:
         >>> draw_rect_from_image(
         ...     img_path='./images/0001.jpg',
         ...     label_path='./labels/0001.txt',
@@ -125,16 +125,16 @@ def draw_rect_from_image(img_path, label_path, out_img_path):
 
 def select_assign_label_img(image_folder, label_folder, new_image_folder, new_label_folder, class_ids):
     """
-    筛选出包含指定类别ID的图片与标签，复制到新目录，并将类别ID重映射为0开始的连续索引。
+    筛选出包含指定类别 ID 的图片与标签，复制到新目录，并将类别 ID 重映射为 0 开始的连续索引。
 
-    参数:
+    Args:
         image_folder (str): 原始图片目录
         label_folder (str): 原始标签目录
         new_image_folder (str): 筛选后图片输出目录
         new_label_folder (str): 筛选后标签输出目录
-        class_ids (list[int]): 需要保留的原始类别ID列表，如[2,5,7]
+        class_ids (list[int]): 需要保留的原始类别 ID 列表，如 [2,5,7]
 
-    使用示例:
+    Example:
         >>> select_assign_label_img(
         ...     image_folder='./all/images',
         ...     label_folder='./all/labels',
@@ -205,13 +205,13 @@ def select_assign_label_img(image_folder, label_folder, new_image_folder, new_la
 
 def remove_extra(img_dir, label_dir):
     """
-    删除图片目录中没有对应txt标签文件的多余图片。
+    删除图片目录中没有对应 txt 标签文件的多余图片。
 
-    参数:
+    Args:
         img_dir (str): 图片目录路径
         label_dir (str): 标签文件目录路径
 
-    使用示例:
+    Example:
         >>> remove_extra(
         ...     img_dir='./images',
         ...     label_dir='./labels'
@@ -238,13 +238,13 @@ def split_dataset(image_folder, label_folder, output_folder, split_ratios=(0.70,
     """
     将匹配的图片与标签按给定比例随机切分为训练/验证/测试集，并复制到输出目录。
 
-    参数:
+    Args:
         image_folder (str): 图片目录
         label_folder (str): 标签目录
-        output_folder (str): 输出根目录（会自动创建 img/train、label/train 等子目录）
-        split_ratios (tuple[float]): (train, val, test) 比例，默认(0.7,0.2,0.1)
+        output_folder (str): 输出根目录（自动创建 img/train、label/train 等子目录）
+        split_ratios (tuple[float]): (train, val, test) 比例，默认 (0.7,0.2,0.1)
 
-    使用示例:
+    Example:
         >>> split_dataset(
         ...     image_folder='./images',
         ...     label_folder='./labels',
@@ -327,19 +327,13 @@ def split_dataset(image_folder, label_folder, output_folder, split_ratios=(0.70,
 
 def count_label_types(directory):
     """
-    统计指定目录下所有YOLO标签文件中出现的类别ID及其出现次数。
+    统计指定目录下所有 YOLO 标签文件中出现的类别 ID 及其出现次数。
 
-    参数:
+    Args:
         directory (str): 标签文件所在目录
 
-    使用示例:
+    Example:
         >>> count_label_types('./labels')
-        统计结果：
-        数据集中共有 5 个标签类别
-        类别 ID | 出现次数
-              0 | 1200
-              1 |  800
-              ...
     """
     label_counter = Counter()  # 记录每个类别 ID 的出现次数
 
@@ -391,12 +385,12 @@ def count_label_types(directory):
 
 def convert_txt_files_to_utf8(directory):
     """
-    批量将目录下所有txt文件转码为UTF-8编码（自动尝试utf-8、gbk及chardet检测）。
+    批量将目录下所有 txt 文件转码为 UTF-8 编码（自动尝试 utf-8、gbk 及 chardet 检测）。
 
-    参数:
+    Args:
         directory (str): 需要处理的目录路径
 
-    使用示例:
+    Example:
         >>> convert_txt_files_to_utf8('./labels')
     """
     # 遍历目录中的所有文件
@@ -429,12 +423,12 @@ def convert_txt_files_to_utf8(directory):
 
 def delete_empty_txt_files(directory):
     """
-    删除指定目录下所有大小为0字节的txt文件。
+    删除指定目录下所有大小为 0 字节的 txt 文件。
 
-    参数:
+    Args:
         directory (str): 需要清理的目录路径
 
-    使用示例:
+    Example:
         >>> delete_empty_txt_files('./labels')
     """
     # 遍历目录中的所有文件
@@ -455,17 +449,16 @@ def delete_empty_txt_files(directory):
 
 def count_boxes(label_folder):
     """
-    统计YOLO标签目录下所有txt文件中的目标框总数（非空行数）。
+    统计 YOLO 标签目录下所有 txt 文件中的目标框总数（非空行数）。
 
-    参数:
+    Args:
         label_folder (str): 标签目录路径
 
-    返回:
+    Returns:
         int: 目标框总数
 
-    使用示例:
+    Example:
         >>> total = count_boxes('./labels')
-        total boxes count: 12345
         >>> print(total)
         12345
     """
@@ -489,14 +482,14 @@ def count_boxes(label_folder):
 
 def modify_category(source_label_folder, target_label_folder, category_mapping):
     """
-    批量修改YOLO标签文件中类别索引，并保存到新目录。
+    批量修改 YOLO 标签文件中类别索引，并保存到新目录。
 
-    参数:
+    Args:
         source_label_folder (str): 原始标签目录
         target_label_folder (str): 修改后标签输出目录（自动创建）
-        category_mapping (dict): 旧类别到新类别的映射字典，如{"0":"2", "3":"1"}
+        category_mapping (dict[str, str]): 旧类别到新类别的映射字典，如 {"0":"2", "3":"1"}
 
-    使用示例:
+    Example:
         >>> modify_category(
         ...     source_label_folder='./labels',
         ...     target_label_folder='./labels_mapped',
@@ -526,24 +519,3 @@ def modify_category(source_label_folder, target_label_folder, category_mapping):
                 f.writelines(modified_lines)
 
     print("类别修改完成，并已保存到新文件夹！")
-
-
-if __name__ == '__main__':
-    image_folder = r"D:\project\python_code\TinyTrain-main\datasets\fire\images"  # 原始图片目录
-    label_folder = r"D:\project\python_code\TinyTrain-main\datasets\fire\labels"  # 原始标签目录
-    # new_image_folder = r"E:\coco\yolo_train\images"
-    # new_label_folder = r"E:\coco\yolo_train\labels"
-
-    # 设置类别映射，键为原始类别索引，值为目标类别索引
-    category_mapping = {
-        '0': '0',  # 示例：将类别索引0修改为1
-        "1": "1",
-        "2": "2"
-    }
-    # modify_category(label_folder, new_label_folder, category_mapping)
-    # count_label_types(new_label_folder)
-    # select_assign_label_img(image_folder, label_folder, new_image_folder, new_label_folder, [0, 1, 2, 3, 5, 7])
-    # rename_and_move_files(image_folder, label_folder, new_image_folder, new_label_folder)
-    # remove_extra(image_folder,label_folder)
-    split_dataset(image_folder, label_folder, r"D:\project\python_code\TinyTrain-main\datasets\fire\sss", split_ratios=[0.8,0.2,0.0])
-    # count_boxes(label_folder)

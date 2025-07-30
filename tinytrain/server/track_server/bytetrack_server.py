@@ -17,21 +17,54 @@ if TYPE_CHECKING:
 
 
 class ByteTrackServer(BaseTrackServer):
+    """
+    ByteTrack 跟踪服务器实现，继承自 BaseTrackServer。
+    在预测器运行期间实时更新轨迹、绘制结果并支持保存图片 / 视频 / 实时显示。
+    """
     def __init__(self, config_manager: ConfigManager, callback: Callback, **kwargs):
+        """
+        初始化 ByteTrack 跟踪服务器。
+
+        Args
+        ----
+        config_manager : ConfigManager
+            全局配置管理器，用于读取 tracker 超参（min_box_area、save_img 等）。
+        callback : Callback
+            回调注册器，用于挂载 on_predict_start / on_predict_batch_end / on_predict_end 钩子。
+        **kwargs
+            透传给 BYTETracker 的初始化参数。
+        """
         super().__init__(config_manager, callback, **kwargs)
         self.tracker = BYTETracker(config_manager)
         self.stop_show_window = False
 
     def register_callback(self, callback: Callback):
+        """
+        注册 ByteTrack 所需的全部回调钩子。
+
+        Args
+        ----
+        callback : Callback
+            回调注册器实例。
+        """
         super().register_callback(callback)
         callback.add_callback("on_predict_start", self.on_predict_start)
         callback.add_callback("on_predict_batch_end", self.on_predict_batch_end)
         callback.add_callback("on_predict_end", self.on_predict_end)
 
     def on_predict_start(self, predictor: BasePredictor):
+        """预测开始时记录日志。"""
         LOGGER.info("start tracking...")
 
     def on_predict_batch_end(self, predictor: BasePredictor):
+        """
+        每帧预测结束后执行跟踪更新、结果绘制与保存。
+
+        Args
+        ----
+        predictor : BasePredictor
+            当前正在运行的预测器实例，包含最新检测结果。
+        """
         detect_info: DetectDataInfo = predictor.postprocess_result
         bboxes = detect_info.bboxes
         scores = detect_info.scores
@@ -56,12 +89,29 @@ class ByteTrackServer(BaseTrackServer):
         self.track_results = track_results
 
     def on_predict_end(self, predictor: BasePredictor):
-        # 读取跟踪结果保存路径下所有的图片合并为视频
+        """
+        预测结束后整理跟踪结果并生成视频。
+
+        Args
+        ----
+        predictor : BasePredictor
+            预测器实例，用于获取输出目录等信息。
+        """
         self.save_video()
 
         LOGGER.info("end tracking...")
 
     def save_track_imgs(self, detect_info: DetectDataInfo, track_results):
+        """
+        在图像上绘制跟踪结果并保存 / 显示。
+
+        Args
+        ----
+        detect_info : DetectDataInfo
+            当前帧的图像与元信息。
+        track_results : dict
+            当前帧的跟踪结果，键包含 track_ids、bboxes、scores。
+        """
         img = detect_info.img
 
         # 图像左上角写 frame_id
@@ -99,6 +149,11 @@ class ByteTrackServer(BaseTrackServer):
                 self.stop_show_window = True
 
     def save_video(self):
+        """
+        将保存的图片序列合成为视频。
+
+        仅在 save_img 与 save_video 同时开启时执行。
+        """
         if not (self.config_manager.tracker["save_img"] and self.config_manager.tracker["save_video"]):
             return
 

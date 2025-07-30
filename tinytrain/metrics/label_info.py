@@ -9,14 +9,23 @@ from matplotlib import pyplot as plt
 
 class LabelInfo:
     """
-    该类负责绘制跟标签相关的统计图表。
+    数据集标签统计与可视化工具类。
+
+    功能
+    ----
+    1. 标签类别分布直方图 (`label_histogram`)
+    2. 边界框空间分布热力图 (`boxes_statistics`)
+    3. 中心点及宽高分布散点图 (`cxcy_and_wh`)
+    4. 一键保存所有图表 (`plot`)
     """
 
     def __init__(self, num_classes: int, class_names: list[str], labels: np.ndarray, bboxes: np.ndarray):
         """
-
-        @param labels: 标签类别，一维的ndarray，shape为：[box_num]。如：np.array([1,2,3])
-        @param bboxes: 边界框，二维的ndarray，shape为：[box_num, 4],要求box_format为cxcywh
+        Args:
+            num_classes (int): 类别总数。
+            class_names (list[str]): 与索引对应的类别名称列表。
+            labels (np.ndarray): 一维数组，长度 = 边界框数量，存储每个框的类别索引。
+            bboxes (np.ndarray): 二维数组，形状 [box_num, 4]，格式为 cxcywh（已归一化到 [0,1]）。
         """
         self.num_classes = num_classes
         self.class_names = class_names
@@ -25,7 +34,13 @@ class LabelInfo:
 
     def label_histogram(self, save_dir: Path):
         """
-        绘制标签直方图。
+        绘制类别实例数量直方图并保存。
+
+        图表说明
+        --------
+        - 横轴：类别名称
+        - 纵轴：实例数量（条形顶部显示数值）
+        - 自动根据类别数量调整宽度
         """
         instances = np.arange(0, self.num_classes, dtype=int)
         for label in self.labels:
@@ -66,6 +81,14 @@ class LabelInfo:
         # plt.show()
 
     def boxes_statistics(self, axes):
+        """
+        在 640×640 画布上绘制所有边界框的叠加热力图。
+
+        参数
+        ----
+        axes: matplotlib Axes 对象，用于子图绘制。
+        """
+
         # 默认绘制在640x640的大小的图上
         width, height = 640, 640
         image = np.full((height, width, 3), fill_value=255, dtype=np.uint8)
@@ -89,6 +112,15 @@ class LabelInfo:
         axes[0, 0].axis('off')
 
     def cxcy_and_wh(self, axes):
+        """
+        绘制两类散点图：
+        1. 中心点 (cx, cy) 分布
+        2. 宽高 (w, h) 分布
+
+        参数
+        ----
+        axes: 长度为 2 的 Axes 列表，分别用于两幅子图。
+        """
         data1 = {
             "cx": [],
             "cy": [],
@@ -139,6 +171,11 @@ class LabelInfo:
         axes[1, 1].set_ylabel('Height')
 
     def plot(self, save_dir: Path):
+        """
+        一键绘制并保存所有统计图表：
+        1. label_histogram.png
+        2. label_infos.png（包含 boxes_statistics + cxcy_and_wh）
+        """
         # 标签直方图单独绘制
         self.label_histogram(save_dir)
 
@@ -152,22 +189,3 @@ class LabelInfo:
 
         # 保存图像
         fig.savefig(save_dir / 'label_infos.png', bbox_inches='tight', dpi=300)
-
-
-if __name__ == '__main__':
-    from tinytrain.data import YOLODetectionDataset
-    from pathlib import Path
-
-    img_path1 = Path(r"D:\project\python_code\TinyTrain-main\datasets\coco8\images\train")
-    da = YOLODetectionDataset(img_path1, 640, True)
-    samples = da.samples
-    labels = []
-    bboxes = []
-    for sample in samples:
-        labels.append(sample.label)
-        bboxes.append(sample.bboxes)
-    labels = np.concatenate(labels, axis=0)
-    bboxes = np.concatenate(bboxes, axis=0)
-    label_info = LabelInfo(num_classes=80, labels=labels, bboxes=bboxes)
-    save_dir = Path(r"D:\project\python_code\TinyTrain-main\runs\default_project\detect\train_0")
-    label_info.plot(save_dir)

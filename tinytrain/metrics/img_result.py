@@ -12,11 +12,12 @@ from matplotlib import pyplot as plt
 # -------------------- 基类 --------------------
 class BaseImgResult(ABC):
     """
-    只负责：
-    1. 计数、决定是否绘制
-    2. 创建/复用 Figure
-    3. 循环调用子类实现的 _draw_one_img 并保存
-    子类只需实现 _draw_one_img 即可。
+    通用可视化基类：负责
+    1) 计数 & 决定是否绘制；
+    2) 复用 matplotlib Figure，避免重复创建；
+    3) 循环调用子类实现的 `_draw_one_img` 并保存 PNG。
+
+    子类只需实现 `_draw_one_img`，即可完成单张图的绘制逻辑。
     """
 
     def __init__(self,
@@ -25,6 +26,14 @@ class BaseImgResult(ABC):
                  mode: str = "val",
                  max_sub_len: int = 3,
                  rgb=True):
+        """
+        Args:
+            save_dir (Path): 保存图片的目录。
+            plot_count (int): 最多绘制多少张 batch。
+            mode (str): 训练/验证/测试模式，用于文件名。
+            max_sub_len (int): 子图网格行列上限（ceil(sqrt(B)) 的截断）。
+            rgb (bool): 输入通道是否 RGB，若为 False 则会在 `_draw_one_img` 中翻转 BGR→RGB。
+        """
         self.save_dir = save_dir
         self.mode = mode
         self.max_sub_len = max_sub_len
@@ -41,14 +50,21 @@ class BaseImgResult(ABC):
     def _draw_one_img(self, img: np.ndarray, pred: torch.Tensor) -> np.ndarray:
         """
         把单张图片画好并返回 uint8 RGB（或 BGR，后面统一转 RGB）。
+
+        Args:
+            img (np.ndarray): HWC uint8 图像。
+            pred (torch.Tensor): 任务相关预测张量，子类自行解释。
+
+        Returns:
+            np.ndarray: 绘制后的图像，HWC。
         """
         pass
 
     # ---------- 子类可重写 ----------
     def _prepare_imgs(self, batch_samples) -> Tuple[np.ndarray, torch.Tensor]:
         """
-        默认实现：把 Tensor 转成 uint8 np.ndarray，并把预测 Tensor 准备好。
-        子类可以按任务重写（例如分类不需要 NMS）。
+        默认实现：把 Tensor → uint8 np.ndarray，并把预测张量准备好。
+        子类可按任务重写（如分类不需要 NMS，检测需要解码）。
         """
         imgs = batch_samples.data.permute(0, 2, 3, 1).contiguous()
         if imgs.max() <= 1.0:
@@ -58,6 +74,11 @@ class BaseImgResult(ABC):
 
     # ---------- 公共绘制入口 ----------
     def plot(self, batch_samples, preds: list[torch.Tensor]):
+        """
+        主入口：根据批次绘制子图并保存。
+        - 自动跳过超过 plot_count 的请求。
+        - 自动复用 Figure。
+        """
         if self.is_plot:
             return
         if self.plot_tick >= self.plot_count:
@@ -102,6 +123,9 @@ class BaseImgResult(ABC):
 
     # ---------- Pillow 兼容 ----------
     def _text_size(self, draw: ImageDraw.Draw, text: str):
+        """
+        Pillow 兼容接口：返回文字 (width, height)。
+        """
         try:
             return draw.textsize(text, font=self.font)
         except AttributeError:
@@ -110,6 +134,11 @@ class BaseImgResult(ABC):
 
 
 class ClassifyImgResult(BaseImgResult):
+    """
+    分类任务可视化实现：
+    在图片左上角叠加 true / pred 标签文本。
+    """
+
     def __init__(self, save_dir: Path, plot_count: int = 4, mode: str = "val", max_sub_len: int = 3, rgb=True, **kwargs):
         super().__init__(save_dir, plot_count, mode, max_sub_len, rgb)
         # 额外存一份 class_names
@@ -117,6 +146,7 @@ class ClassifyImgResult(BaseImgResult):
         self.title = None
 
     def _prepare_imgs(self, batch_samples):
+        """重写：返回 (imgs_np, true_labels)"""
         imgs = batch_samples.data.permute(0, 2, 3, 1).contiguous()  # bchw->bhwc
         if imgs.max() <= 1.0:
             imgs = imgs * 255.
@@ -125,6 +155,10 @@ class ClassifyImgResult(BaseImgResult):
         return imgs_np, true_labels  # 返回 (imgs, true_labels)
 
     def _draw_one_img(self, img: np.ndarray, info) -> np.ndarray:
+        """
+        绘制单张分类图：
+        左上角写 true / pred 标签。
+        """
         pred_tensor, true_label = info
         pred_label = int(torch.argmax(pred_tensor).item())
 
@@ -142,6 +176,7 @@ class ClassifyImgResult(BaseImgResult):
         return drawn
 
     def plot(self, batch_samples, pred: torch.Tensor):
+        """重写：使用子图标题显示标签。"""
         if self.is_plot:
             return
 
@@ -183,10 +218,16 @@ class ClassifyImgResult(BaseImgResult):
 
 
 class YOLODetectImgResult(BaseImgResult):
+    """
+    YOLO 检测可视化实现：
+    在图片上画框、写类别与置信度。
+    """
+
     def __init__(self, save_dir: Path, plot_count: int = 4, mode: str = "val", max_sub_len: int = 3, rgb=True):
         super().__init__(save_dir, plot_count, mode, max_sub_len, rgb)
 
     def _prepare_imgs(self, batch_samples):
+        """默认：返回 (imgs_np, None)，预测由外部赋值。"""
         imgs = batch_samples.data.permute(0, 2, 3, 1).contiguous()
         if imgs.max() <= 1.0:
             imgs = imgs * 255.
@@ -194,6 +235,9 @@ class YOLODetectImgResult(BaseImgResult):
         return imgs_np, None
 
     def _draw_one_img(self, img: np.ndarray, pred: torch.Tensor) -> np.ndarray:
+        """
+        绘制检测框：框 + 类别 + 置信度。
+        """
         from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry
 
         if pred.numel() == 0:

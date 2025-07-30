@@ -7,12 +7,46 @@ from tinytrain.utils.checks import check_file
 
 
 class ConfigManager(SimpleNamespace):
+    """
+    配置管理器，用于加载和解析配置文件。
+
+    主要功能：
+    1. 支持链式配置文件（通过 link 文件加载其他配置文件）。
+    2. 提供便捷的属性访问方式。
+    3. 支持深度拷贝和序列化。
+
+    Args:
+        link_file (str | Path): 链式配置文件路径。
+        **kwargs: 其他初始化参数。
+
+    示例：
+        >>> config = ConfigManager("config.toml")
+        >>> print(config.model)
+        >>> print(config.dataset)
+    """
     def __init__(self, link_file: str | Path, **kwargs):
+        """
+        初始化 ConfigManager 实例。
+
+        Args:
+            link_file (str | Path): 链式配置文件路径。
+            **kwargs: 其他初始化参数。
+        """
         super().__init__(link_file=link_file, **kwargs)
         self.link = None
         self.parse_link_file(link_file)
 
     def parse_link_file(self, link_file: str | Path):
+        """
+        解析链式配置文件。
+
+        Args:
+            link_file (str | Path): 链式配置文件路径。
+
+        Raises:
+            ValueError: 如果文件类型不支持或文件内容无效。
+        """
+
         # 检查文件是否存在
         link_file = check_file(link_file)
 
@@ -32,17 +66,40 @@ class ConfigManager(SimpleNamespace):
     @staticmethod
     def load_toml(toml_file: str | Path) -> Dict:
         """
-        加载 TOML 文件
-        :param toml_file: TOML 文件路径
-        :return: 加载后的数据
+        加载 TOML 文件。
+
+        Args:
+            toml_file (str | Path): TOML 文件路径。
+
+        Returns:
+            Dict: 加载后的数据。
+
+        Raises:
+            FileNotFoundError: 如果文件不存在。
+            toml.TomlDecodeError: 如果文件格式错误。
         """
         import toml
-        return toml.load(toml_file)
+        try:
+            return toml.load(toml_file)
+        except toml.TomlDecodeError as e:
+            raise ValueError(f"Error loading TOML file {toml_file}: {e}")
 
     def __iter__(self):
+        """
+        返回配置管理器的迭代器。
+        """
         return iter(vars(self).items())
 
     def __deepcopy__(self, memo):
+        """
+        实现深度拷贝。
+
+        Args:
+            memo: 深度拷贝的备忘录。
+
+        Returns:
+            ConfigManager: 深度拷贝后的实例。
+        """
         # 创建一个新的 ConfigManager 实例，并传递 link_file 参数
         new_instance = ConfigManager(self.link_file)
         memo[id(self)] = new_instance
@@ -55,5 +112,8 @@ class ConfigManager(SimpleNamespace):
         return new_instance
 
     def __reduce__(self):
+        """
+        返回用于序列化的元组。
+        """
         # 返回一个元组，包含用于重新构建对象的类和参数
         return self.__class__, (self.link_file,), self.__dict__

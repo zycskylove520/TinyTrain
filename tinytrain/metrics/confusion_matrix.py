@@ -12,13 +12,20 @@ from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry
 
 class ClassifyConfusionMatrix:
     """
-    分类算法使用的混淆矩阵
+    分类任务专用混淆矩阵。
+
+    功能
+    ----
+    1. 统计每个类别预测与真实标签的匹配次数。
+    2. 支持重置 (`reset`) 与增量更新 (`update`)。
+    3. 自动绘制原始与归一化混淆矩阵图，并保存到磁盘。
     """
 
     def __init__(self, num_classes: int, class_names: list[str]):
         """
-        :param num_classes: 分类类别数量
-        :param class_names: 类别名称列表
+        Args:
+            num_classes (int): 类别数量。
+            class_names (list[str]): 类别名称列表，与索引一一对应。
         """
         self.num_classes = num_classes
         self.class_names = class_names
@@ -27,18 +34,28 @@ class ClassifyConfusionMatrix:
         self.confusion_matrix = torch.zeros((num_classes, num_classes), dtype=torch.int64)
 
     def reset(self):
+        """将矩阵清零，准备新一轮统计。"""
         self.confusion_matrix = torch.zeros_like(self.confusion_matrix)
 
     def update(self, pred: torch.Tensor, label: torch.Tensor):
         """
-        @param pred: 分类模型预测输出，shape:[batch,num_classes]
-        @param label: 真实标签，shape:[batch]
+        更新混淆矩阵。
+
+        Args:
+            pred (Tensor): 模型预测 logits，形状 [batch, num_classes]。
+            label (Tensor): 真实标签，形状 [batch]。
         """
         pred_idx = torch.argmax(pred, dim=1)
         for true_label, pred_label in zip(label, pred_idx):
             self.confusion_matrix[true_label, pred_label] += 1
 
     def plot(self, save_dir: Path):
+        """
+        绘制并保存原始、归一化两份混淆矩阵图。
+
+        Args:
+            save_dir (Path): 保存目录。
+        """
         LOGGER.info(f"plotting confusion matrix...")
         confusion_matrix = self.confusion_matrix.numpy()
         # 绘制混淆矩阵
@@ -80,13 +97,21 @@ class ClassifyConfusionMatrix:
 
 class DetectConfusionMatrix:
     """
-    检测算法使用的混淆矩阵
-    """
+    检测任务专用混淆矩阵工具。
 
+    功能
+    ----
+    1. 以 IoU 阈值为准，将预测框匹配到 GT 框，统计 TP / FP / FN。
+    2. 额外引入“背景”类别，用于表示漏检（FN）与误检（FP）。
+    3. 支持重置、增量更新、绘制原始/归一化矩阵。
+    """
     def __init__(self, num_classes: int, class_names: list[str], conf_threshold=0.25, iou_threshold=0.45):
         """
-        @param num_classes: 检测类别数量
-        :param class_names: 类别名称列表
+        Args:
+            num_classes (int): 前景类别数量。
+            class_names (list[str]): 类别名称列表，顺序必须与索引对齐。
+            conf_threshold (float): 置信度阈值，低于阈值的预测框丢弃。
+            iou_threshold (float): IoU 阈值，大于该值视为匹配成功。
         """
         self.num_classes = num_classes
         self.class_names = class_names
@@ -98,14 +123,18 @@ class DetectConfusionMatrix:
         self.confusion_matrix = torch.zeros((num_classes + 1, num_classes + 1), dtype=torch.int64)
 
     def reset(self):
+        """将矩阵清零。"""
         self.confusion_matrix = torch.zeros_like(self.confusion_matrix)
 
     def update(self, pred: list[torch.Tensor], target: list[torch.Tensor]):
         """
-        @param pred: 检测模型输出的预测矩阵经过nms后的结果，list的长度为batch，list内部的tensor要求shape为:[after_nms_num_boxes, 4+score+class_idx],要求:
-        boxes的format必须为cxcywh格式,score是类别分数，class_idx是box预测的类别索引
-        @param target:真实标签，list的长度为batch，list内部的tensor要求shape为:[num_boxes, 4+class_idx],要求:
-        boxes的format必须为cxcywh格式,class_idx是真实的类别索引
+        更新混淆矩阵（按 batch 循环调用）。
+
+        Args:
+            pred (list[Tensor]): NMS 后结果，每元素形状 [N, 6]：
+                (cx, cy, w, h, score, class_idx)。
+            target (list[Tensor]): 真实标签，每元素形状 [M, 5]：
+                (cx, cy, w, h, class_idx)。
         """
         for p, t in zip(pred, target):
             # 判断t是否为空tensor，即背景图片没有真实标签
@@ -165,6 +194,12 @@ class DetectConfusionMatrix:
                 self.confusion_matrix[self.num_classes, dc] += 1  # FP
 
     def plot(self, save_dir: Path):
+        """
+        绘制并保存原始、归一化两份混淆矩阵图。
+
+        Args:
+            save_dir (Path): 保存目录。
+        """
         LOGGER.info(f"plotting confusion matrix...")
         confusion_matrix = self.confusion_matrix.numpy()
 

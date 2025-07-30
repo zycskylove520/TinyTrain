@@ -10,14 +10,29 @@ def coco2yolo(coco_json_path: str,
               keep_coco_ids: Optional[List[int]] = None,
               use_segments: bool = False):
     """
-    将 COCO instances 标注转为 YOLO 格式，并按需拷贝图片
-    :param coco_json_path: instances_val2017.json 路径
-    :param img_root:      原始图片文件夹（如 val2017）
-    :param out_root:      输出根目录，将生成
-                          out_root/images 和 out_root/labels
-    :param keep_coco_ids: 需要保留的 COCO category_id 列表；
-                          若为 None 则保留全部类别
-    :param use_segments:  是否把多边形写进 txt
+    将 COCO instances 标注转换为 YOLO 格式，并可选择是否拷贝图片与保留指定类别。
+
+    生成的目录结构
+    --------------
+    out_root/
+    ├── images/
+    │   └── *.jpg
+    └── labels/
+        └── *.txt
+
+    参数
+    ----
+    coco_json_path : str
+        COCO instances 标注文件路径，如 'instances_val2017.json'。
+    img_root : str
+        原始图片所在目录，如 'val2017/'。
+    out_root : str
+        输出根目录，函数会自动创建 `images` 与 `labels` 子目录。
+    keep_coco_ids : list[int] | None, optional
+        需要保留的 COCO category_id 列表；若为 None 则保留全部类别。
+    use_segments : bool, optional
+        若为 True，将多边形分割信息写入标签文件（YOLO-segment 格式）；若为 False，
+        则仅写入中心点归一化矩形框 (YOLO-det 格式)。
     """
     out_root = Path(out_root)
     img_out_dir = out_root / 'images'

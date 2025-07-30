@@ -12,10 +12,30 @@ from tinytrain.utils import LOGGER
 
 
 class BaseModel(nn.Module):
-    """The BaseModel class serves as a base class for all the models."""
+    """
+    BaseModel 是所有深度学习模型的统一基类，负责：
+    1. 根据配置文件动态解析网络结构（entry / flow / head）。
+    2. 管理前向传播：支持推理模式（inference）与训练模式（loss）。
+    3. 提供权重加载、初始化、日志打印等通用功能。
+    4. 兼容绝大多数AI任务（视觉、自然语言处理等），子类只需实现 `init_criterion()`。
+
+    设计要点：
+    - 结构配置完全由 ConfigManager 驱动，无需硬编码。
+    - 支持深度增益（depth gain）自动缩放重复模块。
+    - 内置模块缓存机制（record_list + ask_set）确保数据流正确。
+    - 支持自定义模块解析（custom_parse_model）。
+    - 自动初始化权重（initialize_weights），支持 Kaiming / BN / ReLU 等。
+    """
     DEPTH_GAIN = None  # 深度增益
 
     def __init__(self, config_manager: ConfigManager, *args, **kwargs):
+        """
+        初始化模型。
+
+        Args:
+            config_manager (ConfigManager): 配置管理器，包含模型结构、超参数、设备等信息。
+            *args, **kwargs: 预留扩展参数，供子类使用。
+        """
         super().__init__()
         self.criterion = None
         self.config_manager = config_manager
@@ -25,12 +45,39 @@ class BaseModel(nn.Module):
             self._model_log()
 
     def forward(self, data, **kwargs):
+        """
+        统一入口：根据输入类型自动选择推理或训练模式。
+
+        Args:
+            data (BaseBatchDataInfo | torch.Tensor):
+                - BaseBatchDataInfo：训练/验证模式，计算 loss。
+                - torch.Tensor：推理模式，执行 inference。
+            **kwargs: 透传参数。
+
+        Returns:
+            Union[list[torch.Tensor], tuple]: 推理输出或 (loss, loss_items)。
+        """
+
         if isinstance(data, BaseBatchDataInfo):
             return self.loss(data, **kwargs)
         else:
             return self.inference(data, **kwargs)
 
     def inference(self, data, **kwargs):
+        """
+        推理模式前向传播。
+
+        Args:
+            data (torch.Tensor | list[torch.Tensor]): 输入张量或多输入列表。
+            **kwargs: 透传参数。
+
+        Returns:
+            list[torch.Tensor]: 模型输出列表（每个 head 对应一个输出）。
+
+        Raises:
+            RuntimeError: 如果未检测到任何输出。
+        """
+
         # 检查输入是否为多输入（list 或 tuple）
         if isinstance(data, (list, tuple)):
             inputs = {index: item for index, item in enumerate(data)}
@@ -114,9 +161,17 @@ class BaseModel(nn.Module):
 
     def loss(self, batch_samples: BaseBatchDataInfo, preds=None, **kwargs):
         """
-        Compute loss.
+        训练/验证模式：计算损失。
 
+        Args:
+            batch_samples (BaseBatchDataInfo): 包含输入与标签的数据对象。
+            preds (list[torch.Tensor] | None): 若提供则直接使用，否则内部前向获取。
+            **kwargs: 透传给损失函数。
+
+        Returns:
+            tuple[float, dict]: (总损失, 各分量损失字典)。
         """
+
         if self.criterion is None:
             self.criterion = self.init_criterion()
 
@@ -124,12 +179,27 @@ class BaseModel(nn.Module):
         return self.criterion(preds, batch_samples)
 
     def init_criterion(self):
-        """Initialize the loss criterion for the BaseModel."""
+        """
+        初始化任务特定的损失函数。
+
+        Returns:
+            nn.Module: 损失模块。
+
+        Raises:
+            NotImplementedError: 必须由子类实现。
+        """
         raise NotImplementedError("compute_loss() needs to be implemented by task heads")
 
     def load_model_state_dict(self, state_dict, force_load=True):
         """
-        force_load为True，要求模型参数键对应的值的shape必须完全一致，适用于predict和export
+        加载权重，支持强制匹配或宽松匹配。
+
+        Args:
+            state_dict (dict[str, torch.Tensor]): 待加载的权重字典。
+            force_load (bool, optional): True 时要求形状完全匹配，否则跳过；False 时抛出异常。默认 True。
+
+        Raises:
+            KeyError: force_load=False 且形状不匹配时抛出。
         """
         model_state_dict = self.state_dict()
 
@@ -148,13 +218,27 @@ class BaseModel(nn.Module):
         self.load_state_dict(match_state_dict, strict=False)
 
     def custom_parse_model(self, module_info):
+        """
+        钩子：子类可重写以动态修改模块配置。
+
+        Args:
+            module_info (dict): 当前模块的配置字典。
+        """
         pass
 
     def parse_model(self, config_manager: ConfigManager):
         """
+        解析配置文件，动态构建网络结构。
 
-        :param config_manager:
-        :return:
+        Args:
+            config_manager (ConfigManager): 配置管理器。
+
+        Returns:
+            tuple:
+                - nn.ModuleList: 按顺序的模块列表。
+                - list[dict]: 每层记录信息（type, from, repeat 等）。
+                - set[int]: 需要缓存输出的层索引集合。
+                - list[dict]: 日志信息（用于打印结构）。
         """
         scale_info = config_manager.model["scales"][config_manager.model["scale"]]
 
@@ -231,6 +315,10 @@ class BaseModel(nn.Module):
         return layers, record_list, ask_set, log_info
 
     def _model_log(self):
+        """
+        打印模型结构摘要到日志与终端。
+        """
+
         # 获取对齐长度，打印会更好看
         align_len = dict({"layer": 5, "type": 4, "repeat": 6, "from": 4, "module": 6, "args": 4})
         for layer, info in enumerate(self.log_info):
@@ -285,7 +373,13 @@ class BaseModel(nn.Module):
         print(f"model summary: {scale_info['summary']}\n")
 
     def initialize_weights(self):
-        """Initialize model weights to random values."""
+        """
+        初始化模型权重：
+        - Conv2d: Kaiming 正态分布
+        - BatchNorm2d: γ=1, β=0, running_mean=0, running_var=1
+        - 激活函数: 设置为 inplace=True
+        """
+
         for m in self.modules():
             t = type(m)
             if t is nn.Conv2d:
@@ -301,6 +395,23 @@ class BaseModel(nn.Module):
 
     @staticmethod
     def _get_layer(module_str: str):
+        """
+        根据字符串动态导入模块类，子类可进行扩展以增加新的第三方库的模块。
+
+        Args:
+            module_str (str): 模块名称，支持以下格式：
+                - nn.Conv2d
+                - torchvision.ops.DeformConv2d
+                - transformers.ViTModel
+                - tinytrain.modules.C3
+
+        Returns:
+            type: 对应的 PyTorch 模块类。
+
+        Raises:
+            ValueError: 模块未找到时抛出。
+        """
+
         import importlib
 
         module_str = module_str.strip()

@@ -1,3 +1,8 @@
+"""
+通用数据/设备校验与图像处理工具模块
+提供文件搜索、图像格式/尺寸检查、AMP 验证、YOLO 标签校验等一站式工具函数。
+"""
+
 import os
 
 import torch
@@ -19,13 +24,13 @@ FORMATS_HELP_MSG = f"Supported formats are:\nimages: {IMG_FORMATS}\nvideos: {VID
 
 def exif_size(img: Image.Image) -> tuple[int, int]:
     """
-    Returns the EXIF-corrected size of a PIL Image.
+    根据 EXIF 修正 PIL 图像的宽高（处理旋转 90/270°）。
 
     Args:
-        img (Image.Image): The input PIL Image object.
+        img: PIL.Image 对象
 
     Returns:
-        tuple[int, int]: The corrected size (width, height).
+        (width, height) 修正后的尺寸
     """
     # 获取图像的原始尺寸
     width, height = img.size
@@ -51,7 +56,12 @@ def exif_size(img: Image.Image) -> tuple[int, int]:
 
 
 def check_file(file: str | Path) -> Path:
-    """Search file and return path."""
+    """
+    根据相对或绝对路径，在 ROOT 及父目录中递归搜索文件，返回唯一绝对路径。
+
+    Raises:
+        FileNotFoundError: 文件不存在或存在多个匹配
+    """
     # 将 file 转换为 Path 对象
     file_path = Path(file).resolve()
 
@@ -87,7 +97,15 @@ def check_file(file: str | Path) -> Path:
 
 def check_img_size(img_size: int | list[int] | tuple[int, int], divisor=32, mode="train") -> tuple[int, int]:
     """
-    检查图像尺寸是否为 divisor 的倍数。
+    确保输入尺寸是 divisor 的倍数；不足时自动向上取整。
+
+    Args:
+        img_size: 单个 int 或 (w, h)
+        divisor:  对齐基数
+        mode:     用于日志提示，如 "train"/"val"
+
+    Returns:
+        (width, height) 已对齐的尺寸
     """
     # 确保 img_size 是一个元组或列表，并且包含两个整数
     if isinstance(img_size, int):
@@ -116,9 +134,18 @@ def check_img_size(img_size: int | list[int] | tuple[int, int], divisor=32, mode
 
 def check_amp(trainer, model, dataset):
     """
-    Checks if the model can use PyTorch Automatic Mixed Precision (AMP).
-    This function tests whether the model produces similar results in FP32 and AMP modes.
-    It returns False if AMP is not supported or if there are significant discrepancies.
+    检测模型在 AMP 模式下是否数值稳定（不 NaN、不崩溃）。
+
+    原理：对比 FP32 与 AMP 输出误差 < atol=0.5。
+    若失败，返回 False，提示关闭 AMP。
+
+    Args:
+        trainer:  训练器实例，用于数据预处理
+        model:    待检测模型
+        dataset:  数据集实例，用于采样小批次
+
+    Returns:
+        bool: 是否支持 AMP
     """
 
     device = next(model.parameters()).device  # Get the model's device
@@ -168,14 +195,11 @@ def check_amp(trainer, model, dataset):
 
 def check_image(img_file: Path, *args):
     """
-    Checks if an image file is valid and repairs corrupt JPEGs if necessary.
-
-    Args:
-        img_file (Path): The path to the image file.
-        *args: Additional arguments to be returned unchanged.
+    检测图像是否完整，必要时修复损坏 JPEG。
 
     Returns:
         tuple: (img_file, good, bad, message, *args)
+               good=1 表示有效，bad=1 表示异常
     """
     good, bad, message = 0, 0, ""
     try:
@@ -213,14 +237,14 @@ def check_image(img_file: Path, *args):
 
 def check_image_and_label(img_file: Path | str, label_paths: Path | list[Path]):
     """
-    Checks if an image file and its corresponding label file exist.
+    检查图片及对应标签是否存在；若标签不存在/空，则标记为背景图。
 
     Args:
-        img_file (Path | str): The path to the image file.
-        label_paths (Path | list[Path]): The path(s) to the label directory or directories.
+        img_file: 图片路径
+        label_paths: 标签目录或目录列表
 
     Returns:
-        tuple: (bg_img_file, img_file, label_file, is_bg, good, bad, message)
+        (bg_img_file, img_file, label_file, is_bg, good, bad, message)
     """
     # 初始化返回值
     bg_img_file, is_bg, good, bad, message, label_file = None, False, 0, 0, "", None
@@ -257,16 +281,13 @@ def check_image_and_label(img_file: Path | str, label_paths: Path | list[Path]):
 
 def check_device_mini(device):
     """
-    Checks the availability of the specified device and returns a torch.device object.
+    根据输入字符串或整数返回 torch.device。
 
     Args:
-        device (str | int | list): The device to check. Can be 'cpu', 'cuda', 'mps', an integer (GPU index), or a list of integers (GPU indices).
+        device: 'cpu' | 'cuda' | 'mps' | int | list[int]
 
     Returns:
-        torch.device: The selected device.
-
-    Raises:
-        ValueError: If the specified device is not supported.
+        torch.device
     """
     # Check if the specified device is available
     if device is None or device == "cpu":
@@ -292,18 +313,15 @@ def check_device_mini(device):
 
 def check_detect_yolo_label(img_file, npy_file=None, label_file=None):
     """
-    检查目标检测数据集的标签文件是否正确。
+    验证 YOLO 标签文件合法性：每行 5 个元素，cls ≥ 0，xywh ∈ [0,1]。
 
     Args:
-        img_file (str | Path): 图像文件路径。
-        npy_file (str | Path, optional): 可选的 NumPy 文件路径。默认为 None。
-        label_file (str | Path, optional): 标签文件路径。如果图片没有对应的标签文件，则为 None。
+        img_file:   图像路径
+        npy_file:   NumPy 文件路径（可选）
+        label_file: txt 标签路径（可选）
 
     Returns:
-        tuple: (img_file, npy_file, message, cls, boxes)
-
-    Raises:
-        ValueError: 如果标签文件格式不正确或包含无效值。
+        (img_file, npy_file, message, cls, boxes)
     """
     message = None
     labels_arr = np.zeros((0, 5), dtype=np.float32)  # 初始化为空数组

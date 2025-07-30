@@ -1,3 +1,46 @@
+"""
+YOLOModel
+=========
+YOLO 系列检测 / 分类模型的统一解析器。
+在 TinyTrain 框架中，所有 YOLO 变体（v5 / v7 / v8 / NAS …）均可通过
+同一套配置语法描述网络结构，并由本类自动完成深度、宽度缩放与模块实例化。
+
+核心职责
+--------
+1. 依据模型规模（n/s/m/l/x）自动计算 depth / width 增益并一次性写入类变量，
+   确保所有层共享同一缩放因子。
+2. 逐层校验网络描述合法性（entry→flow→head 的顺序、from / repeat 约束）。
+3. 对 entry / flow / head 中 `in_channels / out_channels / nc` 等关键字段
+   执行 width-gain 调整，保证输出通道数为硬件对齐值（8 的倍数）。
+4. 支持用户通过 `custom_parse_model` 钩子插入私有解析逻辑，实现零侵入扩展。
+5. 自动生成 `layers / record_list / ask_set / log_info` 四元组，
+   供 Backbone、Neck、Head 按需索引与特征融合。
+
+配置约定
+--------
+network:
+  - type: entry      # 第 0 层必须为 entry，且仅出现一次
+    module: Conv     # 模块类名，必须能在 tinytrain.modules 中找到
+    from: [-1]       # -1 表示「来自上一层」
+    repeat: 1        # 重复次数，flow 层受 depth 增益影响
+    args:
+      in_channels: 3
+      out_channels: 64
+  - type: flow
+    module: C2f
+    from: [-1]
+    repeat: 6
+    args:
+      in_channels: 64
+      out_channels: 64
+  - type: head
+    module: Detect
+    from: [15, 18, 21]
+    repeat: 1
+    args:
+      nc: -1          # 自动替换为 dataset.nc
+"""
+
 from copy import deepcopy
 
 from tinytrain.cfg.config_manager import ConfigManager
@@ -13,9 +56,30 @@ class YOLOModel(BaseModel):
 
     def parse_model(self, config_manager: ConfigManager):
         """
-        重写解析YOLO专用适配模型。
-        :param config_manager:
-        :return:
+        根据配置描述文件，构建 YOLO 网络。
+
+        步骤
+        ----
+        1. 读取 scales 配置，计算并缓存 width / depth gain。
+        2. 逐层解析 network，完成合法性校验、增益缩放、模块实例化。
+        3. 生成 `layers`、`record_list`、`ask_set`、`log_info` 四元组，
+           供后续 ForwardGraph 或手动特征融合使用。
+
+        参数
+        ----
+        config_manager : ConfigManager
+            包含 model / dataset / augment 等完整配置。
+
+        返回
+        ----
+        layers : nn.ModuleList
+            按顺序排列的 PyTorch 层或子网络。
+        record_list : list[dict]
+            每层详细描述，便于特征路由与调试。
+        ask_set : set[int]
+            所有被其他层引用的层索引，用于剪枝或可视化。
+        log_info : list[dict]
+            解析后用于打印或序列化的最终配置。
         """
 
         scale_info = config_manager.model["scales"][config_manager.model["scale"]]

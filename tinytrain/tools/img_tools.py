@@ -5,11 +5,18 @@ from PIL import Image
 
 def convert_images_format(input_dir, output_dir, input_format, output_format):
     """
-    批量将指定目录中的图片从一种格式转换为另一种格式。
-    :param input_dir: 包含要转换的图片的目录
-    :param output_dir: 转换后的图片保存的目录
-    :param input_format: 原图片格式（例如 'jpg', 'png' 等）
-    :param output_format: 转换后的图片格式（例如 'png', 'jpg' 等）
+    批量将指定目录中指定格式的图片统一转换为另一种格式并保存到新目录。
+
+    参数
+    ----
+    input_dir : str
+        源图片所在目录路径。
+    output_dir : str
+        转换后图片的保存目录路径；若不存在则自动创建。
+    input_format : str
+        待转换图片的扩展名（不含“.”），例如 'jpg'、'png'。
+    output_format : str
+        目标图片格式扩展名（不含“.”），例如 'png'、'jpg'。
     """
     # 检查输入目录是否存在
     if not os.path.exists(input_dir):

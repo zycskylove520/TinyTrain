@@ -35,13 +35,55 @@ if TYPE_CHECKING:
 
 
 class BaseTrainer:
+    """
+    BaseTrainer 是一个通用、可扩展的深度学习训练框架基类，支持单机单卡、单机多卡（DDP）、多机多卡等多种训练模式。
+
+    设计目标：
+    - 解耦：将配置、模型、数据、优化器、验证器、回调等模块解耦，方便复用与扩展。
+    - 通用性：适用于分类、检测、分割、生成等多种任务。
+    - 高性能：支持 AMP（自动混合精度）、梯度累积、EMA、SyncBN、预热学习率等。
+    - 分布式：原生支持 PyTorch DDP，自动处理通信、同步、保存等。
+    - 可恢复：支持断点续训，自动保存/加载模型、优化器、epoch、fitness 等状态。
+    - 可视化：集成 TensorBoard 日志、CSV 结果记录、训练过程图表绘制。
+
+    核心功能：
+    - 自动检测设备（CPU / CUDA / MPS）与配置合法性。
+    - 自动构建 DataLoader，支持 DDP 采样、动态 batch_size、num_workers 优化。
+    - 支持多种优化器（Adam、AdamW、SGD、Lion、AdaBelief 等）与学习率调度器（Linear、Cosine、Exponential、ReduceLROnPlateau 等）。
+    - 支持模型层冻结、梯度裁剪、EarlyStopping、训练时长限制。
+    - 支持 EMA（指数移动平均）模型保存与验证。
+    - 支持模型导出为精简格式（如 fp16）用于部署。
+    - 支持回调机制，可在训练各阶段插入自定义逻辑。
+
+    使用方式：
+    - 继承此类并重写以下方法：
+        - `build_dataset()`：返回数据集实例。
+        - `preprocess_data()`：对 batch 数据进行预处理。
+        - `get_validator()`：返回验证器实例（可选）。
+        - `do_validate()`：执行验证逻辑（可选）。
+    - 调用 `trainer.train()` 即可启动训练。
+
+    示例：
+    ```python
+    trainer = MyTrainer(config_manager, model, callback)
+    trainer.train()
+    ```
+
+    注意事项：
+    - 所有路径类参数建议使用 `pathlib.Path`。
+    - 所有配置通过 `ConfigManager` 统一管理，支持 TOML 文件。
+    - 所有日志通过 `LOGGER` 输出，支持 rank 过滤。
+    - 训练结果统一保存在 `save_dir`，包括权重、日志、配置、图表等。
+    """
     def __init__(self, config_manager: ConfigManager, model: BaseModel, callback: Callback, main_script_path: Path = None):
         """
-        初始化 BaseTrainer 类。
+        初始化 BaseTrainer 类，配置训练所需的核心组件。
 
-        @param config_manager: 配置管理器。
-        @param model: 模型实例，用于训练和验证。
-        @param callback: 回调函数，用于在训练过程中执行自定义操作。
+        Args:
+            config_manager (ConfigManager): 配置管理器，提供训练参数。
+            model (BaseModel): 模型实例，用于训练和验证。
+            callback (Callback): 回调函数，用于在训练过程中执行自定义操作。
+            main_script_path (Path, optional): 主脚本路径，用于 DDP 启动。默认 None。
         """
         torch.set_float32_matmul_precision('high')
         self.config_manager: ConfigManager = config_manager
@@ -112,35 +154,51 @@ class BaseTrainer:
         self.main_script_path = main_script_path
         self.intra_node_group = None  # DDP分组
 
+    # ------------------------------------------------------------------
+    # 以下建议子类可重写的方法
+    # ------------------------------------------------------------------
     def preprocess_data(self, batch_samples: BaseBatchDataInfo) -> BaseBatchDataInfo:
         """
-        对批量数据进行预处理。一般包括将数据从CPU传递到GPU等操作。
+        对批量数据进行预处理，如将数据从 CPU 移动到 GPU。
 
-        @param batch_samples: 批量数据信息。
-        @return: 预处理后的批量数据信息。
+        Args:
+            batch_samples (BaseBatchDataInfo): 原始批量数据。
+
+        Returns:
+            BaseBatchDataInfo: 预处理后的批量数据。
+
+        Raises:
+            NotImplementedError: 子类必须实现此方法。
         """
         raise NotImplementedError("preprocess_data function not implemented in trainer")
 
     def build_dataset(self, mode="train") -> TTBaseDataset:
         """
-        构建数据集，需要子类进行重载以构建不同的数据集。
+        构建数据集实例。
 
-        @param mode: 数据集模式，可选值为 "train"、"val"和"test"。默认为 "train"。
-        @return: TTBaseDataset子类实例。
+        Args:
+            mode (str): 数据集模式，可选值为 "train"、"val" 或 "test"。
+
+        Returns:
+            TTBaseDataset: 数据集实例。
+
+        Raises:
+            NotImplementedError: 子类必须实现此方法。
         """
         raise NotImplementedError("build_dataset function not implemented in trainer")
 
     def plot_something_before_train(self):
         """
-        在训练前绘制一些图表（可选实现）。
+        在训练开始前绘制可视化图表（可选实现）。
         """
         pass
 
     def freeze_layers(self, world_size: int):
         """
-        冻结模型的某些层。子类要重载实现自定义冻结需求, 可参照下方代码复制修改使用。
+        冻结模型的某些层，防止其参数在训练中被更新。
 
-        @param world_size: 分布式训练中的进程数量。
+        Args:
+            world_size (int): 分布式训练中的进程数量。
         """
 
         freeze_layer_names = []
@@ -149,9 +207,12 @@ class BaseTrainer:
                 LOGGER.info(f"Freezing layer '{k}'")
                 v.requires_grad = False
 
+    # ------------------------------------------------------------------
+    # 以下不建议子类重写的方法
+    # ------------------------------------------------------------------
     def train(self):
         """
-        启动模型训练。支持单机单卡、单机多卡、多机多卡等训练方式。
+        启动模型训练，支持单机单卡、单机多卡、多机多卡等多种训练方式。
         """
         nproc_per_node = self._get_nproc_per_node()
 
@@ -166,7 +227,10 @@ class BaseTrainer:
 
     def _get_nproc_per_node(self):
         """
-        获取每个节点的 GPU 数。CPU或MPS情况下默认为0.
+        获取当前节点的 GPU 数量（CPU 或 MPS 返回 0）。
+
+        Returns:
+            int: 当前节点可用的 GPU 数量。
         """
         if self.device.type in {"cpu", "mps"}:
             return 0
@@ -183,8 +247,10 @@ class BaseTrainer:
     @staticmethod
     def _get_intra_node_group():
         """
-        返回一个仅包含当前节点（机器）内所有进程的通信组。
-        组内 rank=0 对应 LOCAL_RANK=0 的进程。
+        创建并返回当前节点内的 DDP 通信组。
+
+        Returns:
+            dist.ProcessGroup | None: 当前节点内的通信组，未初始化返回 None。
         """
         if not dist.is_initialized():
             return None
@@ -204,7 +270,10 @@ class BaseTrainer:
 
     def _launch_ddp_training(self, nproc_per_node):
         """
-        启动分布式数据并行（DDP）训练。
+        使用 torchrun 启动分布式训练。
+
+        Args:
+            nproc_per_node (int): 每个节点的 GPU 数量。
         """
         cmd = generate_ddp_command(self, nproc_per_node)
         try:
@@ -219,7 +288,10 @@ class BaseTrainer:
 
     def _perform_training(self, world_size):
         """
-        执行实际的训练逻辑。
+        执行实际训练逻辑，包括 DDP 初始化、训练、异常处理和资源清理。
+
+        Args:
+            world_size (int): 分布式训练中的进程数量。
         """
         try:
             if world_size > 1:
@@ -246,7 +318,10 @@ class BaseTrainer:
 
     def _graceful_shutdown(self, world_size):
         """
-        中断训练时安全退出
+        训练中断时进行优雅退出，清理资源并保存结果。
+
+        Args:
+            world_size (int): 分布式训练中的进程数量。
         """
         if world_size > 1:
             self.destroy_ddp()
@@ -262,9 +337,10 @@ class BaseTrainer:
 
     def _before_train(self, world_size: int):
         """
-        训练模型前，需要做的各种检查与准备。请勿打乱以下执行顺序！
+        训练前的准备工作，包括路径设置、模型初始化、优化器配置等。
 
-        @param world_size: 分布式训练中的进程数量。
+        Args:
+            world_size (int): 分布式训练中的进程数量。
         """
         self.callbacks.run_callback(self, "on_prepare_train_start")
 
@@ -318,10 +394,10 @@ class BaseTrainer:
 
     def _do_train(self, world_size: int):
         """
-        执行模型训练。
-        非开发人员不要手动直接调用函数。如果需要训练模型，请使用train函数。
+        执行模型训练主循环，包括前向、反向、验证、保存等。
 
-        @param world_size: 分布式训练中的进程数量。
+        Args:
+            world_size (int): 分布式训练中的进程数量。
         """
         # 训练前检查
         self._before_train(world_size)
@@ -526,10 +602,10 @@ class BaseTrainer:
 
     def set_ddp(self, world_size: int):
         """
-        设置分布式数据并行（DDP），和destroy_ddp函数是一对。
-        使用set_ddp函数后必须使用destroy_ddp函数。
+        初始化分布式训练环境（DDP）。
 
-        @param world_size: 分布式训练中的进程数量。
+        Args:
+            world_size (int): 分布式训练中的进程数量。
         """
         from torch.distributed import init_process_group
 
@@ -546,16 +622,17 @@ class BaseTrainer:
     @staticmethod
     def destroy_ddp():
         """
-        销毁分布式数据并行（DDP），和set_ddp函数是一对。
-        使用set_ddp函数后必须使用destroy_ddp函数。
+        销毁分布式训练环境（DDP）。
         """
         from torch.distributed import destroy_process_group
         destroy_process_group()
 
     def set_save_dir(self, world_size: int):
         """
-        设置模型训练完的保存路径。
-        每个节点内部由 LOCAL_RANK==0 负责创建目录并广播给本节点其它进程。
+        设置训练结果保存路径，支持多节点同步。
+
+        Args:
+            world_size (int): 分布式训练中的进程数量。
         """
 
         # 节点内主进程（LOCAL_RANK==0）负责创建目录
@@ -585,9 +662,10 @@ class BaseTrainer:
 
     def check_device(self) -> torch.device:
         """
-        检查设备配置并返回可用设备。
+        根据配置检查并返回可用设备（CPU、CUDA 或 MPS）。
 
-        @return: 主机的device。
+        Returns:
+            torch.device: 可用设备。
         """
 
         device = self.config_manager.core["device"]
@@ -655,7 +733,7 @@ class BaseTrainer:
 
     def set_dataset_dir(self):
         """
-        设置数据集路径。
+        设置训练、验证和测试数据集路径。
         """
 
         dataset_root_dirs = self.config_manager.dataset["path"]
@@ -693,9 +771,10 @@ class BaseTrainer:
 
     def check_amp(self, world_size: int):
         """
-        检查是否支持自动混合精度（AMP）。
+        检查是否支持自动混合精度（AMP），并初始化 GradScaler。
 
-        @param world_size: 分布式训练中的进程数量。
+        Args:
+            world_size (int): 分布式训练中的进程数量。
         """
 
         # DDP 支持 AMP，直接启动，不进行检查
@@ -735,10 +814,12 @@ class BaseTrainer:
 
     def check_batch_size(self, world_size: int):
         """
-        检查批量大小是否合理。
+        检查 batch_size 是否合理，是否支持 DDP。
 
-        @param world_size: 分布式训练中的进程数量。
+        Args:
+            world_size (int): 分布式训练中的进程数量。
         """
+
         # 检查批量大小是否能被进程数量整除
         if world_size > 1:
             if self.batch_size % world_size != 0:
@@ -763,9 +844,10 @@ class BaseTrainer:
 
     def set_dataloaders(self, world_size: int):
         """
-        设置Dataloader。
+        构建训练与验证的 DataLoader。
 
-        @param world_size: 分布式训练中的进程数量。
+        Args:
+            world_size (int): 分布式训练中的进程数量。
         """
         # train dataloader
         self.train_dataloader = self.build_dataloader(world_size, mode="train")
@@ -776,10 +858,10 @@ class BaseTrainer:
 
     def set_optimizer(self, model):
         """
-        构建优化器，支持：
-        1. 参数分组（bias/norm/其他）
-        2. 学习率线性放大（基于全局 batch size）
-        3. 在 DDP 下保证所有进程参数顺序完全一致
+        构建优化器，支持参数分组、学习率缩放、多种优化器选择。
+
+        Args:
+            model (nn.Module): 模型实例。
         """
 
         optimizer_name = self.config_manager.core["optimizer"]
@@ -889,8 +971,9 @@ class BaseTrainer:
 
     def set_warmup_scheduler(self):
         """
-        设置预热训练阶段的学习率调度器。
+        设置预热阶段的学习率调度器。
         """
+
         if self.warmup_epochs <= 0:
             return
         if self.start_epoch >= self.warmup_epochs:
@@ -906,12 +989,13 @@ class BaseTrainer:
         last_epoch = max(start_epoch - 1, -1)
 
         # set warmup_scheduler
-        if warmup_scheduler_name == "LinearLR":
-            self.warmup_scheduler = optim.lr_scheduler.LinearLR(
+        if warmup_scheduler_name == "LinearWarmupLR":
+            from tinytrain.utils.scheduler import LinearWarmupLR
+            self.warmup_scheduler = LinearWarmupLR(
                 self.optimizer,
-                start_factor=warmup_lr / lr0,
-                end_factor=1.0,
-                total_iters=self.warmup_epochs,
+                warmup_lr=warmup_lr,
+                lr0=lr0,
+                warmup_epochs=self.warmup_epochs,
                 last_epoch=last_epoch
             )
         elif warmup_scheduler_name == "CosineWarmUpLR":
@@ -955,6 +1039,7 @@ class BaseTrainer:
         """
         设置正式训练阶段的学习率调度器。
         """
+
         if self.epochs <= self.warmup_epochs:
             return
 
@@ -1035,8 +1120,12 @@ class BaseTrainer:
 
     def set_model(self, world_size: int):
         """
-        设置模型，并在 DDP 模式下自动启用 SyncBatchNorm。
+        设置模型，包括移动到设备、启用 SyncBatchNorm、封装 DDP 和 EMA。
+
+        Args:
+            world_size (int): 分布式训练中的进程数量。
         """
+
         self.model = self.model.to(self.device)
 
         # 所有参数默认开启梯度
@@ -1058,6 +1147,16 @@ class BaseTrainer:
             LOGGER.info("EMA(Exponential Moving Average) is enabled.")
 
     def build_dataloader(self, world_size: int, mode: str = "train"):
+        """
+        构建 DataLoader，支持 DDP、动态 batch_size、num_workers 调整。
+
+        Args:
+            world_size (int): 分布式训练中的进程数量。
+            mode (str): 模式，"train"、"val" 或 "test"。
+
+        Returns:
+            DataLoader: 构建好的数据加载器。
+        """
 
         # 计算每个进程的批量大小
         batch_size = self.batch_size // max(world_size, 1)
@@ -1119,6 +1218,10 @@ class BaseTrainer:
         return dataloader
 
     def resume_training(self):
+        """
+        从 checkpoint 恢复训练，包括 epoch、optimizer、fitness 等。
+        """
+
         if self.resume and self.config_manager.link["model"].suffix not in {".pt", ".pth"}:
             raise ValueError(f"To resume training, the model file must have a '.pt' or '.pth' suffix.")
 
@@ -1142,8 +1245,9 @@ class BaseTrainer:
 
     def optimizer_step(self):
         """
-        执行优化器步骤，包括梯度裁剪和 EMA 更新。
+        执行优化器更新步骤，包括梯度裁剪、EMA 更新。
         """
+
         self.scaler.unscale_(self.optimizer)  # unscale gradients
         grad_clip = self.config_manager.core["grad_clip"]
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=grad_clip)  # clip gradients
@@ -1157,6 +1261,12 @@ class BaseTrainer:
             self.ema.update(self.model)
 
     def scheduler_step(self, current_epoch: int):
+        """
+        根据当前 epoch 更新学习率。
+
+        Args:
+            current_epoch (int): 当前训练轮次。
+        """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")  # suppress 'Detected lr_scheduler.step() before optimizer.step()'
             if current_epoch + 1 <= self.warmup_epochs:
@@ -1170,7 +1280,7 @@ class BaseTrainer:
 
     def save_config_file(self):
         """
-        保存配置文件
+        将配置保存为 TOML 文件到指定目录。
         """
         import toml
 
@@ -1199,25 +1309,36 @@ class BaseTrainer:
 
     def get_validator(self, world_size: int):
         """
-        获取验证模型所需的验证器。若重载，则需要与do_validate配合使用。
+        获取验证器实例。
 
-        @param world_size: 分布式训练中的进程数量。
-        @return: 验证器实例。
+        Args:
+            world_size (int): 分布式训练中的进程数量。
+
+        Returns:
+            BaseValidator: 验证器实例。
         """
+
         task = self.config_manager.core["task"]
         return TTRegistry.get(task, "validator")(self, world_size)
 
     def do_validate(self) -> float:
         """
-        子类通过重载该函数来验证模型性能，也可以选择不重载不进行验证。若重载，则需要与get_validator配合使用。
+        执行模型验证并返回 fitness 值。
 
-        @return: 返回fitness用于评估模型训练的好坏程度。
+        Returns:
+            float: fitness 值。
         """
         return self.validator.validate() if self.validator else 0.
 
     def get_model_instance(self, world_size: int) -> nn.Module:
         """
-        获取要保存的模型实例。
+        获取用于保存的模型实例（EMA 或原始模型）。
+
+        Args:
+            world_size (int): 分布式训练中的进程数量。
+
+        Returns:
+            nn.Module: 模型实例。
         """
         if self.ema:
             model = self.ema.ema_model
@@ -1227,7 +1348,11 @@ class BaseTrainer:
 
     def save_model(self, world_size: int, current_epoch: int):
         """
-        保存模型，并同步 best_fitness / best_epoch 给所有进程。
+        保存模型 checkpoint，包括 last.pt、best.pt、epoch_X.pt。
+
+        Args:
+            world_size (int): 分布式训练中的进程数量。
+            current_epoch (int): 当前训练轮次。
         """
         try:
             # 获取要保存的模型
@@ -1264,11 +1389,10 @@ class BaseTrainer:
 
     def simplified_model(self, world_size: int):
         """
-        精简化模型压缩模型文件大小并保存为指定格式，用于部署。
-        该函数的主要功能是根据配置决定是否将模型转换为半精度（fp16），然后将模型的 `state_dict` 保存为一个检查点文件。
-        如果配置中指定了 `FP16_pt` 为 `True`，则将模型的参数转换为 `float16` 格式，否则保持原格式。
+        导出精简模型pt文件（如 fp16）用于部署。
 
-        @param world_size: 分布式训练中的进程数量。
+        Args:
+            world_size (int): 分布式训练中的进程数量。
         """
 
         LOGGER.info(f"start export simplified model...")
@@ -1295,9 +1419,10 @@ class BaseTrainer:
 
     def _get_memory(self) -> float:
         """
-        获取当前设备的内存/显存使用情况。
+        获取当前设备显存/内存使用量。
 
-        @return: 当前设备的内存使用量（单位：GB）。
+        Returns:
+            float: 使用量（单位：GB）。
         """
 
         if self.device.type == "mps":
@@ -1319,6 +1444,9 @@ class BaseTrainer:
             torch.cuda.empty_cache()
 
     def only_do_validate(self):
-        # 传递stop信号
-        self.stop = True
+        """
+        仅执行验证流程，不训练。
+        """
+
+        self.stop = True  # 传递stop信号
         self.do_validate()

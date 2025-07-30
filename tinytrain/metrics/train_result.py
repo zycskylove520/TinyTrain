@@ -15,7 +15,25 @@ from tinytrain.utils.dist import find_available_port
 
 
 class TrainResult:
+    """
+    训练/验证结果记录与可视化工具。
+
+    功能
+    ----
+    1. 逐字段增量收集指标（loss、lr、mAP 等）。
+    2. 实时写入 TensorBoard。
+    3. 自动拉起 TensorBoard 进程（可选）。
+    4. 训练完成后一键绘制折线图并保存 PNG。
+    5. 追加写入 CSV，兼容中断续写。
+    """
+
     def __init__(self, save_dir: Path, row_name='epoch', launch_tb: bool = True):
+        """
+        Args:
+            save_dir (Path): 结果保存目录，内部创建子目录 `log/` 和文件。
+            row_name (str): 横轴名称，默认 "epoch"，可改为 "step"。
+            launch_tb (bool): 是否自动启动 TensorBoard。
+        """
         self.save_dir = save_dir
         self.data = {}
         self.row_name = row_name
@@ -35,6 +53,13 @@ class TrainResult:
             self._launch_tensorboard(tb_log_dir)
 
     def add(self, key, value):
+        """
+        记录单个指标值，并同步写入 TensorBoard。
+
+        Args:
+            key (str): 指标名称，如 "loss_cls"。
+            value (int | float | Tensor): 数值或 0-D Tensor。
+        """
         self.data.setdefault(key, []).append(value)
 
         if self.launch_tb:
@@ -44,6 +69,13 @@ class TrainResult:
                 self.writer.add_scalar(key, val, global_step=step)
 
     def plot(self, start=1):
+        """
+        一次性绘制所有数值型指标的折线图，并保存为 `result.png`。
+        子图行列自适应，保证紧凑美观。
+
+        Args:
+            start (int): 横轴起始值，默认 1。
+        """
         LOGGER.info(f"plotting result.png...")
         # 过滤非数字键值对
         filtered_dic = {key: value for key, value in self.data.items() if all(isinstance(x, (int, float)) for x in value)}
@@ -103,6 +135,11 @@ class TrainResult:
         plt.savefig(self.save_dir / f"result.png", dpi=300)  # 保存为PNG文件，分辨率为300dpi
 
     def save_csv(self):
+        """
+        将当前所有指标追加写入 `result.csv`。
+        - 首次写入自动生成表头。
+        - 后续追加行，支持断点续训。
+        """
         self.save_dir.mkdir(parents=True, exist_ok=True)
         csv_file_path = self.save_dir / "result.csv"
 
@@ -127,14 +164,14 @@ class TrainResult:
             writer.writerow(row_data)
 
     def _launch_tensorboard(self, log_dir: Path):
-        """找可用端口并启动 tensorboard"""
+        """在可用端口上启动 TensorBoard 子进程。"""
         port = find_available_port()
         cmd = ["tensorboard", "--logdir", str(log_dir), "--port", str(port), "--host", "0.0.0.0"]
         self.tb_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         LOGGER.info(f"TensorBoard launched at http://localhost:{port}  (PID={self.tb_proc.pid})")
 
     def close(self):
-        """关闭 SummaryWriter 与 TensorBoard 进程"""
+        """优雅关闭 SummaryWriter 与 TensorBoard 子进程。"""
         if self.writer:
             self.writer.close()
         if self.tb_proc:
@@ -144,7 +181,11 @@ class TrainResult:
 
     @staticmethod
     def _to_float(x):
-        """把 torch.Tensor / np.ndarray / 数值 → Python float"""
+        """
+        将 torch.Tensor / np.ndarray / Python 数值 → float。
+
+        高维张量需先 `.detach().cpu().numpy().item()`。
+        """
         if isinstance(x, torch.Tensor):
             # .item() 只对 0-D 张量有效；若需兼容高维请先 x.detach().cpu().numpy().item()
             return x.detach().cpu().item()

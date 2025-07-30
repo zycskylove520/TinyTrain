@@ -10,16 +10,31 @@ from tinytrain.utils.tal import TaskAlignedAssigner, make_anchors, dist2bbox
 
 class ClassificationLoss(nn.Module):
     """
-    适用于所有分类任务的通用分类损失函数。
+    通用分类损失封装，默认使用 CrossEntropyLoss。
+    支持通过 cls_loss_gain 进行损失缩放。
     """
-
     def __init__(self, cls_loss_gain: float):
+        """
+        Args:
+            cls_loss_gain (float): 分类损失权重系数。
+        """
         super().__init__()
         self.cls_loss_gain = cls_loss_gain
         self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, preds: list[torch.Tensor], batch: ClassifyBatchDataInfo):
-        """Compute the classification loss between predictions and true target."""
+        """
+        计算分类损失。
+
+        Args:
+            preds (list[torch.Tensor]): 模型输出列表，通常只含一个 (B, C) 张量。
+            batch (ClassifyBatchDataInfo): 批数据，包含 `target` 标签。
+
+        Returns:
+            tuple:
+                - loss (torch.Tensor): 标量损失值。
+                - loss_items (dict): 各分量损失，便于日志记录。
+        """
         loss = self.criterion(preds[0], batch.target) * self.cls_loss_gain
         loss_items = {"cls_loss": loss.detach()}
         return loss, loss_items
@@ -27,13 +42,22 @@ class ClassificationLoss(nn.Module):
 
 class YOLOV8DetectionLoss(nn.Module):
     """
-    该loss由cls_loss、box_loss、dfl_loss组成。
+    YOLOv8检测损失，包括：
+    - 分类损失（cls_loss）—— BCEWithLogitsLoss
+    - 框回归损失（box_loss）—— IoU + DFL
+    - DFL 损失（dfl_loss）—— Distribution Focal Loss
+    使用 Task-Aligned Assigner 进行正负样本匹配。
     """
 
     def __init__(self, model, imgsz, cls_gain=1, box_gain=1, dfl_gain=1, tal_topk=10):
         """
-        @param nc: 类别个数
-        @param tal_topk:
+        Args:
+            model (nn.Module): 检测模型，用于提取 head 超参数。
+            imgsz (int | list[int] | tuple[int, int]): 训练输入分辨率 (W, H)。
+            cls_gain (float): 分类损失权重。
+            box_gain (float): 框回归损失权重。
+            dfl_gain (float): DFL 损失权重。
+            tal_topk (int): Task-Aligned Assigner 的 top-k 参数。
         """
         super().__init__()
         self.device = next(model.parameters()).device  # get model device
@@ -55,7 +79,17 @@ class YOLOV8DetectionLoss(nn.Module):
         self.proj = torch.arange(self.reg_max, dtype=torch.float, device=self.device)
 
     def preprocess(self, targets, batch_size, scale_tensor):
-        """Preprocesses the target counts and matches with the input batch size to output a tensor."""
+        """
+        将原始 targets 整理为 (B, max_n, 5) 格式，并缩放到输入分辨率。
+
+        Args:
+            targets (Tensor): [N, 6] 格式（img_idx, cls, cx, cy, w, h）。
+            batch_size (int): 批大小。
+            scale_tensor (Tensor): [4] (W, H, W, H) 用于缩放 bbox。
+
+        Returns:
+            Tensor: [B, max_n, 5] 格式 (cls, lx, ly, rx, ry)。
+        """
         nl, ne = targets.shape
         if nl == 0:
             out = torch.zeros(batch_size, 0, ne - 1, device=self.device)
@@ -78,7 +112,16 @@ class YOLOV8DetectionLoss(nn.Module):
         return out
 
     def bbox_decode(self, anchor_points, pred_dist):
-        """Decode predicted object bounding box coordinates from anchor points and distribution."""
+        """
+        将锚点 + 分布解码为边界框坐标。
+
+        Args:
+            anchor_points (Tensor): [H*W, 2] 锚点中心。
+            pred_dist (Tensor): [B, H*W, 4*reg_max] 分布预测。
+
+        Returns:
+            Tensor: [B, H*W, 4] (lx, ly, rx, ry)。
+        """
         if self.use_dfl:
             b, a, c = pred_dist.shape  # batch, anchors, channels
             # 将最后一个维度归一化，计算ltrb四个坐标的预测值
@@ -86,6 +129,18 @@ class YOLOV8DetectionLoss(nn.Module):
         return dist2bbox(pred_dist, anchor_points, xywh=False)
 
     def forward(self, preds: list[torch.Tensor], batch: DetectBatchDataInfo):
+        """
+        计算检测三件套损失。
+
+        Args:
+            preds (list[Tensor]): 单 head 输出 [B, C+4*reg_max, H*W]。
+            batch (DetectBatchDataInfo): 批数据，含 bboxes、labels、bboxes_idx。
+
+        Returns:
+            tuple:
+                - total_loss (Tensor): 标量。
+                - loss_items (dict): 各分量损失。
+        """
         preds = preds[0]  # 只有一个head module
         dtype = preds[0].dtype
         batch_size = preds[0].shape[0]

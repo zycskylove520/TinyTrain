@@ -5,21 +5,27 @@ from datetime import datetime
 
 from tinytrain.utils.any_utils import generate_unique_id
 
+
 def video_to_images(video_file, image_folder, start_time, end_time, fps):
     """
-    将视频裁剪为图片。
-    :param video_file: 输入视频文件路径
-    :param image_folder: 输出图片保存的文件夹路径
-    :param start_time: 起始时间（小时:分钟:秒）
-    :param end_time: 结束时间（小时:分钟:秒）
-    :param fps: 每秒保存图片的帧率（整数表示每秒切n张图，小于1表示n秒切1张图）
+    将视频按指定时间段与帧率抽帧并保存为图片，文件名使用 UUID 防冲突。
 
-    Examples:
-    # 每秒切2张图
-    video_to_images("input.mp4", "output_images", "00:00:10", "00:00:30", 2)
+    设计要点：
+    - 支持 hh:mm:ss 时间格式直读
+    - fps>1 表示每秒取 n 张；0<fps<1 表示 n 秒取 1 张
+    - 自动校正 fps 不超过视频原始帧率
+    - 利用 generate_unique_id 生成唯一文件名，避免重名覆盖
 
-    # 每5秒切1张图
-    video_to_images("input.mp4", "output_images", "00:00:10", "00:00:30", 0.2)
+    Args:
+        video_file (str): 输入视频路径
+        image_folder (str): 输出图片保存目录（自动创建）
+        start_time (str): 起始时间，格式 "hh:mm:ss"
+        end_time (str): 结束时间，格式 "hh:mm:ss"
+        fps (float): 抽帧频率；>1 为每秒张数，<1 为每 n 秒一张
+
+    Example:
+        >>> video_to_images("input.mp4", "out_imgs", "00:00:10", "00:00:30", 2)   # 每秒 2 张
+        >>> video_to_images("input.mp4", "out_imgs", "00:00:10", "00:00:30", 0.2) # 每 5 秒 1 张
     """
 
     # 将时间字符串转换为秒
@@ -113,11 +119,20 @@ def video_to_images(video_file, image_folder, start_time, end_time, fps):
 
 def images_to_video(image_folder, output_video_path, fps=30):
     """
-    将图片文件夹中的图片合成成一个视频。
+    将图片序列合成为 MP4 视频，保持原图顺序。
 
-    :param image_folder: 包含图片的文件夹路径
-    :param output_video_path: 输出视频的路径
-    :param fps: 输出视频的帧率，默认为30fps
+    设计要点：
+    - 按文件名排序保证帧序
+    - 使用 MP4V 编码，H.264 兼容
+    - 自动获取首张图片宽高作为视频分辨率
+
+    Args:
+        image_folder (str): 包含 jpg/png/jpeg 的目录
+        output_video_path (str): 输出视频文件路径
+        fps (int, optional): 输出帧率，默认 30
+
+    Example:
+        >>> images_to_video("./frames", "output.mp4", fps=25)
     """
     # 获取文件夹中的所有图片文件
     images = [img for img in os.listdir(image_folder) if img.endswith((".jpg", ".png", ".jpeg"))]
@@ -152,21 +167,23 @@ def images_to_video(image_folder, output_video_path, fps=30):
     video_writer.release()
     print(f"视频合成完成！已保存到: {output_video_path}")
 
+
 def extract_frames(video_path, output_folder, save_every_nth_frame=1):
     """
-    将视频按帧提取为图片并保存到指定文件夹。
+    将视频逐帧提取为图片，可按间隔保存，支持全帧导出。
 
-    参数:
+    设计要点：
+    - save_every_nth_frame=1 时保存所有帧
+    - 自动创建输出目录
+    - 帧文件名零填充，方便后续排序
+
+    Args:
         video_path (str): 输入视频文件路径
         output_folder (str): 输出图片保存目录（自动创建）
-        save_every_nth_frame (int): 每多少帧保存一次，默认1（全部保存）
+        save_every_nth_frame (int, optional): 每隔多少帧保存一次，默认 1
 
-    使用示例:
-        >>> extract_frames(
-        ...     video_path='./video.mp4',
-        ...     output_folder='./frames',
-        ...     save_every_nth_frame=10
-        ... )
+    Example:
+        >>> extract_frames("./video.mp4", "./frames", save_every_nth_frame=10)
     """
     # 检查输出文件夹是否存在，如果不存在则创建
     if not os.path.exists(output_folder):
@@ -203,13 +220,3 @@ def extract_frames(video_path, output_folder, save_every_nth_frame=1):
 
     cap.release()
     print(f"完成！共保存了 {save_count} 张图片到 {output_folder}")
-
-# 示例用法
-if __name__ == "__main__":
-    input_video_path = r"E:\DownLoad\yanhuachang\视频\开关门\20250717\00000006589000000.mp4"  # 输入视频文件路径
-    output_folder = r"E:\DownLoad\yanhuachang\img"  # 输出图片文件夹路径
-    start_time = "00:00:00"  # 起始时间（秒）
-    end_time = "01:00:00"  # 结束时间（秒）
-    fps = 0.02  # 每秒保存图片的帧率
-
-    video_to_images(input_video_path, output_folder, start_time, end_time, fps)

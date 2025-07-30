@@ -9,6 +9,17 @@ from pathlib import Path
 
 
 class BoxMetrics:
+    """
+    检测任务统一评估指标封装类，基于 torchmetrics.detection.MeanAveragePrecision。
+
+    功能
+    ----
+    1. 支持 mAP@0.5、mAP@0.75、mAP@[0.5:0.95] 等常用指标；
+    2. 支持小/中/大目标 mAP 与 mAR；
+    3. 支持 IoU-Recall 曲线与 PR 曲线绘制；
+    4. 支持类别级指标输出、可视化；
+    5. 支持缓存与重置，方便训练/验证循环。
+    """
     def __init__(self,
                  iou_thresholds: list = None,
                  rec_thresholds: list = None,
@@ -17,6 +28,21 @@ class BoxMetrics:
                  extended_summary: bool = True,
                  class_names: list = None,
                  ):
+        """
+        Args:
+            iou_thresholds (list[float] | None):
+                评估时使用的 IoU 阈值列表，默认 [0.5, 0.55, ..., 0.95]。
+            rec_thresholds (list[float] | None):
+                召回率采样点列表，默认 [0.0, 0.01, ..., 1.0]。
+            max_detection_thresholds (list[int] | None):
+                每张图最大检测框数量列表，默认 [1, 100, 300]。
+            class_metrics (bool):
+                是否计算类别级指标。
+            extended_summary (bool):
+                是否返回扩展摘要（曲线、矩阵等）。
+            class_names (list[str] | None):
+                类别名称列表，用于可视化时替换索引。
+        """
         self.iou_thresholds = iou_thresholds
         self.rec_thresholds = rec_thresholds
         self.max_detection_thresholds = max_detection_thresholds
@@ -46,24 +72,20 @@ class BoxMetrics:
         self.precision_curve = torch.zeros((1, 1, 1), dtype=torch.float32)
 
     def reset(self):
-        # self.metrics = torchmetrics.detection.MeanAveragePrecision(box_format='cxcywh',
-        #                                                            iou_type='bbox',
-        #                                                            iou_thresholds=self.iou_thresholds,
-        #                                                            rec_thresholds=self.rec_thresholds,
-        #                                                            class_metrics=self.class_metrics,
-        #                                                            extended_summary=self.extended_summary,
-        #                                                            max_detection_thresholds=self.max_detection_thresholds
-        #                                                            )
+        """重置内部状态，开始新一轮评估。"""
         self.recall_curve = torch.zeros((1, 1), dtype=torch.float32)
         self.precision_curve = torch.zeros((1, 1), dtype=torch.float32)
         self.metrics.reset()
 
     def update(self, pred: list[torch.Tensor], target: list[torch.Tensor]):
         """
-        @param pred: 检测模型输出的预测矩阵经过nms后的结果，list的长度为batch，list内部的tensor要求shape为:[after_nms_num_boxes, 4+score+class_idx],要求:
-        boxes的format必须为lxlyrxry格式,score是类别分数，class_idx是box预测的类别索引
-        @param target: 真实标签，list的长度为batch，list内部的tensor要求shape为:[num_boxes, 4+class_idx],要求:
-        boxes的format必须为lxlyrxry格式,class_idx是真实的类别索引
+        更新指标（每批调用一次）。
+
+        Args:
+            pred (list[Tensor]): 模型输出（NMS 后）。
+                每个元素形状 [N, 6] → (x1, y1, x2, y2, score, class_idx)。
+            target (list[Tensor]): 真实标签。
+                每个元素形状 [M, 5] → (x1, y1, x2, y2, class_idx)。
         """
         pred_list = []
         target_list = []
@@ -83,6 +105,8 @@ class BoxMetrics:
         self.metrics.update(pred_list, target_list)
 
     def compute(self):
+        """计算最终指标，并缓存曲线数据。"""
+
         # 更新完计算统计指标
         self.results = self.metrics.compute()
 
@@ -142,18 +166,23 @@ class BoxMetrics:
         return self.results["map"].item() if self.results else 0.
 
     def map_small(self):
+        """小目标 mAP"""
         return self.results["map_small"].item() if self.results else 0.
 
     def map_medium(self):
+        """中目标 mAP"""
         return self.results["map_medium"].item() if self.results else 0.
 
     def map_large(self):
+        """大目标 mAP"""
         return self.results["map_large"].item() if self.results else 0.
 
     def mar_a(self):
+        """mAR@1"""
         return self.results[f"mar_{self.max_detection_thresholds[0]}"].item() if self.results else 0.
 
     def mar_b(self):
+        """mAR@100"""
         return self.results[f"mar_{self.max_detection_thresholds[1]}"].item() if self.results else 0.
 
     def mar_c(self):
@@ -169,26 +198,27 @@ class BoxMetrics:
         return self.results[f"mar_{self.max_detection_thresholds[2]}"].item() if self.results else 0.
 
     def per_class_recall(self):
+        """类别级 Recall@0.5"""
         # 只计算每个类别在iou=0.5的情况下的recall
         return self.recall_curve[0, :]
 
     def recall(self):
-        # 计算总的recall
+        """总体 Recall"""
         return max(self.per_class_recall().mean().item(), 0)
 
     def per_class_precision(self, conf_threshold=0.25):
+        """类别级 Precision@conf"""
         # 只计算每个类别在iou=0.5,conf=conf_threshold的情况下的precision
         conf = int(conf_threshold * 100)
         return self.precision_curve[0, conf, :]
 
     def precision(self):
-        # 计算总的precision
+        """总体 Precision"""
         return max(self.per_class_precision().mean().item(), 0)
 
     def classes(self):
         """
-        观察到的类别列表
-        @return:
+        返回检测到的类别索引列表
         """
         if self.results:
             return self.results["classes"].reshape(-1)
@@ -196,6 +226,8 @@ class BoxMetrics:
             raise ValueError("box metrics no classes!")
 
     def plot_recall_curve(self, save_dir: Path):
+        """绘制 IoU-Recall 曲线（每类别）"""
+
         # 检查 class_names 是否为 None
         if self.class_names is None:
             # 如果 class_names 为 None，使用默认的类别索引作为列名
@@ -236,8 +268,7 @@ class BoxMetrics:
 
     def plot_pr_curve(self, save_dir: Path):
         """
-        绘制在iou=0.5的情况下的PR曲线
-        @return:
+        绘制 PR 曲线（IoU=0.5 时）
         """
         precision_recall_curve = self.precision_curve[0]
         # 检查 class_names 是否为 None
@@ -279,5 +310,6 @@ class BoxMetrics:
         plt.close()  # 关闭图像窗口，释放资源
 
     def plot(self, save_dir: Path):
+        """一键绘制所有曲线。"""
         self.plot_recall_curve(save_dir)
         self.plot_pr_curve(save_dir)

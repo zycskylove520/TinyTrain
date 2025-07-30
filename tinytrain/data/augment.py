@@ -11,18 +11,39 @@ if TYPE_CHECKING:
     from .augment_ops import DynamicFilling
 
 
-# custom augmentations class -----------------------------------------------------------------------------------------
-
 class YOLODetectionAugmentation(BaseAugmentation):
     """
-    A class for creating YOLO detection data augmentation pipelines.
+    为 YOLO 系列检测任务构建 **训练/验证** 数据增强流水线。
+
+    特性
+    ----
+    1. **动态填充**（DynamicFilling）：先随机填充到统一尺寸，再进入 Albumentations。
+    2. **Albumentations 全量增强**：模糊、灰度、亮度对比、HSV、翻转、仿射、压缩等。
+    3. **Yolo 格式 bbox 同步**：Albumentations 自动保证 bbox 与标签同步变换，并过滤无效框。
+    4. **均值/方差 归一化延后**：为了加快 CPU→GPU 传输，归一化放在 device 端执行。
+
+    使用示例
+    --------
+    >>> aug = YOLODetectionAugmentation(cfg)
+    >>> pipeline = aug.augment()          # 训练增强
+    >>> val_pipeline = aug.transform()    # 验证增强
+    >>> sample = pipeline(sample)
     """
 
     def __init__(self, config_manager: ConfigManager):
+        """
+        从配置文件中读取增强超参数。
+
+        Args:
+            config_manager (ConfigManager): 包含 augment / dataset 配置段。
+        """
         self.config_manager = config_manager
         self._load_cfg()
 
     def _load_cfg(self) -> None:
+        """
+        一次性把增强相关配置读入成员变量，方便后续构造 pipeline。
+        """
         augment_cfg = self.config_manager.augment
         self.target_size = make2tuple(self.config_manager.dataset["img_size"])
         self.mean = augment_cfg["mean"]
@@ -40,10 +61,10 @@ class YOLODetectionAugmentation(BaseAugmentation):
 
     def augment(self) -> TTCompose:
         """
-        Creates a data augmentation pipeline for YOLO detection tasks.
+        构建 **训练阶段** 增强流水线。
 
         Returns:
-            TTCompose: A composed augmentation pipeline.
+            TTCompose: 组合了 DynamicFilling + Albumentations 的增强器。
         """
         import albumentations as A
         from .augment_base import AlbumentationsAdapter, TTCompose
@@ -77,10 +98,10 @@ class YOLODetectionAugmentation(BaseAugmentation):
 
     def transform(self) -> TTCompose:
         """
-        Creates a transformation pipeline for YOLO detection tasks (similar to augment but named differently).
+        构建 **验证/预测阶段** 轻量增强流水线（仅 resize 与 bbox 同步）。
 
         Returns:
-            TTCompose: A composed transformation pipeline.
+            TTCompose: 组合了 DynamicFilling + 轻量 Albumentations 的增强器。
         """
         import albumentations as A
         from .augment_base import AlbumentationsAdapter, TTCompose
@@ -104,7 +125,19 @@ class YOLODetectionAugmentation(BaseAugmentation):
 
 class ClassificationAugmentation(BaseAugmentation):
     """
-    A class for creating image classification data augmentation pipelines.
+    为图像分类任务构建 **训练/验证** 数据增强流水线。
+
+    特性
+    ----
+    1. **训练增强**：随机裁剪、翻转、颜色抖动、随机擦除、Resize。
+    2. **验证增强**：中心 Resize。
+    3. **均值/方差 归一化延后**：与检测保持一致，放在 device 端执行。
+
+    使用示例
+    --------
+    >>> aug = ClassificationAugmentation(cfg)
+    >>> train_pipe = aug.augment()
+    >>> val_pipe   = aug.transform()
     """
 
     def __init__(self, config_manager: ConfigManager):
@@ -128,11 +161,12 @@ class ClassificationAugmentation(BaseAugmentation):
 
     def augment(self) -> TTCompose:
         """
-        Creates a data augmentation pipeline for image classification tasks.
+        构建 **训练阶段** 增强流水线。
 
         Returns:
-            TTCompose: A composed augmentation pipeline.
+            TTCompose: 包含随机裁剪、翻转、颜色抖动、擦除、Resize 的增强器。
         """
+
         import albumentations as A
         from .augment_base import AlbumentationsAdapter, TTCompose
 
@@ -158,11 +192,12 @@ class ClassificationAugmentation(BaseAugmentation):
 
     def transform(self) -> TTCompose:
         """
-        Creates a transformation pipeline for validation or prediction.
+        构建 **验证/预测阶段** 轻量增强流水线（仅 Resize）。
 
         Returns:
-            TTCompose: A composed transformation pipeline.
+            TTCompose: 仅包含 Resize 的增强器。
         """
+
         import albumentations as A
         from .augment_base import AlbumentationsAdapter, TTCompose
 

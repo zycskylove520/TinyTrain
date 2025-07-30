@@ -1,8 +1,13 @@
+"""
+统一回调管理器
+将训练、验证、推理、导出四阶段的所有钩子集中管理，支持动态增删与覆盖。
+"""
+
 class TrainerCallback:
     """
-    Trainer callbacks
+    训练阶段钩子
+    生命周期：prepare → train → epoch → batch → save → end
     """
-
     def __init__(self):
         self.callbacks = {
             "on_prepare_train_start": [self.on_prepare_train_start],
@@ -18,58 +23,59 @@ class TrainerCallback:
 
     @staticmethod
     def on_prepare_train_start(trainer):
-        """Called before the pretraining routine starts."""
+        """训练前准备开始时调用。"""
         pass
 
     @staticmethod
     def on_prepare_train_end(trainer):
-        """Called after the pretraining routine ends."""
+        """训练前准备结束时调用。"""
         pass
 
     @staticmethod
     def on_train_start(trainer):
-        """Called when the training starts."""
+        """训练开始时调用。"""
         pass
 
     @staticmethod
     def on_train_epoch_start(trainer):
-        """Called at the start of each training epoch."""
+        """每个训练 epoch 开始时调用。"""
         pass
 
     @staticmethod
     def on_train_batch_start(trainer):
-        """Called at the start of each training batch."""
+        """每个训练 batch 开始时调用。"""
         pass
 
     @staticmethod
     def on_before_zero_grad(trainer):
-        """Called before the gradients are set to zero."""
+        """梯度清零前调用。"""
         pass
 
     @staticmethod
     def on_train_batch_end(trainer):
-        """Called at the end of each training batch."""
+        """每个训练 batch 结束时调用。"""
         pass
 
     @staticmethod
     def on_train_epoch_end(trainer):
-        """Called at the end of each training epoch."""
+        """每个训练 epoch 结束时调用。"""
         pass
 
     @staticmethod
     def on_model_save(trainer):
-        """Called when the model is saved."""
+        """模型保存时调用。"""
         pass
 
     @staticmethod
     def on_train_end(trainer):
-        """Called when the training ends."""
+        """训练结束时调用。"""
         pass
 
 
 class ValidatorCallback:
     """
-    Validator callbacks
+    验证阶段钩子
+    生命周期：val → batch-start → batch-end → val-end
     """
 
     def __init__(self):
@@ -82,30 +88,30 @@ class ValidatorCallback:
 
     @staticmethod
     def on_val_start(validator):
-        """Called when the validation starts."""
+        """验证开始时调用。"""
         pass
 
     @staticmethod
     def on_val_batch_start(validator):
-        """Called at the start of each validation batch."""
+        """验证 batch 开始时调用。"""
         pass
 
     @staticmethod
     def on_val_batch_end(validator):
-        """Called at the end of each validation batch."""
+        """验证 batch 结束时调用。"""
         pass
 
     @staticmethod
     def on_val_end(validator):
-        """Called when the validation ends."""
+        """验证结束时调用。"""
         pass
 
 
 class PredictorCallback:
     """
-    Predictor callbacks
+    推理阶段钩子
+    生命周期：predict → batch-start → preprocess → inference → batch-end → predict-end
     """
-
     def __init__(self):
         self.callbacks = {
             "on_predict_start": [self.on_predict_start],
@@ -118,38 +124,39 @@ class PredictorCallback:
 
     @staticmethod
     def on_predict_start(predictor):
-        """Called when the prediction starts."""
+        """推理开始时调用。"""
         pass
 
     @staticmethod
     def on_predict_batch_start(predictor):
-        """Called when the prediction batch starts."""
+        """推理 batch 开始时调用。"""
         pass
 
     @staticmethod
     def on_predict_preprocess_end(predictor):
-        """Called when the prediction preprocess ends."""
+        """预处理结束时调用。"""
         pass
 
     @staticmethod
     def on_predict_inference_end(predictor):
-        """Called when the prediction inference ends."""
+        """推理结束时调用。"""
         pass
 
     @staticmethod
     def on_predict_batch_end(predictor):
-        """Called when the prediction batch ends."""
+        """推理 batch 结束时调用。"""
         pass
 
     @staticmethod
     def on_predict_end(predictor):
-        """Called when the prediction ends."""
+        """推理结束时调用。"""
         pass
 
 
 class ExporterCallback:
     """
-    Exporter callbacks
+    导出阶段钩子
+    生命周期：export-start → export-end
     """
 
     def __init__(self):
@@ -160,16 +167,23 @@ class ExporterCallback:
 
     @staticmethod
     def on_export_start(exporter):
-        """Called when the model export starts."""
+        """导出开始时调用。"""
         pass
 
     @staticmethod
     def on_export_end(exporter):
-        """Called when the model export ends."""
+        """导出结束时调用。"""
         pass
 
 
 class Callback:
+    """
+    全局回调容器
+    整合 Trainer / Validator / Predictor / Exporter 的全部钩子，对外提供：
+    - add_callback:  追加自定义函数
+    - set_callback:  覆盖原有函数
+    - run_callback:  按事件名批量执行
+    """
     def __init__(self):
         self._callbacks = {
             **TrainerCallback().callbacks,
@@ -179,20 +193,20 @@ class Callback:
         }
 
     def add_callback(self, event: str, callback):
-        """Append a callback event to the given callback."""
+        """在指定事件后追加一个回调函数。"""
         if event in self._callbacks:
             self._callbacks[event].append(callback)
         else:
             raise KeyError(f"Callback event '{event}' does not exist.")
 
     def set_callback(self, event: str, callback):
-        """Overrides the existing callbacks with the given callback."""
+        """用新回调函数覆盖指定事件的所有回调。"""
         if event in self._callbacks:
             self._callbacks[event] = [callback]
         else:
             raise KeyError(f"Callback event '{event}' does not exist.")
 
     def run_callback(self, engine, event: str):
-        """Run all existing callbacks associated with a particular event."""
+        """执行与事件关联的所有回调函数。"""
         for callback in self._callbacks.get(event, []):
             callback(engine)

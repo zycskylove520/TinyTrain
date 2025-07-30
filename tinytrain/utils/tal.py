@@ -8,21 +8,34 @@ from tinytrain.utils.box_utils import bbox_iou_torch
 
 class TaskAlignedAssigner(nn.Module):
     """
-    A task-aligned assigner for object detection.
+    Task-Aligned Assigner（TAL）
 
-    This class assigns ground-truth (gt) objects to anchors based on the task-aligned metric, which combines both
-    classification and localization information.
+    主要功能
+    --------
+    1. 将任意数量的 GT 框动态地分配给 anchor，解决正负样本极度不平衡问题。
+    2. 引入 **Task-Aligned Metric**（分类分 * α + IoU * β）作为 anchor 与 GT 的匹配标准。
+    3. 支持 CUDA OOM 自动回退 CPU，保证训练稳定。
+    4. 兼容旋转框（rotated bbox）解码接口（dist2rbox）。
 
-    Attributes:
-        topk (int): The number of top candidates to consider.
-        num_classes (int): The number of object classes.
-        alpha (float): The alpha parameter for the classification component of the task-aligned metric.
-        beta (float): The beta parameter for the localization component of the task-aligned metric.
-        eps (float): A small value to prevent division by zero.
+    用法示例
+    --------
+    >>> tal = TaskAlignedAssigner(topk=13, num_classes=80, alpha=1.0, beta=6.0)
+    >>> target_labels, target_bboxes, target_scores, fg_mask, target_gt_idx = tal(
+    ...     pd_scores, pd_bboxes, anc_points, gt_labels, gt_bboxes, mask_gt
+    ... )
     """
 
     def __init__(self, topk=13, num_classes=80, alpha=1.0, beta=6.0, eps=1e-9):
-        """Initialize a TaskAlignedAssigner object with customizable hyperparameters."""
+        """
+        初始化 TAL 超参数。
+
+        Args:
+            topk (int): 每个 GT 最多保留的候选 anchor 数。
+            num_classes (int): 类别数，用于生成 one-hot。
+            alpha (float): 分类分数在 Task-Aligned Metric 中的权重。
+            beta (float): IoU 在 Task-Aligned Metric 中的权重。
+            eps (float): 防止除零的小量。
+        """
         super().__init__()
         self.topk = topk
         self.num_classes = num_classes
@@ -34,23 +47,23 @@ class TaskAlignedAssigner(nn.Module):
     @torch.no_grad()
     def forward(self, pd_scores, pd_bboxes, anc_points, gt_labels, gt_bboxes, mask_gt):
         """
-        Compute the task-aligned assignment. Reference code is available at
-        https://github.com/Nioolek/PPYOLOE_pytorch/blob/master/ppyoloe/assigner/tal_assigner.py.
+        前向计算，完成 anchor-to-GT 的匹配并生成训练目标。
 
         Args:
-            pd_scores (Tensor): shape(bs, num_total_anchors, num_classes)
-            pd_bboxes (Tensor): shape(bs, num_total_anchors, 4)
-            anc_points (Tensor): shape(num_total_anchors, 2)
-            gt_labels (Tensor): shape(bs, n_max_boxes, 1)
-            gt_bboxes (Tensor): shape(bs, n_max_boxes, 4)
-            mask_gt (Tensor): shape(bs, n_max_boxes, 1)
+            pd_scores (Tensor): (bs, num_total_anchors, num_classes) 预测类别概率。
+            pd_bboxes (Tensor): (bs, num_total_anchors, 4) 预测框（xyxy 或 xywh）。
+            anc_points (Tensor): (num_total_anchors, 2) anchor 中心点坐标。
+            gt_labels (Tensor): (bs, n_max_boxes, 1) GT 类别。
+            gt_bboxes (Tensor): (bs, n_max_boxes, 4) GT 框（xyxy）。
+            mask_gt (Tensor): (bs, n_max_boxes, 1) 有效 GT 掩码。
 
         Returns:
-            target_labels (Tensor): shape(bs, num_total_anchors)
-            target_bboxes (Tensor): shape(bs, num_total_anchors, 4)
-            target_scores (Tensor): shape(bs, num_total_anchors, num_classes)
-            fg_mask (Tensor): shape(bs, num_total_anchors)
-            target_gt_idx (Tensor): shape(bs, num_total_anchors)
+            Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+                target_labels   (bs, num_total_anchors)   每个 anchor 的类别标签
+                target_bboxes   (bs, num_total_anchors,4) 每个 anchor 的回归目标
+                target_scores   (bs, num_total_anchors,C) one-hot+对齐分数
+                fg_mask         (bs, num_total_anchors)   前景掩码
+                target_gt_idx   (bs, num_total_anchors)   anchor 对应 GT 索引
         """
         self.bs = pd_scores.shape[0]
         self.n_max_boxes = gt_bboxes.shape[1]
@@ -75,25 +88,7 @@ class TaskAlignedAssigner(nn.Module):
             return tuple(t.to(device) for t in result)
 
     def _forward(self, pd_scores, pd_bboxes, anc_points, gt_labels, gt_bboxes, mask_gt):
-        """
-        Compute the task-aligned assignment. Reference code is available at
-        https://github.com/Nioolek/PPYOLOE_pytorch/blob/master/ppyoloe/assigner/tal_assigner.py.
-
-        Args:
-            pd_scores (Tensor): shape(bs, num_total_anchors, num_classes)
-            pd_bboxes (Tensor): shape(bs, num_total_anchors, 4)
-            anc_points (Tensor): shape(num_total_anchors, 2)
-            gt_labels (Tensor): shape(bs, n_max_boxes, 1)
-            gt_bboxes (Tensor): shape(bs, n_max_boxes, 4)
-            mask_gt (Tensor): shape(bs, n_max_boxes, 1)
-
-        Returns:
-            target_labels (Tensor): shape(bs, num_total_anchors)
-            target_bboxes (Tensor): shape(bs, num_total_anchors, 4)
-            target_scores (Tensor): shape(bs, num_total_anchors, num_classes)
-            fg_mask (Tensor): shape(bs, num_total_anchors)
-            target_gt_idx (Tensor): shape(bs, num_total_anchors)
-        """
+        """CPU/GPU 统一的实际计算逻辑，见 forward 的返回说明。"""
         mask_pos, align_metric, overlaps = self.get_pos_mask(
             pd_scores, pd_bboxes, gt_labels, gt_bboxes, anc_points, mask_gt
         )
@@ -113,7 +108,7 @@ class TaskAlignedAssigner(nn.Module):
         return target_labels, target_bboxes, target_scores, fg_mask.bool(), target_gt_idx
 
     def get_pos_mask(self, pd_scores, pd_bboxes, gt_labels, gt_bboxes, anc_points, mask_gt):
-        """Get in_gts mask, (b, max_num_obj, h*w)."""
+        """生成正样本掩码、对齐度量和 IoU。"""
         mask_in_gts = self.select_candidates_in_gts(anc_points, gt_bboxes)
         # Get anchor_align metric, (b, max_num_obj, h*w)
         align_metric, overlaps = self.get_box_metrics(pd_scores, pd_bboxes, gt_labels, gt_bboxes, mask_in_gts * mask_gt)
@@ -125,7 +120,7 @@ class TaskAlignedAssigner(nn.Module):
         return mask_pos, align_metric, overlaps
 
     def get_box_metrics(self, pd_scores, pd_bboxes, gt_labels, gt_bboxes, mask_gt):
-        """Compute alignment metric given predicted and ground truth bounding boxes."""
+        """计算 Task-Aligned Metric = cls^α * IoU^β。"""
         na = pd_bboxes.shape[-2]
         mask_gt = mask_gt.bool()  # b, max_num_obj, h*w
         overlaps = torch.zeros([self.bs, self.n_max_boxes, na], dtype=pd_bboxes.dtype, device=pd_bboxes.device)
@@ -146,24 +141,21 @@ class TaskAlignedAssigner(nn.Module):
         return align_metric, overlaps
 
     def iou_calculation(self, gt_bboxes, pd_bboxes):
-        """IoU calculation for horizontal bounding boxes."""
+        """计算水平框 IoU，返回 shape (N,)"""
         return bbox_iou_torch(gt_bboxes, pd_bboxes, xywh=False, CIoU=True).squeeze(-1).clamp_(0)
 
     def select_topk_candidates(self, metrics, largest=True, topk_mask=None):
         """
-        Select the top-k candidates based on the given metrics.
+        为每个 GT 保留 top-k anchor。
 
         Args:
-            metrics (Tensor): A tensor of shape (b, max_num_obj, h*w), where b is the batch size,
-                              max_num_obj is the maximum number of objects, and h*w represents the
-                              total number of anchor points.
-            largest (bool): If True, select the largest values; otherwise, select the smallest values.
-            topk_mask (Tensor): An optional boolean tensor of shape (b, max_num_obj, topk), where
-                                topk is the number of top candidates to consider. If not provided,
-                                the top-k values are automatically computed based on the given metrics.
+            metrics (Tensor): (b, n_max_boxes, h*w) Task-Aligned Metric。
+            topk (int): 保留数。
+            largest (bool): True 取最大，False 取最小。
+            topk_mask (Tensor, optional): (b, n_max_boxes, topk) 额外掩码。
 
         Returns:
-            (Tensor): A tensor of shape (b, max_num_obj, h*w) containing the selected top-k candidates.
+            Tensor: (b, n_max_boxes, h*w) 0/1 mask。
         """
         # (b, max_num_obj, topk)
         topk_metrics, topk_idxs = torch.topk(metrics, self.topk, dim=-1, largest=largest)
@@ -186,27 +178,17 @@ class TaskAlignedAssigner(nn.Module):
 
     def get_targets(self, gt_labels, gt_bboxes, target_gt_idx, fg_mask):
         """
-        Compute target labels, target bounding boxes, and target scores for the positive anchor points.
+        根据匹配结果生成训练目标。
 
         Args:
-            gt_labels (Tensor): Ground truth labels of shape (b, max_num_obj, 1), where b is the
-                                batch size and max_num_obj is the maximum number of objects.
-            gt_bboxes (Tensor): Ground truth bounding boxes of shape (b, max_num_obj, 4).
-            target_gt_idx (Tensor): Indices of the assigned ground truth objects for positive
-                                    anchor points, with shape (b, h*w), where h*w is the total
-                                    number of anchor points.
-            fg_mask (Tensor): A boolean tensor of shape (b, h*w) indicating the positive
-                              (foreground) anchor points.
+            gt_labels (Tensor): (b, n_max_boxes, 1) GT 类别。
+            gt_bboxes (Tensor): (b, n_max_boxes, 4) GT 框。
+            target_gt_idx (Tensor): (b, h*w) anchor 对应 GT 索引。
+            fg_mask (Tensor): (b, h*w) 前景掩码。
 
         Returns:
-            (Tuple[Tensor, Tensor, Tensor]): A tuple containing the following tensors:
-                - target_labels (Tensor): Shape (b, h*w), containing the target labels for
-                                          positive anchor points.
-                - target_bboxes (Tensor): Shape (b, h*w, 4), containing the target bounding boxes
-                                          for positive anchor points.
-                - target_scores (Tensor): Shape (b, h*w, num_classes), containing the target scores
-                                          for positive anchor points, where num_classes is the number
-                                          of object classes.
+            Tuple[Tensor, Tensor, Tensor]:
+                target_labels, target_bboxes, target_scores
         """
         # Assigned target labels, (b, 1)
         batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_labels.device)[..., None]
@@ -235,19 +217,15 @@ class TaskAlignedAssigner(nn.Module):
     @staticmethod
     def select_candidates_in_gts(xy_centers, gt_bboxes, eps=1e-9):
         """
-        Select positive anchor centers within ground truth bounding boxes.
+        判断 anchor 中心是否落在 GT 框内。
 
         Args:
-            xy_centers (torch.Tensor): Anchor center coordinates, shape (h*w, 2).
-            gt_bboxes (torch.Tensor): Ground truth bounding boxes, shape (b, n_boxes, 4).
-            eps (float, optional): Small value for numerical stability. Defaults to 1e-9.
+            xy_centers (Tensor): (h*w, 2) anchor 中心。
+            gt_bboxes (Tensor): (b, n_max_boxes, 4) GT 框 [x1, y1, x2, y2]。
+            eps (float): 边缘容差。
 
         Returns:
-            (torch.Tensor): Boolean mask of positive anchors, shape (b, n_boxes, h*w).
-
-        Note:
-            b: batch size, n_boxes: number of ground truth boxes, h: height, w: width.
-            Bounding box format: [x_min, y_min, x_max, y_max].
+            Tensor: (b, n_max_boxes, h*w) bool mask。
         """
         n_anchors = xy_centers.shape[0]
         bs, n_boxes, _ = gt_bboxes.shape
@@ -259,20 +237,16 @@ class TaskAlignedAssigner(nn.Module):
     @staticmethod
     def select_highest_overlaps(mask_pos, overlaps, n_max_boxes):
         """
-        Select anchor boxes with highest IoU when assigned to multiple ground truths.
+        处理一个 anchor 被多个 GT 选中的冲突：保留 IoU 最大者。
 
         Args:
-            mask_pos (torch.Tensor): Positive mask, shape (b, n_max_boxes, h*w).
-            overlaps (torch.Tensor): IoU overlaps, shape (b, n_max_boxes, h*w).
-            n_max_boxes (int): Maximum number of ground truth boxes.
+            mask_pos (Tensor): (b, n_max_boxes, h*w) 正样本掩码。
+            overlaps (Tensor): (b, n_max_boxes, h*w) IoU。
+            n_max_boxes (int): 最大 GT 数。
 
         Returns:
-            target_gt_idx (torch.Tensor): Indices of assigned ground truths, shape (b, h*w).
-            fg_mask (torch.Tensor): Foreground mask, shape (b, h*w).
-            mask_pos (torch.Tensor): Updated positive mask, shape (b, n_max_boxes, h*w).
-
-        Note:
-            b: batch size, h: height, w: width.
+            Tuple[Tensor, Tensor, Tensor]:
+                target_gt_idx, fg_mask, 更新后的 mask_pos
         """
         # Convert (b, n_max_boxes, h*w) -> (b, h*w)
         fg_mask = mask_pos.sum(-2)
@@ -290,38 +264,19 @@ class TaskAlignedAssigner(nn.Module):
         return target_gt_idx, fg_mask, mask_pos
 
 
-# def make_anchors(feats, imgsz, featuremap_sizes, grid_cell_offset=0.5):
-#     """Generate anchors from features."""
-#     # 对每个最终输出的featuremap建立像素点矩阵，然后拼接后返回
-#     anchor_points, stride_tensor = [], []
-#     assert feats is not None
-#     dtype, device = feats[0].dtype, feats[0].device
-#     strides = [int(imgsz / sz) for sz in featuremap_sizes]
-#     for i, stride in enumerate(strides):
-#         h, w = feats[i].shape[2:] if isinstance(feats, list) else (int(feats[i][0]), int(feats[i][1]))
-#         sx = torch.arange(end=w, device=device, dtype=dtype) + grid_cell_offset  # shift x
-#         sy = torch.arange(end=h, device=device, dtype=dtype) + grid_cell_offset  # shift y
-#         # 生成两个hxw的矩阵，sy表示像素点的y值，sx表示像素点的x值
-#         sx, sy = torch.meshgrid(sx, sy, indexing="xy")
-#         # 生成hxwx2的矩阵，然后view成(hxw, 2)的矩阵
-#         anchor_points.append(torch.stack((sx, sy), -1).view(-1, 2))
-#         stride_tensor.append(torch.full((h * w, 1), stride, dtype=dtype, device=device))
-#     return torch.cat(anchor_points), torch.cat(stride_tensor)
-
-
 def make_anchors(feats: list[torch.Tensor], strides: torch.Tensor, grid_cell_offset: float = 0.5):
     """
-    Generate anchors from features.
+    根据多尺度特征图生成 anchor 中心点及其 stride。
 
     Args:
-        feats: List of feature maps (tensors) from the backbone network.
-        imgsz: Image size, can be a tuple (height, width) or a single value for square images.
-        featuremap_sizes: List of feature map sizes (tensors) corresponding to feats.
-        grid_cell_offset: Offset for grid cell coordinates (default=0.5).
+        feats (list[Tensor]): 网络输出特征图列表，每个 shape (B, C, H, W)。
+        strides (Tensor): (n_levels,) 各层相对于输入图像的步长。
+        grid_cell_offset (float): 网格偏移，默认 0.5 表示中心点。
 
     Returns:
-        anchor_points: Tensor of shape (total_anchors, 2) containing anchor point coordinates.
-        stride_tensor: Tensor of shape (total_anchors, 2) containing stride values for each anchor.
+        Tuple[Tensor, Tensor]:
+            anchor_points (Tensor): (total_anchors, 2) 所有 anchor 中心坐标。
+            stride_tensor (Tensor): (total_anchors, 1) 每个 anchor 对应的 stride。
     """
     assert feats is not None, "Feature maps (feats) cannot be None"
 
@@ -355,7 +310,18 @@ def make_anchors(feats: list[torch.Tensor], strides: torch.Tensor, grid_cell_off
 
 
 def dist2bbox(distance, anchor_points, xywh: bool = True, dim: int = -1):
-    """Transform distance(ltrb) to box(xywh or xyxy)."""
+    """
+    将距离预测 (ltrb) 转换为边界框坐标。
+
+    Args:
+        distance (Tensor): (..., 4) 预测距离 [left, top, right, bottom]。
+        anchor_points (Tensor): (..., 2) anchor 中心点。
+        xywh (bool): True 返回 [cx, cy, w, h]，False 返回 [x1, y1, x2, y2]。
+        dim (int): 指定分割维度。
+
+    Returns:
+        Tensor: 转换后的边界框，形状与 distance 相同。
+    """
     lt, rb = distance.chunk(2, dim)
     # 计算左上角点的预测值标
     x1y1 = anchor_points - lt
@@ -370,23 +336,33 @@ def dist2bbox(distance, anchor_points, xywh: bool = True, dim: int = -1):
 
 
 def bbox2dist(anchor_points, bbox, reg_max):
-    """Transform bbox(xyxy) to dist(ltrb)."""
+    """
+    将边界框转换为距离格式 (ltrb)。
+
+    Args:
+        anchor_points (Tensor): (..., 2) anchor 中心点。
+        bbox (Tensor): (..., 4) 边界框 [x1, y1, x2, y2]。
+        reg_max (float): 距离上限，防止溢出。
+
+    Returns:
+        Tensor: (..., 4) 距离 [left, top, right, bottom]，范围 [0, reg_max)。
+    """
     x1y1, x2y2 = bbox.chunk(2, -1)
     return torch.cat((anchor_points - x1y1, x2y2 - anchor_points), -1).clamp_(0, reg_max - 0.01)  # dist (lt, rb)
 
 
 def dist2rbox(pred_dist, pred_angle, anchor_points, dim=-1):
     """
-    Decode predicted rotated bounding box coordinates from anchor points and distribution.
+    将旋转框距离预测解码为旋转框坐标 [cx, cy, w, h, angle(rad)]。
 
     Args:
-        pred_dist (torch.Tensor): Predicted rotated distance, shape (bs, h*w, 4).
-        pred_angle (torch.Tensor): Predicted angle, shape (bs, h*w, 1).
-        anchor_points (torch.Tensor): Anchor points, shape (h*w, 2).
-        dim (int, optional): Dimension along which to split. Defaults to -1.
+        pred_dist (Tensor): (..., 4) 距离 [left, top, right, bottom]。
+        pred_angle (Tensor): (..., 1) 角度（弧度）。
+        anchor_points (Tensor): (..., 2) anchor 中心点。
+        dim (int): 指定分割维度。
 
     Returns:
-        (torch.Tensor): Predicted rotated bounding boxes, shape (bs, h*w, 4).
+        Tensor: (..., 4) [cx, cy, w, h]（已旋转）。
     """
     lt, rb = pred_dist.split(2, dim=dim)
     cos, sin = torch.cos(pred_angle), torch.sin(pred_angle)

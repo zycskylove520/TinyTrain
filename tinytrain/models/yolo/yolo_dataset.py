@@ -1,4 +1,36 @@
-import time
+"""
+YOLODetectionDataset
+==================
+YOLO 通用检测数据集封装类，支持 YOLO 格式（class cx cy w h，归一化坐标）标签。
+设计目标：极致性能 + 零冗余内存占用 + 训练/验证/推理一体化。
+
+主要特性
+--------
+1. 内存映射缓存
+   通过 `load_image_cache_file` 将图片以只读内存映射方式缓存，
+   多进程 DataLoader 共享物理内存，显著降低 RAM 占用。
+2. 异步标签校验
+   使用 `ThreadPool` 并行检查所有图片与标签合法性，
+   实时汇总异常信息并统一 `LOGGER.warning` 输出。
+3. 动态增强管道
+   训练/验证模式分别绑定 `YOLODetectionAugmentation` 的不同策略，
+   在 `__getitem__` 中按需执行。
+4. 训练友好 collate_fn
+   预分配 GPU 连续内存、拼接 batch，返回 `DetectBatchDataInfo`，
+   可直接送入模型，无需额外后处理。
+5. 背景图自动混入
+   支持空标签背景图（background images），在 `custom_check` 中与普通样本
+   一起校验、拼接，增强模型鲁棒性。
+
+示例
+----
+>>> cfg = ConfigManager("cfg/yolov8-detect.toml")
+>>> ds = YOLODetectionDataset(cfg, img_path=Path("datasets/coco128/images/train"), mode="train")
+>>> dl = InfiniteDataLoader(ds, batch_size=32, num_workers=8)
+>>> for batch in dl:
+...     # batch: DetectBatchDataInfo
+...     preds = model(batch.data, batch.bboxes, batch.target)
+"""
 
 import cv2
 import torch
@@ -20,7 +52,7 @@ from tinytrain.data.dataset import TTBaseVisionDataset
 
 class YOLODetectionDataset(TTBaseVisionDataset):
     """
-    YOLO detection dataset.采用YOLO格式作为标签。
+    YOLO 检测数据集封装，支持 YOLO 格式标签（class cx cy w h，已归一化）。
     """
 
     def __init__(self,
@@ -28,15 +60,35 @@ class YOLODetectionDataset(TTBaseVisionDataset):
                  img_path: Path | list[Path],
                  mode: str = "train",
                  ):
+        """
+        参数
+        ----
+        config_manager : ConfigManager
+            全局配置管理器，读取 augment / dataset / core 等配置段。
+        img_path : Path | list[Path]
+            图片所在目录或目录列表，支持混合背景图。
+        mode : {"train", "val", "test"}
+            数据集模式，决定增强策略及 collate 行为。
+        """
         self.rgb: bool = config_manager.augment["rgb"]
         self.samples: list[DetectDataInfo] = []
         self.detect_augmentation = YOLODetectionAugmentation(config_manager)
         super().__init__(config_manager=config_manager, img_path=img_path, mode=mode)
 
     def __len__(self):
+        """返回样本总数（含背景图）。"""
         return len(self.samples)
 
     def __getitem__(self, index):
+        """
+        根据索引加载单张图片与标签，应用增强后返回 DetectDataInfo。
+
+        注意
+        ----
+        - 若启用 cache，则通过内存映射读取，避免重复 IO。
+        - 返回对象仅浅拷贝外壳，内部 img 字段会被新的 ndarray 覆盖。
+        """
+
         # from copy import deepcopy
         # sample = deepcopy(self.samples[index]) # 做深拷贝，避免内存常驻img数据
         sample = self.samples[index]  # 浅拷贝
@@ -62,6 +114,10 @@ class YOLODetectionDataset(TTBaseVisionDataset):
         return sample
 
     def custom_check(self):
+        """
+        多线程并行校验所有图片与标签，并构建 DetectDataInfo 列表。
+        背景图（无标签）与普通图共用同一校验函数，异常信息统一收集。
+        """
         messages = []
         with ThreadPool(NUM_THREADS) as pool:
             def wrapper(args):
@@ -119,12 +175,22 @@ class YOLODetectionDataset(TTBaseVisionDataset):
             sample.next_ImgDataInfo = None
 
     def set_transform(self):
+        """根据模式返回训练增强或验证/测试转换。"""
         if self.mode == "train":
             return self.detect_augmentation.augment()
         else:
             return self.detect_augmentation.transform()
 
     def collate_fn(self, batch_samples: list[DetectDataInfo]):
+        """
+        将 DetectDataInfo 列表打包为 DetectBatchDataInfo。
+
+        实现细节
+        --------
+        - 预分配连续 GPU 内存，避免拼接时额外拷贝。
+        - 训练模式不返回 origin/target shape，节省显存。
+        - 返回的 `bboxes_idx` 用于 scatter 到正确 GPU 卡。
+        """
         train_mode = self.mode == "train"
 
         # ---- 预分配 ----
