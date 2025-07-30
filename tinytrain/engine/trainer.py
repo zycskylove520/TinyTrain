@@ -822,29 +822,62 @@ class BaseTrainer:
 
             if "bias" in name:
                 groups["no_decay_bias"].append(param)
-            elif isinstance(parent_module, norm_types):
+            elif parent_module is not None and isinstance(parent_module, norm_types):
                 groups["no_decay_norm"].append(param)
             else:
                 groups["with_decay"].append(param)
 
         # ---------------- 构造优化器 ----------------
         common_kwargs = {"lr": lr_scaled}
-        if optimizer_name in {"Adam", "Adamax", "AdamW", "NAdam", "RAdam"}:
-            common_kwargs.update(betas=(momentum, 0.999), weight_decay=0.0)
-            opt_cls = getattr(optim, optimizer_name, optim.Adam)
-        elif optimizer_name == "RMSProp":
-            common_kwargs.update(momentum=momentum)
-            opt_cls = optim.RMSprop
-        elif optimizer_name == "SGD":
-            common_kwargs.update(momentum=momentum, nesterov=True)
-            opt_cls = optim.SGD
-        else:
-            raise NotImplementedError(f"Optimizer '{optimizer_name}' is not supported.")
 
-        # 先建立优化器（至少需要一个参数组）
-        optimizer = opt_cls(groups["no_decay_bias"], **common_kwargs)
+        # pytorch优化器
+        registry = {
+            "Adam": (optim.Adam, {"betas": (momentum, 0.999), "weight_decay": 0.0}),
+            "AdamW": (optim.AdamW, {"betas": (momentum, 0.999), "weight_decay": 0.0}),
+            "Adamax": (optim.Adamax, {"betas": (momentum, 0.999), "weight_decay": 0.0}),
+            "NAdam": (optim.NAdam, {"betas": (momentum, 0.999), "weight_decay": 0.0}),
+            "RAdam": (optim.RAdam, {"betas": (momentum, 0.999), "weight_decay": 0.0}),
+            "RMSprop": (optim.RMSprop, {"momentum": momentum}),
+            "SGD": (optim.SGD, {"momentum": momentum, "nesterov": True}),
+            "Adadelta": (optim.Adadelta, {"weight_decay": 0.0}),
+            "Adagrad": (optim.Adagrad, {"weight_decay": 0.0}),
+        }
 
-        # 追加剩余参数组
+        # 第三方优化器
+        # key   = 配置文件里优化器的名称
+        # value = (模块导入路径, 类名, 默认kwargs)
+        _third_party = {
+            "Lion": ("lion_pytorch", "Lion", {"weight_decay": 0.0}),
+            "AdaBelief": ("adabelief_pytorch", "AdaBelief", {"betas": (momentum, 0.999), "weight_decay": 0.0}),
+            "AdaBound": ("torch_optimizer", "AdaBound", {"betas": (momentum, 0.999), "weight_decay": 0.0}),
+            "AdaMod": ("torch_optimizer", "AdaMod", {"betas": (momentum, 0.999), "weight_decay": 0.0}),
+            "Lamb": ("torch_optimizer", "Lamb", {"betas": (momentum, 0.999), "weight_decay": 0.0}),
+            "Ranger": ("torch_optimizer", "Ranger", {"betas": (momentum, 0.999), "weight_decay": 0.0}),
+            "Ranger21": ("torch_optimizer", "Ranger21", {"betas": (momentum, 0.999), "weight_decay": 0.0}),
+        }
+
+        if optimizer_name in _third_party:
+            mod_path, cls_name, kwargs = _third_party[optimizer_name]
+            try:
+                mod = __import__(mod_path, fromlist=[cls_name])
+                opt_cls = getattr(mod, cls_name)
+            except (ImportError, AttributeError) as e:
+                raise ImportError(
+                    f"Optimizer '{optimizer_name}' needs `pip install {mod_path}`"
+                ) from e
+            registry[optimizer_name] = (opt_cls, kwargs)
+
+        if optimizer_name not in registry:
+            LOGGER.warning(f"Optimizer '{optimizer_name}' is not supported, fallback to AdamW.")
+            optimizer_name = "AdamW"
+
+        opt_cls, opt_kwargs = registry[optimizer_name]
+        opt_kwargs.update(common_kwargs)
+
+        # ---------- 4. 构建优化器 ----------
+        # 必须至少一个 param_group
+        optimizer = opt_cls(groups["no_decay_bias"], **opt_kwargs)
+
         if groups["with_decay"]:
             optimizer.add_param_group({"params": groups["with_decay"],
                                        "weight_decay": weight_decay})
@@ -858,65 +891,129 @@ class BaseTrainer:
         """
         设置预热训练阶段的学习率调度器。
         """
+        if self.warmup_epochs <= 0:
+            return
+        if self.start_epoch >= self.warmup_epochs:
+            return
 
+        warmup_scheduler_name = self.config_manager.core["warmup_scheduler"]
         lr0 = self.config_manager.core["lr0"]
         warmup_lr = self.config_manager.core["warmup_lr"]
+        warmup_epochs = self.warmup_epochs
         start_epoch = self.start_epoch
 
-        # set warmup_scheduler
-        if start_epoch < self.warmup_epochs:
-            warmup_start_epochs = start_epoch - 1
-        else:
-            warmup_start_epochs = self.warmup_epochs - 1
+        # 预热开始 epoch 对应的 last_epoch
+        last_epoch = max(start_epoch - 1, -1)
 
-        if self.warmup_epochs > 0:
+        # set warmup_scheduler
+        if warmup_scheduler_name == "LinearLR":
             self.warmup_scheduler = optim.lr_scheduler.LinearLR(
                 self.optimizer,
                 start_factor=warmup_lr / lr0,
-                end_factor=1,
+                end_factor=1.0,
                 total_iters=self.warmup_epochs,
-                last_epoch=warmup_start_epochs if warmup_start_epochs != 0 else -1
+                last_epoch=last_epoch
+            )
+        elif warmup_scheduler_name == "CosineWarmUpLR":
+            from tinytrain.utils.scheduler import CosineWarmUpLR
+            self.warmup_scheduler = CosineWarmUpLR(
+                self.optimizer,
+                warmup_lr=warmup_lr,
+                lr0=lr0,
+                epochs=warmup_epochs,
+                last_epoch=last_epoch
+            )
+        elif warmup_scheduler_name == "ExponentialWarmUpLR":
+            from tinytrain.utils.scheduler import ExponentialWarmUpLR
+            self.warmup_scheduler = ExponentialWarmUpLR(
+                self.optimizer,
+                warmup_lr=warmup_lr,
+                lr0=lr0,
+                epochs=warmup_epochs,
+                last_epoch=last_epoch
+            )
+        elif warmup_scheduler_name == "ConstantWarmupLR":
+            from tinytrain.utils.scheduler import ConstantWarmupLR
+            # 常量预热学习率衰减器，不做任何学习率衰减
+            self.warmup_scheduler = ConstantWarmupLR(
+                self.optimizer,
+                warmup_lr=warmup_lr,
+                lr0=lr0,
+                warmup_epochs=warmup_epochs
+            )
+        else:
+            LOGGER.warning(f"Unknown warmup_scheduler '{warmup_scheduler_name}', fallback to LinearLR.")
+            self.warmup_scheduler = optim.lr_scheduler.LinearLR(
+                self.optimizer,
+                start_factor=warmup_lr / lr0,
+                end_factor=1.0,
+                total_iters=warmup_epochs,
+                last_epoch=last_epoch
             )
 
     def set_normal_scheduler(self):
         """
         设置正式训练阶段的学习率调度器。
         """
+        if self.epochs <= self.warmup_epochs:
+            return
 
+        scheduler_name = self.config_manager.core["scheduler"]
         lr0 = self.config_manager.core["lr0"]
         lr1 = self.config_manager.core["lr1"]
         start_epoch = self.start_epoch
+        warmup_epochs = self.warmup_epochs
 
-        # set normal scheduler
-        if start_epoch < self.warmup_epochs:
-            normal_num_epochs = self.epochs - self.warmup_epochs
-            normal_start_epochs = -1
+        # 计算正式阶段开始的 last_epoch
+        if start_epoch < warmup_epochs:
+            last_epoch = -1
+            normal_epochs = self.epochs - warmup_epochs
         else:
-            normal_num_epochs = self.epochs - start_epoch
-            normal_start_epochs = start_epoch - self.warmup_epochs - 1
+            last_epoch = start_epoch - warmup_epochs - 1
+            normal_epochs = self.epochs - start_epoch
 
-        scheduler_name = self.config_manager.core["scheduler"]
+        # ---------- 衰减器选择 ----------
         if scheduler_name == "LinearLR":
-            scheduler = optim.lr_scheduler.LinearLR(
+            self.scheduler = optim.lr_scheduler.LinearLR(
                 self.optimizer,
-                start_factor=1,
+                start_factor=1.0,
                 end_factor=lr1,
-                total_iters=normal_num_epochs,
-                last_epoch=normal_start_epochs
+                total_iters=normal_epochs,
+                last_epoch=last_epoch
             )
         elif scheduler_name == "CosineLR":
-            if self.epochs < 100:
-                t_max = self.epochs
-            else:
-                t_max = self.epochs // 10
-            scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            t_max = normal_epochs if normal_epochs < 100 else normal_epochs // 10
+            self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer,
                 T_max=t_max,
                 eta_min=lr0 * lr1,
-                last_epoch=normal_start_epochs
+                last_epoch=last_epoch
+            )
+        elif scheduler_name == "ExponentialLR":
+            gamma = lr1 ** (1.0 / normal_epochs)
+            self.scheduler = optim.lr_scheduler.ExponentialLR(
+                self.optimizer,
+                gamma=gamma,
+                last_epoch=last_epoch
+            )
+        elif scheduler_name == "StepLR":
+            step_size = max(1, normal_epochs // 3)
+            gamma = lr1 ** (1.0 / (normal_epochs // step_size))
+            self.scheduler = optim.lr_scheduler.StepLR(
+                self.optimizer,
+                step_size=step_size,
+                gamma=gamma
+            )
+        elif scheduler_name == "MultiStepLR":
+            milestones = [int(normal_epochs * 0.25), int(normal_epochs * 0.5), int(normal_epochs * 0.75)]
+            gamma = lr1 ** (1.0 / len(milestones))
+            self.scheduler = optim.lr_scheduler.MultiStepLR(
+                self.optimizer,
+                milestones=milestones,
+                gamma=gamma
             )
         elif scheduler_name == "auto":
-            scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
                 self.optimizer,
                 mode="max",
                 patience=5,
@@ -927,9 +1024,14 @@ class BaseTrainer:
                 min_lr=lr0 * lr1,
             )
         else:
-            raise NotImplementedError(f"Scheduler '{scheduler_name}' is not supported.")
-
-        self.scheduler = scheduler
+            LOGGER.warning(f"Unknown normal scheduler '{scheduler_name}', fallback to LinearLR.")
+            self.scheduler = optim.lr_scheduler.LinearLR(
+                self.optimizer,
+                start_factor=1.0,
+                end_factor=lr1,
+                total_iters=normal_epochs,
+                last_epoch=last_epoch
+            )
 
     def set_model(self, world_size: int):
         """
@@ -983,7 +1085,7 @@ class BaseTrainer:
 
         # 计算 num_workers
         num_devices = torch.cuda.device_count()
-        num_workers = min(8, os.cpu_count() // max(num_devices, 1), self.config_manager.core["workers"])
+        num_workers = self.config_manager.core["workers"] = min(8, os.cpu_count() // max(num_devices, 1), self.config_manager.core["workers"])
 
         # 生成器（用于可复现性）
         generator = torch.Generator()
@@ -994,12 +1096,16 @@ class BaseTrainer:
             batch_size = max(1, batch_size // 2)
             shuffle = shuffle and self.config_manager.core["shuffle_val_dataloader"]
 
+        # 分mode计算num_workers
+        if mode != "train":
+            num_workers = min(1, num_workers // 2)
+
         # 创建 DataLoader
         dataloader = DataLoader(
             dataset=dataset,
             batch_size=batch_size,
             shuffle=shuffle and sampler is None,  # 由 sampler 控制 shuffle
-            num_workers=num_workers if mode == "train" else min(1, num_workers // 2),
+            num_workers=num_workers,
             sampler=sampler,
             collate_fn=getattr(dataset, "collate_fn", None),
             generator=generator,
