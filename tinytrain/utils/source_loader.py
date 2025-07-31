@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Type
+
+from tinytrain.data import BaseDataInfo
 
 
 class SourceParser(ABC):
@@ -33,13 +35,14 @@ class SourceParser(ABC):
             Any: 单条数据封装对象（如 ImgDataInfo / TextDataInfo / AnyDataInfo），
                  流结束后 yield None 表示终止。
         """
-        pass
+        yield None
 
 
 class ImageParser(SourceParser):
     """
     图片文件解析器，支持常见静态图格式。
     """
+
     def stream(self, source):
         """
         逐张图片生成 ImgDataInfo。
@@ -70,12 +73,13 @@ class VideoParser(SourceParser):
     """
     视频文件/流解析器，按帧输出。
     """
+
     def stream(self, source):
         """
         逐帧生成 ImgDataInfo。
 
         Args:
-            source (str | Path): 视频文件路径或设备索引。
+            source (str | Path | int): 视频文件路径或设备索引。
 
         Yields:
             ImgDataInfo: 包含 frame_id, img, origin_shape 等信息。
@@ -84,13 +88,18 @@ class VideoParser(SourceParser):
         from tinytrain.data import ImgDataInfo
         import cv2
 
-        cap = cv2.VideoCapture(str(source))
+        cap = cv2.VideoCapture(source if isinstance(source, int) else str(source))
+        frame_id = 0
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
 
-            frame_id = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1  # 从0开始计数
+            if isinstance(source, int):
+                frame_id += 1
+            else:
+                frame_id = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+
             yield ImgDataInfo(
                 frame_id=frame_id,
                 img=frame,
@@ -107,6 +116,7 @@ class TextFileParser(SourceParser):
     """
     纯文本文件解析器，按行输出。
     """
+
     def stream(self, source):
         """
         逐行读取文本并生成 TextDataInfo。
@@ -149,66 +159,172 @@ class NullParser(SourceParser):
 
 class SourceParserHub:
     """
-    解析器自动路由中心。
+    解析器自动路由中心，用于根据输入源的类型或格式自动选择合适的解析器。
 
-    主要功能
-    --------
-    1. 根据文件后缀或对象类型自动匹配对应的 SourceParser。
+    主要功能：
+    1. 根据文件后缀、对象类型或输入源的前缀自动匹配对应的 SourceParser。
     2. 支持运行时注册新的解析器，无需改动框架源码。
-    3. 未命中策略：返回 NullParser，保证下游流程始终可迭代。
+    3. 未命中策略：如果没有找到匹配的解析器，抛出 ValueError 异常。
 
-    用法示例
-    --------
-    >>> SourceParserHub.register("gif", ImageParser)   # 动态注册
-    >>> parser = SourceParserHub.auto("sample.gif")    # 返回 ImageParser 实例
+    设计理念：
+    - 提供一个灵活的解析器选择机制，支持多种类型的输入源。
+    - 通过注册机制，方便扩展新的解析器类型。
+    - 保证代码的可维护性和可扩展性。
+
+    Usage Example:
+    >>> SourceParserHub.register("gif", ImageParser)   # 动态注册解析器
+    >>> parser = SourceParserHub.auto("sample.gif")    # 自动选择解析器
+    >>> for data_info in parser.stream("sample.gif"):  # 使用解析器
+    ...     if data_info is None: break
+    ...     print(data_info.img.shape)
+
+    Attributes：
+        _parsers (dict): 以文件后缀为键，解析器类为值的字典。
+        _type_parsers (dict): 以类型为键，解析器类为值的字典。
+        _prefix_parsers (dict): 以输入源前缀为键，解析器类为值的字典。
+
+    Methods：
+        register(suffix, parser): 注册新的文件后缀解析器。
+        register_type(source_type, parser): 注册新的类型解析器。
+        register_prefix(prefix, parser): 注册新的前缀解析器。
+        auto(source): 自动选择解析器。
     """
 
-    _parsers: dict[str, type[SourceParser]] = {}
+    _parsers: dict[str, Type[SourceParser]] = {}
+    _type_parsers: dict[type, Type[SourceParser]] = {}
+    _prefix_parsers: dict[str, Type[SourceParser]] = {}
 
     @classmethod
-    def register(cls, suffix: str, parser: type[SourceParser]):
+    def register(cls, suffix: str, parser: Type[SourceParser]):
         """
-        注册新的后缀解析器。
+        注册新的文件后缀解析器。
 
         Args:
             suffix (str): 文件后缀（不含 '.'，不区分大小写）。
-            parser (type[SourceParser]): 解析器类，须继承 SourceParser。
+            parser (Type[SourceParser]): 解析器类，须继承自 SourceParser。
+
+        示例：
+        >>> SourceParserHub.register("jpg", ImageParser)
         """
-        cls._parsers[suffix] = parser
+        cls._parsers[suffix.lower()] = parser
 
     @classmethod
-    def auto(cls, source: Any) -> SourceParser:
+    def register_type(cls, source_type: type, parser: Type[SourceParser]):
         """
-        根据输入自动选择最合适的解析器。
+        注册新的类型解析器。
+
+        Args:
+            source_type (type): 输入源的类型。
+            parser (Type[SourceParser]): 解析器类，须继承自 SourceParser。
+
+        示例：
+        >>> SourceParserHub.register_type(int, VideoParser)
+        """
+        cls._type_parsers[source_type] = parser
+
+    @classmethod
+    def register_prefix(cls, prefix: str, parser: Type[SourceParser]):
+        """
+        注册新的前缀解析器。
+
+        Args:
+            prefix (str): 输入源的前缀（不区分大小写）。
+            parser (Type[SourceParser]): 解析器类，须继承自 SourceParser。
+
+        示例：
+        >>> SourceParserHub.register_prefix("rtsp://", VideoParser)
+        """
+        cls._prefix_parsers[prefix.lower()] = parser
+
+    @classmethod
+    def _select_parser(cls, source: Any) -> SourceParser:
+        """
+        动态选择解析器。
+
+        根据输入源的类型或格式选择合适的解析器。选择顺序如下：
+        1. 如果输入源是 BaseDataInfo 实例，返回 NullParser。
+        2. 如果输入源的类型在 _type_parsers 中注册，返回对应的解析器。
+        3. 如果输入源是字符串且以某个前缀开头，返回对应的解析器。
+        4. 如果输入源是字符串或 Path 对象，根据文件后缀选择解析器。
+        5. 如果没有找到匹配的解析器，抛出 ValueError 异常。
 
         Args:
             source (Any): 输入源，可以是路径、URL、已封装的数据对象等。
 
         Returns:
-            SourceParser: 对应的解析器实例；未匹配时返回 NullParser。
-        """
-        from tinytrain.data import BaseDataInfo
+            SourceParser: 选择的解析器实例。
 
-        # 已封装的数据对象直接透传
+        Raises:
+            ValueError: 如果没有找到匹配的解析器。
+        """
         if isinstance(source, BaseDataInfo):
             return NullParser()
 
-        # 路径/字符串：按后缀匹配
+        # 按类型选择解析器
+        if type(source) in cls._type_parsers:
+            return cls._type_parsers[type(source)]()
+
+        # 按前缀选择解析器
+        if isinstance(source, str):
+            for prefix, parser in cls._prefix_parsers.items():
+                if source.lower().startswith(prefix):
+                    return parser()
+
+        # 按后缀选择解析器
         if isinstance(source, (str, Path)):
             suffix = Path(source).suffix.lower().lstrip(".")
-            parser_cls = cls._parsers.get(suffix, NullParser)
-            return parser_cls()
+            if suffix in cls._parsers:
+                return cls._parsers[suffix]()
 
-        # 其它类型统一透传
-        return NullParser()
+        # 如果没有找到匹配的解析器，抛出异常
+        raise ValueError(f"Unsupported source type or format: {source}")
+
+    @classmethod
+    def auto(cls, source: Any) -> SourceParser:
+        """
+        自动选择解析器。
+
+        调用 _select_parser 方法选择合适的解析器。
+
+        Args:
+            source (Any): 输入源，可以是路径、URL、已封装的数据对象等。
+
+        Returns:
+            SourceParser: 选择的解析器实例。
+
+        Raises:
+            ValueError: 如果没有找到匹配的解析器。
+        """
+        return cls._select_parser(source)
 
 
 # 内置解析器注册
-SourceParserHub.register("jpg", ImageParser)
-SourceParserHub.register("jpeg", ImageParser)
-SourceParserHub.register("png", ImageParser)
-SourceParserHub.register("bmp", ImageParser)
-SourceParserHub.register("mp4", VideoParser)
-SourceParserHub.register("avi", VideoParser)
-SourceParserHub.register("mov", VideoParser)
-SourceParserHub.register("txt", TextFileParser)
+"""
+注册常见的文件格式及其对应的解析器。
+"""
+SourceParserHub.register("jpg", ImageParser)  # 注册 JPEG 图片解析器
+SourceParserHub.register("jpeg", ImageParser)  # 注册 JPEG 图片解析器
+SourceParserHub.register("png", ImageParser)  # 注册 PNG 图片解析器
+SourceParserHub.register("bmp", ImageParser)  # 注册 BMP 图片解析器
+SourceParserHub.register("gif", ImageParser)  # 注册 GIF 图片解析器
+SourceParserHub.register("webm", VideoParser)  # 注册 WebM 视频解析器
+SourceParserHub.register("mkv", VideoParser)  # 注册 MKV 视频解析器
+SourceParserHub.register("flv", VideoParser)  # 注册 FLV 视频解析器
+SourceParserHub.register("mp4", VideoParser)  # 注册 MP4 视频解析器
+SourceParserHub.register("avi", VideoParser)  # 注册 AVI 视频解析器
+SourceParserHub.register("mov", VideoParser)  # 注册 MOV 视频解析器
+SourceParserHub.register("txt", TextFileParser)  # 注册文本文件解析器
+
+# 注册类型解析器
+"""
+注册基于类型的解析器。
+"""
+SourceParserHub.register_type(int, VideoParser)  # 注册整数类型的解析器，用于处理摄像头索引
+
+# 注册前缀解析器
+"""
+注册基于前缀的解析器。
+"""
+SourceParserHub.register_prefix("rtsp://", VideoParser)  # 注册 RTSP 流的解析器
+SourceParserHub.register_prefix("http://", VideoParser)  # 注册 HTTP 流的解析器
+SourceParserHub.register_prefix("https://", VideoParser)  # 注册 HTTPS 流的解析器

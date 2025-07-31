@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import threading
+from time import sleep
+
 import torch
 
 from concurrent.futures import ThreadPoolExecutor
@@ -13,10 +15,11 @@ from tinytrain.data import BaseDataInfo
 from tinytrain.utils import LOGGER
 from tinytrain.utils.any_utils import create_iter_directory
 from tinytrain.utils.callback import Callback
+from tinytrain.utils.register import TTRegistry
 
 if TYPE_CHECKING:
     from torch import nn
-    from tinytrain.server.inference_server import InferenceServerCore
+    from tinytrain.server.inference_server import BaseInferenceServer
     from tinytrain.utils.source_loader import SourceParser, SourceParserHub
 
 
@@ -24,7 +27,7 @@ class BasePredictor:
     """
     BasePredictor 是一个通用推理基类，支持多种输入源（视频/图片/目录/摄像头/网络流等）
     的实时或批量推理。特性包括：
-    - 支持本地 torch.nn.Module 或远程推理服务器（InferenceServerCore）两种后端。
+    - 支持本地 torch.nn.Module 或远程推理服务器（BaseInferenceServer）两种后端。
     - 内置线程安全的数据流队列，支持多线程异步生产-消费模式。
     - 支持批量推理与逐条推理，可配置 batch_size、最大队列长度、线程池大小。
     - 提供完整的生命周期钩子（on_predict_start、on_predict_batch_* 等）。
@@ -54,13 +57,13 @@ class BasePredictor:
             config_manager (ConfigManager): 全局配置管理器。
             model (nn.Module | str | Path):
                 - torch.nn.Module：本地模型实例。
-                - str / Path：模型文件路径或远程推理服务配置，将使用 InferenceServerCore。
+                - str / Path：模型文件路径或远程推理服务配置，将使用 BaseInferenceServer。
             callback (Callback): 回调对象，用于插入生命周期钩子。
             backend (str | None, optional): 推理后端名称，仅对远程模型生效。默认 None。
             max_qsize (int, optional): 数据流队列最大长度。默认 64。
             max_workers (int, optional): 生产端线程池最大线程数。默认 4。
             batch_size (int, optional): 每批推理的样本数。默认 1。
-            **kwargs: 透传给 InferenceServerCore 的额外参数。
+            **kwargs: 透传给 BaseInferenceServer 的额外参数。
         """
         self.config_manager = config_manager
         self.backend = backend
@@ -95,16 +98,15 @@ class BasePredictor:
         save_dir = save_dir / project_name
         self.output_dir = create_iter_directory(save_dir, start_string="predict_")
 
-    def predict(self, source) -> Generator[Any, None, None]:
+    def predict(self, source) -> Union[Generator[Any, None, None], list[Any]]:
         """
         启动推理流程，返回结果生成器。
 
         Args:
-            source: 输入源，可为文件夹、视频、摄像头索引、URL 等，
-                    由 SourceParserHub 自动选择解析器。
+            source: 输入源，可为文件夹、视频、摄像头索引、URL 等，由 SourceParserHub 自动选择解析器。
 
-        Yields:
-            Any: 经过 show() 处理后的单条结果。
+        Returns:
+            Generator[Any, None, None] | list[Any]: 推理结果生成器或列表。
         """
         from tinytrain.utils.source_loader import SourceParserHub
 
@@ -115,36 +117,35 @@ class BasePredictor:
             threading.Thread(target=self._produce, args=(parser, source), daemon=True).start()
 
             # 2. 消费队列
-            with torch.inference_mode():
-                yield from self._consume()
+            yield from self._consume()
         finally:
             self.callback.run_callback(self, "on_predict_end")
 
-    def _setup_inference_server(self, model: Union[nn.Module, str, Path], **kwargs) -> Union[nn.Module, InferenceServerCore]:
+    def _setup_inference_server(self, model: Union[nn.Module, str, Path], **kwargs) -> Union[nn.Module, BaseInferenceServer]:
         """
         根据输入类型初始化推理后端。
 
         Args:
             model (nn.Module | str | Path):
                 - nn.Module：本地模型，直接加载到 self.device。
-                - str / Path：模型文件路径或远程配置，交由 InferenceServerCore 处理。
-            **kwargs: 透传给 InferenceServerCore 的额外参数。
+                - str / Path：模型文件路径或远程配置，交由 BaseInferenceServer 处理。
+            **kwargs: 透传给 BaseInferenceServer 的额外参数。
 
         Returns:
-            nn.Module | InferenceServerCore: 已就绪的推理后端。
+            nn.Module | BaseInferenceServer: 已就绪的推理后端。
 
         Raises:
             TypeError: 不支持的模型类型。
         """
         from torch import nn
-        from tinytrain.server.inference_server import InferenceServerCore
 
         if isinstance(model, nn.Module):
             model.to(self.device)
             model.eval()
             return model
         elif isinstance(model, (str, Path)):
-            return InferenceServerCore(config_manager=self.config_manager, model_file=model, device=self.device, backend=self.backend, **kwargs)
+            task = self.config_manager.core["task"]
+            return TTRegistry.get(task, "inference_server", self.backend)(model_file=model, device=self.device, **kwargs)
         else:
             raise TypeError(f"Unsupported model type: {type(model)}")
 
@@ -187,6 +188,7 @@ class BasePredictor:
                 yield from self._infer_batch(batch)
                 batch.clear()
 
+    @torch.inference_mode()
     def _infer_batch(self, batch: list[Any]) -> Generator[Any, None, None]:
         """
         执行真正的推理逻辑（逐条或批量）。
@@ -200,12 +202,19 @@ class BasePredictor:
         """
         for data_info in batch:
             self.callback.run_callback(self, "on_predict_batch_start")
+
             self.preprocess_result = self.preprocess(data_info)
+
             self.callback.run_callback(self, "on_predict_preprocess_end")
+
             self.inference_result = self.model.inference(self.preprocess_result)
+
             self.callback.run_callback(self, "on_predict_inference_end")
+
             self.postprocess_result = self.postprocess(data_info, self.inference_result)
+
             self.callback.run_callback(self, "on_predict_batch_end")
+
             yield self.show(data_info, self.postprocess_result)
 
     # ------------------------------------------------------------------

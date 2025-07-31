@@ -4,7 +4,7 @@ import inspect
 import setproctitle
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Generator, Any
+from typing import TYPE_CHECKING, Generator, Any, Union
 
 from tinytrain.utils.register import TTRegistry
 from tinytrain.global_var import DEFAULT_CORE_CONFIG_FILE
@@ -124,7 +124,7 @@ class Core:
         LOGGER.info("Training completed. Waiting for garbage collection...")
         gc.collect()
 
-    def predict(self, source, model: str | Path | None = None, backend: str | None = None, use_best_pt=False, **kwargs) -> Generator[Any, None, None]:
+    def predict(self, source, model: str | Path | None = None, backend: str | None = None, use_best_pt=False, **kwargs) -> Union[Generator[Any, None, None], list[Any]]:
         """
         启动推理。
 
@@ -135,10 +135,9 @@ class Core:
             use_best_pt (bool): 是否自动寻找 best.pt。
             **kwargs: 透传给 predictor。
 
-        Yields:
-            Any: 单条推理结果。
+        Returns:
+            Generator[Any, None, None] | list[Any]: 推理结果生成器或列表。
         """
-
         # find best.pt file
         if use_best_pt and model is None:
             model = self._find_best_pt_file()
@@ -146,7 +145,6 @@ class Core:
         # bind predictor
         self._bind_predictor(model, backend, **kwargs)
 
-        # predict
         yield from self.predictor.predict(source)
 
     def __call__(self, source, model: str | Path | None = None, **kwargs) -> Generator[Any, None, None]:
