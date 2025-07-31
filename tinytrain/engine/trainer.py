@@ -75,6 +75,7 @@ class BaseTrainer:
     - 所有日志通过 `LOGGER` 输出，支持 rank 过滤。
     - 训练结果统一保存在 `save_dir`，包括权重、日志、配置、图表等。
     """
+
     def __init__(self, config_manager: ConfigManager, model: BaseModel, callback: Callback, main_script_path: Path = None):
         """
         初始化 BaseTrainer 类，配置训练所需的核心组件。
@@ -1213,7 +1214,7 @@ class BaseTrainer:
             pin_memory=True,
             pin_memory_device=str(self.device),
             prefetch_factor=min(4, max(2, os.cpu_count() // max(world_size, 1))) if num_workers > 0 else None,
-            multiprocessing_context='spawn' if os.name != 'nt' else None,
+            multiprocessing_context='spawn' if os.name != 'nt' and num_workers > 0 else None,
         )
         return dataloader
 
