@@ -22,8 +22,8 @@ YOLOCore 是 TinyTrain 针对 YOLO 系列任务（classify / detect）的专用�
 
 使用示例
 --------
->>> from tinytrain.engine import YOLOCore
->>> core = YOLOCore("cfg/yolov8-cls.yaml")
+>>> from tinytrain import YOLOCore
+>>> core = YOLOCore("cfg/yolo11-cls.yaml")
 >>> core.train(model_scale="s")          # 分类任务，使用 YOLO-small 模型
 >>> list(core.predict("assets/bus.jpg")) # 推理单张图片
 >>> core.export("onnx")                  # 导出 onnx 并启动推理服务
