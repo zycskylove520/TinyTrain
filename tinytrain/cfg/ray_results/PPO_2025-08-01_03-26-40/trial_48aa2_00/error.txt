@@ -1,0 +1,42 @@
+Failure # 1 (occurred at 2025-08-01_03-26-47)
+The actor died unexpectedly before finishing this task.
+	class_name: PPO
+	actor_id: 65ca6e2f468a94dcb0059ce201000000
+	pid: 19136
+	namespace: 6e5657d6-2fe4-4f29-a64c-5c4b0bc1240f
+	ip: 127.0.0.1
+The actor is dead because its worker process has died. Worker exit type: SYSTEM_ERROR Worker exit detail: Worker exits unexpectedly. Worker exits with an exit code None. Traceback (most recent call last):
+  File "python\\ray\\_raylet.pyx", line 1918, in ray._raylet.execute_task
+  File "python\\ray\\_raylet.pyx", line 2026, in ray._raylet.execute_task
+  File "python\\ray\\_raylet.pyx", line 1925, in ray._raylet.execute_task
+  File "python\\ray\\_raylet.pyx", line 1865, in ray._raylet.execute_task.function_executor
+  File "D:\SoftWare\Python312\Lib\site-packages\ray\_private\function_manager.py", line 689, in actor_method_executor
+    return method(__ray_actor, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\SoftWare\Python312\Lib\site-packages\ray\util\tracing\tracing_helper.py", line 461, in _resume_span
+    return method(self, *_args, **_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\SoftWare\Python312\Lib\site-packages\ray\rllib\algorithms\algorithm.py", line 470, in __init__
+    self._env_id, self.env_creator = self._get_env_id_and_creator(
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\SoftWare\Python312\Lib\site-packages\ray\rllib\algorithms\algorithm.py", line 3176, in _get_env_id_and_creator
+    raise ValueError(
+ValueError: functools.partial(<class 'tinytrain.engine.tuner.TTBaseHPOEnv'>, core=<tinytrain.models.yolo.yolo_core.YOLOCore object at 0x0000016390163530>, model_scale='n', model=None, use_last_pt=False) is an invalid env specifier. You can specify a custom env as either a class (e.g., YourEnvCls) or a registered env id (e.g., "your_env").
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "python\\ray\\_raylet.pyx", line 2351, in ray._raylet.task_execution_handler
+  File "python\\ray\\_raylet.pyx", line 2222, in ray._raylet.execute_task_with_cancellation_handler
+  File "python\\ray\\_raylet.pyx", line 1867, in ray._raylet.execute_task
+  File "python\\ray\\_raylet.pyx", line 1868, in ray._raylet.execute_task
+  File "python\\ray\\_raylet.pyx", line 2115, in ray._raylet.execute_task
+  File "python\\ray\\_raylet.pyx", line 1097, in ray._raylet.store_task_errors
+  File "D:\SoftWare\Python312\Lib\site-packages\ray\util\tracing\tracing_helper.py", line 461, in _resume_span
+    return method(self, *_args, **_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\SoftWare\Python312\Lib\site-packages\ray\rllib\algorithms\algorithm.py", line 3681, in __repr__
+    if self.config.enable_rl_module_and_learner:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'enable_rl_module_and_learner'
+An unexpected internal error occurred while the worker was executing a task.

@@ -95,6 +95,7 @@ class ClassifyConfusionMatrix:
         plt.close()  # 关闭图像窗口，释放资源
 
 
+
 class DetectConfusionMatrix:
     """
     检测任务专用混淆矩阵工具。

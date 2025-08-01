@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Generator, Any, Union
 
 from tinytrain.utils.register import TTRegistry
-from tinytrain.global_var import DEFAULT_CORE_CONFIG_FILE
 from tinytrain.utils import LOGGER
 from tinytrain.utils.callback import Callback
 from tinytrain.cfg.config_manager import ConfigManager
 from tinytrain.utils.checks import check_file
+from .tuner import BaseTuner
 
 if TYPE_CHECKING:
     from .model import BaseModel
@@ -173,6 +173,10 @@ class Core:
         self._bind_exporter(backend=backend, model=model, **kwargs)
 
         self.exporter.export(export_dir=export_dir)
+
+    def tune(self, model_scale: str = None, model: str | Path = None, total_timesteps: int = 2048):
+        self.tuner = BaseTuner(self, model_scale=model_scale, model=model)
+        return self.tuner.tune(total_timesteps)
 
     def _bind_model(self, model_scale: str | None = None, model: str | Path = None, force_load=True) -> None:
         """

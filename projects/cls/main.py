@@ -39,6 +39,14 @@ def export(model):
         # jit_export=True
     )
 
+def tune(model):
+    model.set_config_overrides(
+        link_type="core",
+        task="detect",
+        epochs=10,
+    )
+    results = model.tune(model_scale='n', total_timesteps=2048)
+
 
 if __name__ == '__main__':
     yolo = YOLOCore(link_file=r"link.toml")

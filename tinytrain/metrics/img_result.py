@@ -121,6 +121,8 @@ class BaseImgResult(ABC):
             self.save_dir / f'{self.mode}_img_result_{self.plot_tick}.png',
             dpi=100, bbox_inches='tight', pad_inches=0)
 
+        plt.close(self._fig)
+
     # ---------- Pillow 兼容 ----------
     def _text_size(self, draw: ImageDraw.Draw, text: str):
         """
@@ -215,6 +217,8 @@ class ClassifyImgResult(BaseImgResult):
         self._fig.savefig(
             self.save_dir / f'{self.mode}_img_result_{self.plot_tick}.png',
             dpi=100, bbox_inches='tight', pad_inches=0)
+
+        plt.close(self._fig)
 
 
 class YOLODetectImgResult(BaseImgResult):

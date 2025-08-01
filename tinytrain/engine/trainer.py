@@ -442,7 +442,7 @@ class BaseTrainer:
                 # 判断本次是否真正执行 optimizer.step()
                 is_last_accum_step = (current_batch - last_opt_step) == self.accumulate
 
-                dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() and self.config_manager.core["bf16"] else torch.float16
+                dtype = torch.bfloat16 if self.device.type == "cuda" and torch.cuda.is_bf16_supported() and self.config_manager.core["bf16"] else torch.float16
                 if world_size > 1:
                     # 同步AMP dtype
                     dtype_list = [dtype] if RANK == 0 else [None]
@@ -514,6 +514,7 @@ class BaseTrainer:
 
             # validation
             self.fitness = self.do_validate()  # 不可设置RANK in {-1, 0}，存在多卡验证情况
+            self.train_result.add("fitness", self.fitness)
             if world_size > 1:
                 fitness_tensor = torch.tensor(self.fitness, dtype=torch.float32, device=self.device)
                 dist.broadcast(fitness_tensor, src=0)
@@ -1027,8 +1028,9 @@ class BaseTrainer:
                 warmup_epochs=warmup_epochs
             )
         else:
-            LOGGER.warning(f"Unknown warmup_scheduler '{warmup_scheduler_name}', fallback to LinearLR.")
-            self.warmup_scheduler = optim.lr_scheduler.LinearLR(
+            LOGGER.warning(f"Unknown warmup_scheduler '{warmup_scheduler_name}', fallback to LinearWarmupLR.")
+            from tinytrain.utils.scheduler import LinearWarmupLR
+            self.warmup_scheduler = optim.lr_scheduler.LinearWarmupLR(
                 self.optimizer,
                 start_factor=warmup_lr / lr0,
                 end_factor=1.0,
