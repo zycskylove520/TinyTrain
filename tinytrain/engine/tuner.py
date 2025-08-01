@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import json
-import pandas as pd
-import numpy as np
 import random
 import traceback
+import pandas as pd
+import numpy as np
 
 from typing import Dict, Any, List, Tuple
-from abc import ABC
 from pathlib import Path
 
+from tinytrain.utils import LOGGER
 
-class BaseTuner(ABC):
+
+class BaseTuner:
     """
     BaseTuner 是基于遗传算法（Genetic Algorithm, GA）的超参数自动调优框架。
     子类仅需覆写 build_param_tree() 即可灵活定义/扩展超参数搜索空间，
@@ -276,6 +277,7 @@ class BaseTuner(ABC):
         for genome in pop:
             try:
                 cfg = self._decode_vector(genome.tolist())
+                LOGGER.info(f"[GA-eval] Config to be trained: {json.dumps(cfg, indent=2)}")
                 for link_type, params in cfg.items():
                     self.core.set_config_overrides(link_type=link_type, **params)
                 # 重置trainer与model

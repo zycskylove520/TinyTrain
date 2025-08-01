@@ -971,6 +971,15 @@ class BaseTrainer:
 
         self.optimizer = optimizer
 
+        # 提前初始化 Adagrad 的状态字典（修复 KeyError: 'sum'）
+        if isinstance(self.optimizer, torch.optim.Adagrad):
+            for group in self.optimizer.param_groups:
+                for p in group["params"]:
+                    state = self.optimizer.state[p]
+                    if len(state) == 0:
+                        state["step"] = torch.tensor(0.0, dtype=torch.float32, device=p.device)
+                        state["sum"] = torch.zeros_like(p, memory_format=torch.preserve_format)
+
     def set_warmup_scheduler(self):
         """
         设置预热阶段的学习率调度器。
