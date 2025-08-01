@@ -34,6 +34,7 @@ classify
   ├── model            -> YOLOClassificationModel
   ├── trainer          -> YOLOClassificationTrainer
   ├── validator        -> YOLOClassificationValidator
+  ├── tuner            -> YOLOClassificationTuner
   ├── predictor        -> YOLOClassificationPredictor
   ├── exporter         -> BaseExporter
   ├── export_server
@@ -45,6 +46,7 @@ detect
   ├── model            -> YOLODetectionModel
   ├── trainer          -> YOLODetectionTrainer
   ├── validator        -> YOLODetectionValidator
+  ├── tuner            -> YOLODetectionTuner
   ├── predictor        -> YOLODetectionPredictor
   ├── exporter         -> BaseExporter
   ├── export_server
@@ -62,12 +64,14 @@ from tinytrain.models.yolo.task.classify import (
     YOLOClassificationValidator,
     YOLOClassificationPredictor,
     YOLOClassificationOnnxInferenceServer,
+    YOLOClassificationTuner
 )
 from tinytrain.models.yolo.task.detect import (
     YOLODetectionModel,
     YOLODetectionValidator,
     YOLODetectionPredictor,
     YOLODetectionTrainer,
+    YOLODetectionTuner
 )
 from tinytrain.server.track_server.bytetrack_server import ByteTrackServer
 from tinytrain.server.export_server.onnx_export_server import BaseOnnxExportServer
@@ -80,6 +84,7 @@ class YOLOCore(Core):
     TTRegistry.register("classify", "model")(YOLOClassificationModel)
     TTRegistry.register("classify", "trainer")(YOLOClassificationTrainer)
     TTRegistry.register("classify", "validator")(YOLOClassificationValidator)
+    TTRegistry.register("detect", "tuner")(YOLOClassificationTuner)
     TTRegistry.register("classify", "predictor")(YOLOClassificationPredictor)
     TTRegistry.register("classify", "exporter")(BaseExporter)
     TTRegistry.register("classify", "export_server", "onnx")(BaseOnnxExportServer)
@@ -89,6 +94,7 @@ class YOLOCore(Core):
     TTRegistry.register("detect", "model")(YOLODetectionModel)
     TTRegistry.register("detect", "trainer")(YOLODetectionTrainer)
     TTRegistry.register("detect", "validator")(YOLODetectionValidator)
+    TTRegistry.register("detect", "tuner")(YOLODetectionTuner)
     TTRegistry.register("detect", "predictor")(YOLODetectionPredictor)
     TTRegistry.register("detect", "inference_server", "onnx")(BaseOnnxInferenceServer)
     TTRegistry.register("detect", "exporter")(BaseExporter)

@@ -25,7 +25,7 @@ def predict(model):
         backend="onnx",
         model=r"model.onnx",
         source=r"mnist\val\0\3.png",
-        img_shape=(32,32)
+        img_shape=(32, 32)
     )
     for result in results:
         print(result)
@@ -39,13 +39,16 @@ def export(model):
         # jit_export=True
     )
 
+
 def tune(model):
     model.set_config_overrides(
         link_type="core",
         task="detect",
         epochs=10,
+        warmup_epochs=0
     )
-    results = model.tune(model_scale='n', total_timesteps=2048)
+    results = model.tune(model_scale='n', pop_size=40, generations=20)
+    print(results)
 
 
 if __name__ == '__main__':

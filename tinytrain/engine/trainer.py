@@ -1030,11 +1030,11 @@ class BaseTrainer:
         else:
             LOGGER.warning(f"Unknown warmup_scheduler '{warmup_scheduler_name}', fallback to LinearWarmupLR.")
             from tinytrain.utils.scheduler import LinearWarmupLR
-            self.warmup_scheduler = optim.lr_scheduler.LinearWarmupLR(
+            self.warmup_scheduler = LinearWarmupLR(
                 self.optimizer,
-                start_factor=warmup_lr / lr0,
-                end_factor=1.0,
-                total_iters=warmup_epochs,
+                warmup_lr=warmup_lr,
+                lr0=lr0,
+                warmup_epochs=self.warmup_epochs,
                 last_epoch=last_epoch
             )
 

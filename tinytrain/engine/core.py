@@ -4,7 +4,7 @@ import inspect
 import setproctitle
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Generator, Any, Union
+from typing import TYPE_CHECKING, Generator, Any, Union, Dict
 
 from tinytrain.utils.register import TTRegistry
 from tinytrain.utils import LOGGER
@@ -124,7 +124,7 @@ class Core:
         LOGGER.info("Training completed. Waiting for garbage collection...")
         gc.collect()
 
-    def predict(self, source, model: str | Path | None = None, backend: str | None = None, use_best_pt=False, **kwargs) -> Union[Generator[Any, None, None], list[Any]]:
+    def predict(self, source, model: str | Path | None = None, backend: str | None = None, use_best_pt=False, **kwargs) -> Generator[Any, None, None]:
         """
         启动推理。
 
@@ -136,7 +136,7 @@ class Core:
             **kwargs: 透传给 predictor。
 
         Returns:
-            Generator[Any, None, None] | list[Any]: 推理结果生成器或列表。
+            Generator[Any, None, None]: 推理结果生成器。
         """
         # find best.pt file
         if use_best_pt and model is None:
@@ -174,9 +174,35 @@ class Core:
 
         self.exporter.export(export_dir=export_dir)
 
-    def tune(self, model_scale: str = None, model: str | Path = None, total_timesteps: int = 2048):
-        self.tuner = BaseTuner(self, model_scale=model_scale, model=model)
-        return self.tuner.tune(total_timesteps)
+    def tune(self, model_scale: str = None, pop_size=40, generations=20) -> Dict[str, Any]:
+        """
+        启动遗传算法超参数调优，启动 GA 搜索并返回完整结果。
+
+        Args:
+            model_scale (str | None, optional):
+                模型规模标识，如 'n', 's', 'm', 'l', 'x'。
+                传入后将覆盖配置文件中的默认值。若留空则使用配置值。
+            model (str | Path | None, optional):
+                预训练权重文件路径（.pt 或 .pth）。若为 None，则 Tuner 会
+                根据 use_last_pt 逻辑自动查找或从零开始训练。
+            pop_size (int, optional):
+                遗传算法种群大小，默认 40。
+            generations (int, optional):
+                遗传算法迭代代数，默认 20。
+
+        Returns:
+            Dict[str, Any]:
+                {
+                    "history": pandas.DataFrame,  # 每代个体与适应度
+                    "best_config": dict,          # 最优超参数组合
+                }
+
+        Raises:
+            ValueError: 若任务未在注册表中注册对应 Tuner。
+        """
+        task = self.config_manager.core["task"]
+        self.tuner = TTRegistry.get(task, "tuner")(core=self, model_scale=model_scale)
+        return self.tuner.tune(pop_size=pop_size, generations=generations)
 
     def _bind_model(self, model_scale: str | None = None, model: str | Path = None, force_load=True) -> None:
         """

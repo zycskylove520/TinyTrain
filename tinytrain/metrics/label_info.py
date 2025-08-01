@@ -78,7 +78,7 @@ class LabelInfo:
         plt.savefig(save_dir / 'label_histogram.png', bbox_inches='tight', dpi=300)
 
         # 关闭 figure，防止内存泄漏
-        plt.close(fig)
+        plt.close()
 
     def boxes_statistics(self, axes):
         """
