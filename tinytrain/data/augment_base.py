@@ -5,7 +5,7 @@ import numpy as np
 from typing import TYPE_CHECKING
 from PIL import Image
 
-from .data_format import BaseDataInfo, DetectDataInfo, ClassifyDataInfo
+from .data_format import BaseDataInfo, DetectDataInfo, ClassifyDataInfo, PoseDataInfo
 
 # 仅在类型检查阶段 import，运行时不会加载
 if TYPE_CHECKING:
@@ -109,7 +109,10 @@ class AlbumentationsAdapter:
         if self.task == "classify":
             assert isinstance(sample, ClassifyDataInfo), "task=classify 需传入 ClassifyDataInfo"
             self.classify(sample)
-        if self.task == "detect":
+        elif self.task == "detect":
+            assert isinstance(sample, DetectDataInfo), "task=detect 需传入 DetectDataInfo"
+            sample = self.detect(sample)
+        elif self.task == "pose":
             assert isinstance(sample, DetectDataInfo), "task=detect 需传入 DetectDataInfo"
             sample = self.detect(sample)
 
@@ -148,6 +151,24 @@ class AlbumentationsAdapter:
 
         return sample
 
+    def pose(self,sample: PoseDataInfo):
+        """
+        对姿态估计任务同步增强图像、bboxes、labels。
+
+        Args:
+            sample (DetectDataInfo): 输入样本。
+
+        Returns:
+            DetectDataInfo: 同一样本，字段已同步更新。
+        """
+        if self.transforms is not None:
+            transformed = self.transforms(image=sample.img, bboxes=sample.bboxes, class_labels=sample.label, keypoints=sample.key_points)
+            sample.img = transformed['image']
+            sample.bboxes = transformed['bboxes']
+            sample.label = np.array(transformed['class_labels'])
+            sample.key_points = np.array(transformed['key_points'])
+
+        return sample
 
 class TTCompose:
     """

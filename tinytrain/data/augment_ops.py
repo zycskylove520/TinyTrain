@@ -5,7 +5,7 @@ import numpy as np
 
 from typing import TYPE_CHECKING
 
-from .data_format import BaseDataInfo, ImgDataInfo, ClassifyDataInfo, DetectDataInfo
+from .data_format import BaseDataInfo, ImgDataInfo, ClassifyDataInfo, DetectDataInfo, PoseDataInfo
 
 # 仅在类型检查阶段导入
 if TYPE_CHECKING:
@@ -94,7 +94,6 @@ class DynamicFilling:
             assert isinstance(sample, ClassifyDataInfo)
             out = transform(image=sample.img)
             sample.img = out["image"]
-
         elif self.task == "detect":
             assert isinstance(sample, DetectDataInfo)
             out = transform(
@@ -105,7 +104,18 @@ class DynamicFilling:
             sample.img = out["image"]
             sample.bboxes = out["bboxes"]
             sample.label = out["class_labels"]
-
+        elif self.task == "pose":
+            assert isinstance(sample, PoseDataInfo)
+            out = transform(
+                image=sample.img,
+                bboxes=sample.bboxes,
+                class_labels=sample.label,
+                keypoints=sample.key_points
+            )
+            sample.img = out["image"]
+            sample.bboxes = out["bboxes"]
+            sample.label = out["class_labels"]
+            sample.key_points = out['key_points']
         else:
             raise NotImplementedError(f"task {self.task} not implemented")
 
@@ -138,6 +148,21 @@ class DynamicFilling:
                 ),
                 p=1.0,
             )
+        elif self.task == "pose":
+            return A.Compose(
+                tf,
+                bbox_params=A.BboxParams(
+                    format="yolo",
+                    label_fields=["class_labels"],
+                    min_area=100,
+                    min_visibility=0.1,
+                    filter_invalid_bboxes=True,
+                ),
+                keypoint_params=A.KeypointParams(
+                    format='xy',
+                    remove_invisible=True),
+                p=1.0,
+            )
         else:  # classify
             return A.Compose(tf, p=1.0)
 
@@ -157,6 +182,21 @@ class DynamicFilling:
                     min_visibility=0.1,
                     filter_invalid_bboxes=True,
                 ),
+                p=1.0,
+            )
+        elif self.task == "pose":
+            return A.Compose(
+                tf,
+                bbox_params=A.BboxParams(
+                    format="yolo",
+                    label_fields=["class_labels"],
+                    min_area=100,
+                    min_visibility=0.1,
+                    filter_invalid_bboxes=True,
+                ),
+                keypoint_params=A.KeypointParams(
+                    format='xy',
+                    remove_invisible=True),
                 p=1.0,
             )
         else:  # classify

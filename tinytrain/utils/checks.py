@@ -128,8 +128,40 @@ def check_img_size(img_size: int | list[int] | tuple[int, int], divisor=32, mode
 
     # 输出警告信息
     LOGGER.info(f"{mode}: The image size (w, h) specified during training [{original_w}, {original_h}] must be a multiple of {divisor}! "
-                   f"The training size is automatically adjusted to: [{new_w}, {new_h}]")
+                f"The training size is automatically adjusted to: [{new_w}, {new_h}]")
     return new_w, new_h
+
+
+def check_device_mini(device):
+    """
+    根据输入字符串或整数返回 torch.device。
+
+    Args:
+        device: 'cpu' | 'cuda' | 'mps' | int | list[int]
+
+    Returns:
+        torch.device
+    """
+    # Check if the specified device is available
+    if device is None or device == "cpu":
+        return torch.device("cpu")
+    elif device == "mps":
+        if not torch.mps.is_available():
+            raise ValueError("MPS device requested, but MPS is not available. Defaulting to CPU.")
+        return torch.device("mps")
+    elif device == "cuda" or isinstance(device, int) or isinstance(device, list):
+        if not torch.cuda.is_available():
+            raise ValueError("CUDA device requested, but CUDA is not available. Defaulting to CPU.")
+        if isinstance(device, int):
+            return torch.device(f"cuda:{device}")
+        elif isinstance(device, list):
+            if len(device) == 0:
+                raise ValueError("List of CUDA devices is empty. Defaulting to CPU.")
+            return torch.device(f"cuda:{device[0]}")
+        else:
+            return torch.device("cuda:0")
+    else:
+        raise ValueError("Device must be 'cpu', 'cuda', 'mps', an integer (GPU index), or a list of integers (GPU indices).")
 
 
 def check_amp(trainer, model, dataset):
@@ -279,41 +311,9 @@ def check_image_and_label(img_file: Path | str, label_paths: Path | list[Path]):
     return bg_img_file, img_file, label_file, is_bg, good, bad, message
 
 
-def check_device_mini(device):
-    """
-    根据输入字符串或整数返回 torch.device。
-
-    Args:
-        device: 'cpu' | 'cuda' | 'mps' | int | list[int]
-
-    Returns:
-        torch.device
-    """
-    # Check if the specified device is available
-    if device is None or device == "cpu":
-        return torch.device("cpu")
-    elif device == "mps":
-        if not torch.mps.is_available():
-            raise ValueError("MPS device requested, but MPS is not available. Defaulting to CPU.")
-        return torch.device("mps")
-    elif device == "cuda" or isinstance(device, int) or isinstance(device, list):
-        if not torch.cuda.is_available():
-            raise ValueError("CUDA device requested, but CUDA is not available. Defaulting to CPU.")
-        if isinstance(device, int):
-            return torch.device(f"cuda:{device}")
-        elif isinstance(device, list):
-            if len(device) == 0:
-                raise ValueError("List of CUDA devices is empty. Defaulting to CPU.")
-            return torch.device(f"cuda:{device[0]}")
-        else:
-            return torch.device("cuda:0")
-    else:
-        raise ValueError("Device must be 'cpu', 'cuda', 'mps', an integer (GPU index), or a list of integers (GPU indices).")
-
-
 def check_detect_yolo_label(img_file, npy_file=None, label_file=None):
     """
-    验证 YOLO 标签文件合法性：每行 5 个元素，cls ≥ 0，xywh ∈ [0,1]。
+    验证 YOLO 目标检测标签文件合法性：每行 5 个元素，cls ≥ 0，xywh ∈ [0,1]。
 
     Args:
         img_file:   图像路径
@@ -358,3 +358,62 @@ def check_detect_yolo_label(img_file, npy_file=None, label_file=None):
     boxes = labels_arr[:, 1:]
 
     return img_file, npy_file, message, cls, boxes
+
+
+def check_pose_yolo_label(img_file, keypoint_shape, npy_file=None, label_file=None):
+    """
+    验证 YOLO 姿态估计标签文件合法性：每行 5 个元素，cls ≥ 0，xywh ∈ [0,1]。
+
+    Args:
+        img_file:   图像路径
+        npy_file:   NumPy 文件路径（可选）
+        label_file: txt 标签路径（可选）
+
+    Returns:
+        (img_file, npy_file, message, cls, boxes, key_points)
+    """
+    keypoint_num = keypoint_shape[0]
+    keypoint_dim = keypoint_shape[1]
+
+    message = None
+    labels_arr = np.zeros((0, 5), dtype=np.float32)  # 初始化为空数组
+    keypoints = np.zeros((0, keypoint_num, keypoint_dim), dtype=np.float32)
+
+    if label_file is not None:
+        try:
+            # 读取标签文件
+            with open(label_file, "r") as f:
+                lb = [x.split() for x in f.read().strip().splitlines() if x]
+
+            # 检查标签文件是否为空
+            if len(lb) == 0:
+                message = f"Label file: {label_file} is an empty txt file!"
+            else:
+                # 检查每行是否包含足够的元素
+                if any(len(x) != (5 + keypoint_num * keypoint_dim) for x in lb):
+                    raise ValueError(f"Label file: {label_file} has a line that does not contain 5+{keypoint_num}*{keypoint_dim} elements: cls, xywh, keypoint. Please correct the label file.")
+
+                # 将标签数据转换为 NumPy 数组
+                lb = np.array(lb, dtype=np.float32)
+                labels_arr = lb[:,:5]
+                keypoints = lb[:, 5:].reshape(-1, keypoint_num, keypoint_dim)
+                if keypoint_dim == 2:
+                    # 如果关键点是2维的，没有visibility值，就补上这个值
+                    kpt_mask = np.where((keypoints[..., 0] < 0) | (keypoints[..., 1] < 0), 0.0, 1.0).astype(np.float32)
+                    keypoints = np.concatenate([keypoints, kpt_mask[..., None]], axis=-1)  # (nl, nkpt, 3)
+
+                # 检查类别索引是否为非负整数
+                if not np.all(labels_arr[:, 0] >= 0):
+                    raise ValueError(f"Label file: {label_file} contains invalid class index. Class index must be a non-negative integer.")
+
+                # 检查边界框坐标是否在有效范围内 [0, 1]
+                if not np.all((labels_arr[:, 1:] >= 0) & (labels_arr[:, 1:] <= 1)):
+                    raise ValueError(f"Label file: {label_file} contains invalid bounding box coordinates. Coordinates must be within the range [0, 1].")
+        except ValueError as e:
+            raise ValueError(f"Error in label file: {label_file}. {e}")
+
+    # 提取类别索引和边界框坐标
+    cls = labels_arr[:, 0]
+    boxes = labels_arr[:, 1:]
+
+    return img_file, npy_file, message, cls, boxes, keypoints

@@ -17,6 +17,21 @@ from typing import Any, Union
 
 PathLike = Union[str, os.PathLike]
 
+def add_prefix_to_path(img_file: Path, prefix:str="") -> Path:
+    """将 img_file 的最后一级目录名作为前缀拼接到文件名前"""
+    new_name = f"{prefix}_{img_file.name}"
+    return img_file.parent / new_name
+
+def remove_prefix_from_path(img_file: Path, prefix: str = "") -> Path:
+    """移除文件名中的前缀，还原原始文件名"""
+    name = img_file.name
+    prefix_part = f"{prefix}_"
+    if name.startswith(prefix_part):
+        new_name = name[len(prefix_part):]      # 只去掉前缀以及紧随的下划线
+    else:
+        raise ValueError
+    return img_file.parent / new_name
+
 # ------------------------------------------------------------------
 # 1. 上下文装饰器：临时关闭 GC，减少大数组加载时的内存峰值
 # ------------------------------------------------------------------

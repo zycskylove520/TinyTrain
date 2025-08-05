@@ -9,7 +9,7 @@ import warnings
 import torch
 import torch.distributed as dist
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Union
 from datetime import timedelta
 from pathlib import Path
 from torch import autocast, optim, nn
@@ -733,43 +733,26 @@ class BaseTrainer:
 
             return torch.device("cuda:0")
 
-    def set_dataset_dir(self):
+    def set_dataset_dir(self) -> None:
         """
         设置训练、验证和测试数据集路径。
+        统一返回 list，即使只有一个数据集。
         """
+
+        def _get_dirs(root_dirs: Union[str, List[str]], split_key: str) -> List[Path]:
+            """辅助函数：根据 split_key 获取所有存在的路径列表"""
+            root_dirs = [root_dirs] if isinstance(root_dirs, (str, Path)) else root_dirs
+            dirs = [
+                (Path(root) / self.config_manager.dataset[split_key]).resolve()
+                for root in root_dirs
+            ]
+            return [d for d in dirs if d.exists()]
 
         dataset_root_dirs = self.config_manager.dataset["path"]
 
-        if isinstance(dataset_root_dirs, list):
-            self.train_dir = []
-            self.val_dir = []
-            self.test_dir = []
-            for dataset_root_dir in dataset_root_dirs:
-                # train
-                train_dir = (Path(dataset_root_dir) / self.config_manager.dataset["train"]).resolve()
-                if train_dir.exists():
-                    self.train_dir.append(train_dir)
-                # validation
-                val_dir = (Path(dataset_root_dir) / self.config_manager.dataset["val"]).resolve()
-                if val_dir.exists():
-                    self.val_dir.append(val_dir)
-                # test
-                test_dir: Path = (Path(dataset_root_dir) / self.config_manager.dataset["test"]).resolve()
-                if test_dir.exists():
-                    self.test_dir.append(test_dir)
-        else:
-            # train
-            train_dir = (Path(dataset_root_dirs) / self.config_manager.dataset["train"]).resolve()
-            if train_dir.exists():
-                self.train_dir = train_dir
-            # validation
-            val_dir = (Path(dataset_root_dirs) / self.config_manager.dataset["val"]).resolve()
-            if val_dir.exists():
-                self.val_dir = val_dir
-            # test
-            test_dir = (Path(dataset_root_dirs) / self.config_manager.dataset["test"]).resolve()
-            if test_dir.exists():
-                self.test_dir = test_dir
+        self.train_dir = _get_dirs(dataset_root_dirs, "train")
+        self.val_dir = _get_dirs(dataset_root_dirs, "val")
+        self.test_dir = _get_dirs(dataset_root_dirs, "test")
 
     def check_amp(self, world_size: int):
         """

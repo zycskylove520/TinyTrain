@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal, Dict, Any
 if TYPE_CHECKING:
     import torch
 
+
 # -----------------------------------------------------------------------------
 # 基础数据容器
 # -----------------------------------------------------------------------------
@@ -75,6 +76,7 @@ class TextDataInfo(BaseDataInfo):
     """
     纯文本任务的数据容器。
     """
+
     def __init__(self,
                  text: str,
                  **kwargs):
@@ -97,6 +99,7 @@ class ImgDataInfo(BaseDataInfo):
     - Mosaic/Copy-Paste：next_ImgDataInfo 指向下一张待拼接图像。
     - 仿射变换：affine_matrix 记录当前图像所有几何变换，推理阶段用于坐标回推。
     """
+
     def __init__(self,
                  frame_id: int = 0,
                  img: np.ndarray | None = None,
@@ -363,14 +366,14 @@ class PoseDataInfo(DetectDataInfo):
     """
 
     def __init__(self,
-                 key_points: list | None = None,
+                 key_points: torch.Tensor | None = None,
                  kpt_shape: list | None = None,
                  **kwargs
                  ) -> None:
         """
         Args:
-            key_points (list | None):
-                每个实例的关键点坐标，形状 [N, K, 3]（x, y, visible）。
+            key_points (Tensor | None):
+                每个实例的关键点坐标，形状例如: [N, K, 3]（x, y, visible）。
             kpt_shape (list | None):
                 单张图关键点维度信息，如 [17, 3]。
             **kwargs: 透传给父类。
@@ -418,6 +421,7 @@ class ImgBatchDataInfo(BaseBatchDataInfo):
 
 class ClassifyBatchDataInfo(ImgBatchDataInfo):
     """分类 batch 容器，额外携带标签张量。"""
+
     def __init__(self,
                  target: torch.Tensor | None = None,
                  **kwargs
@@ -478,6 +482,7 @@ class PoseBatchDataInfo(DetectBatchDataInfo):
     """姿态估计 batch 容器，未来可拓展 key_points 字段。"""
 
     def __init__(self,
+                 batch_key_points: torch.Tensor | None = None,
                  **kwargs
                  ) -> None:
         """
@@ -486,3 +491,4 @@ class PoseBatchDataInfo(DetectBatchDataInfo):
         :param kwargs: 其他关键字参数（传递给父类）
         """
         super().__init__(**kwargs)
+        self.batch_key_points = batch_key_points

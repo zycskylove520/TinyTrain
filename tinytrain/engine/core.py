@@ -182,9 +182,6 @@ class Core:
             model_scale (str | None, optional):
                 模型规模标识，如 'n', 's', 'm', 'l', 'x'。
                 传入后将覆盖配置文件中的默认值。若留空则使用配置值。
-            model (str | Path | None, optional):
-                预训练权重文件路径（.pt 或 .pth）。若为 None，则 Tuner 会
-                根据 use_last_pt 逻辑自动查找或从零开始训练。
             pop_size (int, optional):
                 遗传算法种群大小，默认 40。
             generations (int, optional):
@@ -200,10 +197,13 @@ class Core:
         Raises:
             ValueError: 若任务未在注册表中注册对应 Tuner。
         """
-        task = self.config_manager.core["task"]
-        self.tuner = TTRegistry.get(task, "tuner")(core=self, model_scale=model_scale)
+
+        self._bind_tuner(model_scale)
         return self.tuner.tune(pop_size=pop_size, generations=generations)
 
+    # ------------------------------------------------------------------
+    # 受保护函数
+    # ------------------------------------------------------------------
     def _bind_model(self, model_scale: str | None = None, model: str | Path = None, force_load=True) -> None:
         """
         根据权重或配置文件绑定模型。
@@ -349,6 +349,13 @@ class Core:
             backend=backend,
             **kwargs
         )
+
+    def _bind_tuner(self, model_scale: str | None = None) -> None:
+        """
+        实例化并绑定 tuner。
+        """
+        task = self.config_manager.core["task"]
+        self.tuner = TTRegistry.get(task, "tuner")(core=self, model_scale=model_scale)
 
     def _find_last_pt_file(self):
         """

@@ -219,7 +219,7 @@ class TTBaseVisionDataset(TTBaseDataset):
                     func=wrapper,
                     iterable=zip(img_files, label_paths))
 
-                desc = f"{self.mode}: Checking image and label files"
+                desc = f"{self.mode}: Checking {p.parent.parent.stem} dataset image and label files"
                 messages = []
 
                 pbar = TTProgressBar(results, desc=desc, total=len(img_files))

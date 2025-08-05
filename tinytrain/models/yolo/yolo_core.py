@@ -100,3 +100,5 @@ class YOLOCore(Core):
     TTRegistry.register("detect", "exporter")(BaseExporter)
     TTRegistry.register("detect", "export_server", "onnx")(BaseOnnxExportServer)
     TTRegistry.register("detect", "track_server", "bytetrack")(ByteTrackServer)
+
+    # ---------- pose ----------

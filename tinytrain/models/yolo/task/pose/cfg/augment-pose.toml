@@ -1,0 +1,22 @@
+rgb = true
+img_crop_fraction = 1  # 有bug，会影响验证集的速度
+
+# ColorJitter
+hsv_h = 0.1
+hsv_s = 0.1
+hsv_v = 0.1
+color_jitter = 0.3
+
+# Flip
+hflip = 0.5
+vflip = 0.0
+
+# Affine
+scale = 0.1
+translate = 0.1
+rotate = 0.1
+shear = 0.1
+
+# Normalize
+mean = 0
+std = 1

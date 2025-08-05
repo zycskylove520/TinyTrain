@@ -280,9 +280,6 @@ class BaseTuner:
                 LOGGER.info(f"[GA-eval] Config to be trained: {json.dumps(cfg, indent=2)}")
                 for link_type, params in cfg.items():
                     self.core.set_config_overrides(link_type=link_type, **params)
-                # 重置trainer与model
-                self.core.model = None
-                self.core.trainer = None
                 self.core.train(model_scale=self.model_scale)
 
                 csv_path = Path(self.core.trainer.save_dir) / "result.csv"  # type: ignore[arg-type]
