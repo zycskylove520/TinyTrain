@@ -62,7 +62,6 @@ class ImageParser(SourceParser):
         yield ImgDataInfo(
             img=img,
             origin_shape=img.shape[:2][::-1],
-            current_shape=img.shape[:2][::-1],
             target_shape=None,
             img_file=Path(source)
         )
@@ -104,7 +103,6 @@ class VideoParser(SourceParser):
                 frame_id=frame_id,
                 img=frame,
                 origin_shape=frame.shape[:2][::-1],
-                current_shape=frame.shape[:2][::-1],
                 target_shape=None,
                 img_file=None
             )

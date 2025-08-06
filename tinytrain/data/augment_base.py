@@ -22,13 +22,26 @@ class BaseAugmentation:
     子类按需实现其中之一或两者。
     """
 
-    def augment(self, *args, **kwargs):
-        """离线增强接口，子类返回 TTCompose 或自定义流水线，默认空实现。"""
+    def __init__(self, config_manager):
+        self.config_manager = config_manager
+        self.augment = None
+        self.transform = None
+
+    def set_augment(self, *args, **kwargs):
+        """离线增强接口，子类自定义流水线，默认空实现。"""
         pass
 
-    def transform(self, *args, **kwargs):
-        """在线变换接口，子类返回 TTCompose 或自定义流水线，默认空实现。"""
+    def set_transform(self, *args, **kwargs):
+        """在线变换接口，子类自定义流水线，默认空实现。"""
         pass
+
+    def do_augment(self, sample: BaseDataInfo):
+        """执行离线增强，默认空实现。"""
+        return sample
+
+    def do_transform(self, sample: BaseDataInfo):
+        """执行在线变换，默认空实现。"""
+        return sample
 
 
 class TorchvisionAdapter:
@@ -113,8 +126,8 @@ class AlbumentationsAdapter:
             assert isinstance(sample, DetectDataInfo), "task=detect 需传入 DetectDataInfo"
             sample = self.detect(sample)
         elif self.task == "pose":
-            assert isinstance(sample, DetectDataInfo), "task=detect 需传入 DetectDataInfo"
-            sample = self.detect(sample)
+            assert isinstance(sample, PoseDataInfo), "task=detect 需传入 DetectDataInfo"
+            sample = self.pose(sample)
 
         sample.current_shape = sample.img.shape[:2][::-1]
 
@@ -151,24 +164,27 @@ class AlbumentationsAdapter:
 
         return sample
 
-    def pose(self,sample: PoseDataInfo):
+    def pose(self, sample: PoseDataInfo):
         """
         对姿态估计任务同步增强图像、bboxes、labels。
 
         Args:
-            sample (DetectDataInfo): 输入样本。
+            sample (PoseDataInfo): 输入样本。
 
         Returns:
-            DetectDataInfo: 同一样本，字段已同步更新。
+            PoseDataInfo: 同一样本，字段已同步更新。
         """
         if self.transforms is not None:
-            transformed = self.transforms(image=sample.img, bboxes=sample.bboxes, class_labels=sample.label, keypoints=sample.key_points)
+            box_num, keypoint_num, keypoint_dim = sample.key_points.shape
+            multi_keypoints = sample.key_points[..., :2].reshape(-1, 2)
+            transformed = self.transforms(image=sample.img, bboxes=sample.bboxes, class_labels=sample.label, keypoints=multi_keypoints)
             sample.img = transformed['image']
             sample.bboxes = transformed['bboxes']
             sample.label = np.array(transformed['class_labels'])
-            sample.key_points = np.array(transformed['key_points'])
+            sample.key_points[..., :2] = np.array(transformed['keypoints']).reshape(box_num, keypoint_num, 2)
 
         return sample
+
 
 class TTCompose:
     """
@@ -182,6 +198,7 @@ class TTCompose:
     ... ])
     >>> sample = pipeline(sample)
     """
+
     def __init__(self, transform_adapters: list):
         """
         Args:

@@ -1,3 +1,0 @@
-cls_loss_gain = 0.5
-box_loss_gain = 7.5
-dfl_loss_gain = 1.5

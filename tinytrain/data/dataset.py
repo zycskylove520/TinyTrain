@@ -316,8 +316,10 @@ class TTClassificationDataset(ImageFolder):
             mode (str): "train"/"val"/"test"。
         """
         if isinstance(root, list):
+            if len(root) > 1:
+                LOGGER.warning(f"Classify datasets do not support multiple directories!Only loaded: {root}")
             root = root[0]
-            LOGGER.warning(f"Classify datasets do not support multiple directories!Only loaded: {root}")
+
         super().__init__(root)
         self.config_manager = config_manager
         self.mode = mode
@@ -328,8 +330,7 @@ class TTClassificationDataset(ImageFolder):
 
         self.init()
         self.crop_samples()
-        self.classification_augmentation = ClassificationAugmentation(self.config_manager)
-        self.set_transform()
+        self.transform = self.set_transform()
 
     def __getitem__(self, index):
         """
@@ -343,7 +344,7 @@ class TTClassificationDataset(ImageFolder):
         """
         if self.cache:
             cache_file = self.samples[index]
-            sample = load_dict_cache_file(cache_file)
+            sample = load_dict_cache_file(cache_file)  # type: ignore[arg-type]
             image = sample["img"]
             label = np.array(sample["label"])
         else:
@@ -363,13 +364,15 @@ class TTClassificationDataset(ImageFolder):
             img_file=self.samples[index] if self.cache else self.samples[index][0],
             img=image,
             origin_shape=origin_shape,
-            current_shape=origin_shape,
             target_shape=self.img_size,
             label=label
         )
 
         # use transform
-        sample = self.transform(sample)
+        if self.mode == "train":
+            sample = self.transform.do_augment(sample)
+        else:
+            sample = self.transform.do_transform(sample)
 
         return sample
 
@@ -428,10 +431,12 @@ class TTClassificationDataset(ImageFolder):
 
     def set_transform(self):
         """根据模式返回增强流水线。"""
+        classification_augmentation = ClassificationAugmentation(self.config_manager)
         if self.mode == "train":
-            self.transform = self.classification_augmentation.augment()
+            classification_augmentation.set_augment()
         else:
-            self.transform = self.classification_augmentation.transform()
+            classification_augmentation.set_transform()
+        return classification_augmentation
 
     def check_class_names(self):
         """根据 ImageFolder 的 class_to_idx 同步类别名。"""

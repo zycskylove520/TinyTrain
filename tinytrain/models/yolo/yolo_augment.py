@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from tinytrain.cfg.config_manager import ConfigManager
+from tinytrain.data import BaseDataInfo, DetectDataInfo
 from tinytrain.data.augment_base import BaseAugmentation, TTCompose, AlbumentationsAdapter
 from tinytrain.utils.any_utils import make2tuple
 from tinytrain.data.augment_ops import DynamicFilling
@@ -37,7 +40,7 @@ class YOLODetectionAugmentation(BaseAugmentation):
         Args:
             config_manager (ConfigManager): 包含 augment / dataset 配置段。
         """
-        self.config_manager = config_manager
+        super().__init__(config_manager)
         self._load_cfg()
 
     def _load_cfg(self) -> None:
@@ -59,17 +62,14 @@ class YOLODetectionAugmentation(BaseAugmentation):
         self.hsv_v = augment_cfg["hsv_v"]
         self.color_jitter = augment_cfg["color_jitter"]
 
-    def augment(self) -> TTCompose:
+    def set_augment(self):
         """
         构建 **训练阶段** 增强流水线。
-
-        Returns:
-            TTCompose: 组合了 DynamicFilling + Albumentations 的增强器。
         """
         import albumentations as A
 
         # Dynamic filling augmentation
-        dynamic_filling = DynamicFilling(target_size=self.target_size, p=0.5, task="detect")
+        dynamic_filling = DynamicFilling(target_size=self.target_size, p=0.5)
 
         albumentations_compose = A.Compose([
             A.Blur(p=0.01),
@@ -88,23 +88,16 @@ class YOLODetectionAugmentation(BaseAugmentation):
             # A.Normalize(mean=self.mean, std=self.std),
         ], bbox_params=A.BboxParams(format="yolo", label_fields=["class_labels"], min_area=100, min_visibility=0.1, filter_invalid_bboxes=True))
 
-        albumentations_adapter = AlbumentationsAdapter(transforms=albumentations_compose, task="detect")
+        self.augment = [dynamic_filling, albumentations_compose]
 
-        # Combine the augmentations into a single pipeline
-        final_compose = TTCompose([dynamic_filling, albumentations_adapter])
-        return final_compose
-
-    def transform(self) -> TTCompose:
+    def set_transform(self):
         """
         构建 **验证/预测阶段** 轻量增强流水线（仅 resize 与 bbox 同步）。
-
-        Returns:
-            TTCompose: 组合了 DynamicFilling + 轻量 Albumentations 的增强器。
         """
         import albumentations as A
 
         # Dynamic filling augmentation
-        dynamic_filling = DynamicFilling(target_size=self.target_size, p=0.5, task="detect")
+        dynamic_filling = DynamicFilling(target_size=self.target_size, p=0.5)
 
         albumentations_compose = A.Compose([
             # 以下两步在移到对应的device后在做,可以提速
@@ -112,11 +105,36 @@ class YOLODetectionAugmentation(BaseAugmentation):
             # A.Normalize(mean=self.mean, std=self.std),
         ], bbox_params=A.BboxParams(format="yolo", label_fields=["class_labels"], min_area=100, min_visibility=0.1, filter_invalid_bboxes=True))
 
-        albumentations_adapter = AlbumentationsAdapter(transforms=albumentations_compose, task="detect")
-
         # Combine the transformations into a single pipeline
-        final_compose = TTCompose([dynamic_filling, albumentations_adapter])
-        return final_compose
+        self.transform = [dynamic_filling, albumentations_compose]
+
+    def do_augment(self, sample: DetectDataInfo):
+        assert isinstance(sample, DetectDataInfo)
+        df: DynamicFilling = self.augment[0]
+        sample, M = df(sample)
+        sample.bboxes = DynamicFilling.transform_yolo_bboxes_norm(sample.bboxes, M)
+
+        a_compose = self.augment[1]
+        if self.augment is not None:
+            transformed = a_compose(image=sample.img, bboxes=sample.bboxes, class_labels=sample.label)
+            sample.img = transformed['image']
+            sample.bboxes = transformed['bboxes']
+            sample.label = np.array(transformed['class_labels'])
+        return sample
+
+    def do_transform(self, sample: DetectDataInfo):
+        assert isinstance(sample, DetectDataInfo)
+        df: DynamicFilling = self.transform[0]
+        sample, M = df(sample)
+        sample.bboxes = DynamicFilling.transform_yolo_bboxes_norm(sample.bboxes, M)
+
+        a_compose = self.transform[1]
+        if self.transform is not None:
+            transformed = a_compose(image=sample.img, bboxes=sample.bboxes, class_labels=sample.label)
+            sample.img = transformed['image']
+            sample.bboxes = transformed['bboxes']
+            sample.label = np.array(transformed['class_labels'])
+        return sample
 
 
 class YOLOPoseAugmentation(BaseAugmentation):
@@ -145,7 +163,7 @@ class YOLOPoseAugmentation(BaseAugmentation):
         Args:
             config_manager (ConfigManager): 包含 augment / dataset 配置段。
         """
-        self.config_manager = config_manager
+        super().__init__(config_manager)
         self._load_cfg()
 
     def _load_cfg(self) -> None:
@@ -167,7 +185,7 @@ class YOLOPoseAugmentation(BaseAugmentation):
         self.hsv_v = augment_cfg["hsv_v"]
         self.color_jitter = augment_cfg["color_jitter"]
 
-    def augment(self) -> TTCompose:
+    def set_augment(self):
         """
         构建 **训练阶段** 增强流水线。
 
@@ -176,10 +194,7 @@ class YOLOPoseAugmentation(BaseAugmentation):
         """
         import albumentations as A
 
-        # Dynamic filling augmentation
-        dynamic_filling = DynamicFilling(target_size=self.target_size, p=0.5, task="pose")
-
-        albumentations_compose = A.Compose([
+        self.augment = A.Compose([
             A.Blur(p=0.01),
             A.MedianBlur(p=0.01),
             A.ToGray(p=0.01),
@@ -190,44 +205,22 @@ class YOLOPoseAugmentation(BaseAugmentation):
             A.ColorJitter(brightness=self.hsv_v, contrast=self.hsv_v, saturation=self.hsv_s, hue=self.hsv_h, p=self.color_jitter),
             A.HorizontalFlip(p=self.hflip),
             A.VerticalFlip(p=self.vflip),
-            A.Affine(scale=self.scale, shear=self.shear, translate_percent=self.translate, rotate=self.rotate),
             # 以下两步在移到对应的device后在做,可以提速
             # A.ToFloat(),
             # A.Normalize(mean=self.mean, std=self.std),
-        ],
-            bbox_params=A.BboxParams(format="yolo", label_fields=["class_labels"], min_area=100, min_visibility=0.1, filter_invalid_bboxes=True),
-            keypoint_params=A.KeypointParams(format='xy', remove_invisible=True)
-        )
+        ])
 
-        albumentations_adapter = AlbumentationsAdapter(transforms=albumentations_compose, task="pose")
-
-        # Combine the augmentations into a single pipeline
-        final_compose = TTCompose([dynamic_filling, albumentations_adapter])
-        return final_compose
-
-    def transform(self) -> TTCompose:
+    def set_transform(self) -> TTCompose:
         """
         构建 **验证/预测阶段** 轻量增强流水线（仅 resize 与 bbox 同步）。
 
         Returns:
             TTCompose: 组合了 DynamicFilling + 轻量 Albumentations 的增强器。
         """
-        import albumentations as A
+        pass
 
-        # Dynamic filling augmentation
-        dynamic_filling = DynamicFilling(target_size=self.target_size, p=0.5, task="pose")
+    def do_augment(self, sample: DetectDataInfo):
+        pass
 
-        albumentations_compose = A.Compose([
-            # 以下两步在移到对应的device后在做,可以提速
-            # A.ToFloat(),
-            # A.Normalize(mean=self.mean, std=self.std),
-        ],
-            bbox_params=A.BboxParams(format="yolo", label_fields=["class_labels"], min_area=100, min_visibility=0.1, filter_invalid_bboxes=True),
-            keypoint_params=A.KeypointParams(format='xy', remove_invisible=True)
-        )
-
-        albumentations_adapter = AlbumentationsAdapter(transforms=albumentations_compose, task="pose")
-
-        # Combine the transformations into a single pipeline
-        final_compose = TTCompose([dynamic_filling, albumentations_adapter])
-        return final_compose
+    def do_transform(self, sample: DetectDataInfo):
+        pass

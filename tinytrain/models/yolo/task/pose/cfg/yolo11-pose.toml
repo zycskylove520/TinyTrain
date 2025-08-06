@@ -1,4 +1,4 @@
-# YOLO11-det image classification model_config.
+# YOLO11-pose model_config.
 
 # number of classes
 scale = "n"
@@ -7,27 +7,27 @@ scale = "n"
 [scales.n]
 depth = 0.50
 width = 0.25
-summary = "319 layers, 2624080 parameters, 2624064 gradients, 6.6 GFLOPs"
+summary = "344 layers, 2908507 parameters, 2908491 gradients, 7.7 GFLOPs"
 
 [scales.s]
 depth = 0.50
 width = 0.50
-summary = "319 layers, 9458752 parameters, 9458736 gradients, 21.7 GFLOPs"
+summary = "344 layers, 9948811 parameters, 9948795 gradients, 23.5 GFLOPs"
 
 [scales.m]
 depth = 0.50
 width = 1.00
-summary = "409 layers, 20114688 parameters, 20114672 gradients, 68.5 GFLOPs"
+summary = "434 layers, 20973273 parameters, 20973257 gradients, 72.3 GFLOPs"
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "631 layers, 25372160 parameters, 25372144 gradients, 87.6 GFLOPs"
+summary = "656 layers, 26230745 parameters, 26230729 gradients, 91.4 GFLOPs"
 
 [scales.x]
 depth = 1.00
 width = 1.50
-summary = "631 layers, 56966176 parameters, 56966160 gradients, 196.0 GFLOPs"
+summary = "656 layers, 58889881 parameters, 58889865 gradients, 204.3 GFLOPs"
 
 # YOLO11n-det backbone
 [[network]]
@@ -261,7 +261,7 @@ from = [16, 19, 22]
 
 [[network]]
 type = "head"
-module = "YOLODetect"
+module = "YOLOPose"
 repeat = 1
 from = [-1]
 args.nc = -1

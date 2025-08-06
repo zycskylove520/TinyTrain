@@ -1,10 +1,12 @@
+import numpy as np
 import torch
 
 from torch import nn
 
+from tinytrain.data import PoseBatchDataInfo
 from tinytrain.data.data_format import ClassifyBatchDataInfo, DetectBatchDataInfo
-from tinytrain.loss.subloss import BboxLossWithDFL
-from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry
+from tinytrain.loss.subloss import BboxLossWithDFL, KeypointLoss
+from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry, lxlyrxry_2_cxcywh
 from tinytrain.utils.tal import TaskAlignedAssigner, make_anchors, dist2bbox
 
 
@@ -13,6 +15,7 @@ class ClassificationLoss(nn.Module):
     通用分类损失封装，默认使用 CrossEntropyLoss。
     支持通过 cls_loss_gain 进行损失缩放。
     """
+
     def __init__(self, cls_loss_gain: float):
         """
         Args:
@@ -61,12 +64,12 @@ class YOLOV8DetectionLoss(nn.Module):
         """
         super().__init__()
         self.device = next(model.parameters()).device  # get model device
-        head = model.module_list[-1]
-        self.stride = head.stride
-        self.nc = head.nc
-        self.reg_max = head.reg_max
+        self.head = model.module_list[-1]
+        self.stride = self.head.stride
+        self.nc = self.head.nc
+        self.reg_max = self.head.reg_max
         self.output_num = self.nc + self.reg_max * 4
-        self.imgsz = list(imgsz) if isinstance(imgsz, (list,tuple)) else [imgsz, imgsz]  # w,h
+        self.imgsz = list(imgsz) if isinstance(imgsz, (list, tuple)) else [imgsz, imgsz]  # w,h
         self.cls_gain = cls_gain
         self.box_gain = box_gain
         self.dfl_gain = dfl_gain
@@ -200,3 +203,182 @@ class YOLOV8DetectionLoss(nn.Module):
         loss_items = {"cls_loss": cls_loss.detach(), "box_loss": box_loss.detach(), "dfl_loss": dfl_loss.detach()}
 
         return total_loss, loss_items  # loss(box, cls, dfl)
+
+
+class YOLOV8PoseLoss(YOLOV8DetectionLoss):
+    """Criterion class for computing training losses."""
+    OKS_SIGMA = (
+            np.array([0.26, 0.25, 0.25, 0.35, 0.35, 0.79, 0.79, 0.72, 0.72, 0.62, 0.62, 1.07, 1.07, 0.87, 0.87, 0.89, 0.89])
+            / 10.0
+    )
+
+    def __init__(self, model, imgsz, cls_gain=1, box_gain=1, dfl_gain=1, pose_gain=1, kobj_gain=1, tal_topk=10):  # model must be de-paralleled
+        """Initializes v8PoseLoss with model, sets keypoint variables and declares a keypoint loss instance."""
+        super().__init__(model, imgsz, cls_gain, box_gain, dfl_gain, tal_topk)
+        self.pose_gain = pose_gain
+        self.kobj_gain = kobj_gain
+        self.kpt_shape = self.head.kpt_shape
+        self.bce_pose = nn.BCEWithLogitsLoss()
+        is_pose = self.kpt_shape == [17, 3]
+        nkpt = self.kpt_shape[0]  # number of keypoints
+        sigmas = torch.from_numpy(self.OKS_SIGMA).to(self.device) if is_pose else torch.ones(nkpt, device=self.device) / nkpt
+        self.keypoint_loss = KeypointLoss(sigmas=sigmas)
+
+    def __call__(self, preds: list[torch.Tensor], batch: PoseBatchDataInfo):
+        """Calculate the total loss and detach it."""
+        preds = preds[0]  # 只有一个head module
+        dtype = preds[1].dtype
+        batch_size = preds[1].shape[0]
+
+        feats, pred_kpts = preds
+        pred_distri, pred_scores = torch.cat([xi.view(batch_size, self.output_num, -1) for xi in feats], 2).split(
+            (self.reg_max * 4, self.nc), 1
+        )
+
+        pred_scores = pred_scores.permute(0, 2, 1).contiguous()
+        pred_distri = pred_distri.permute(0, 2, 1).contiguous()
+        pred_kpts = pred_kpts.permute(0, 2, 1).contiguous()
+
+        anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
+
+        # Targets
+        targets = torch.cat((batch.bboxes_idx.view(-1, 1), batch.target.view(-1, 1), batch.bboxes.view(-1, 4)), 1)
+        targets = self.preprocess(targets, batch_size, torch.tensor(self.imgsz)[[0, 1, 0, 1]].to(self.device))
+
+        # 获得真实类别标签和真实bboxes
+        gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
+        # 通过对gt_bboxes进行sum操作来找出正样本的边界框，再通过gt_来获取非0的边界框的bool矩阵
+        mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0.0)
+
+        # 解码后的preds的bbox，此时的坐标值为lxlyrxry
+        pred_bboxes = self.bbox_decode(anchor_points, pred_distri)  # xyxy, (b, h*w, 4)
+        pred_kpts = self.kpts_decode(anchor_points, pred_kpts.view(batch_size, -1, *self.kpt_shape))  # (b, h*w, 17, 3)
+
+        _, target_bboxes, target_scores, fg_mask, target_gt_idx = self.assigner(
+            pred_scores.detach().sigmoid(),
+            # 乘以stride_tensor将pred_bboxes恢复原图大小，对anchor_points同理
+            (pred_bboxes.detach() * stride_tensor).type(gt_bboxes.dtype),
+            anchor_points * stride_tensor,
+            gt_labels,
+            gt_bboxes,
+            mask_gt,
+        )
+
+        """开始计算loss"""
+        cls_loss = torch.tensor(0., dtype=dtype)
+        box_loss = torch.tensor(0., dtype=dtype)
+        dfl_loss = torch.tensor(0., dtype=dtype)
+        pose_loss = torch.tensor(0., dtype=dtype)
+        kobj_loss = torch.tensor(0., dtype=dtype)
+
+        # cls loss
+        # 这里限制target_scores_sum最小必须为1
+        target_scores_sum = max(target_scores.sum(), 1)
+        cls_loss = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
+
+        # Bbox loss & DFL loss & Pose loss & KObj loss
+        # fg_mask.sum()保证一定有锚框有真实边界框对应
+        if fg_mask.sum():
+            target_bboxes /= stride_tensor
+            box_loss, dfl_loss = self.bbox_loss(
+                pred_distri, pred_bboxes, anchor_points, target_bboxes, target_scores, target_scores_sum, fg_mask
+            )
+
+            # 把归一化的keypoints放大回原图
+            keypoints = batch.batch_key_points.to(self.device).float().clone()
+            keypoints[..., 0] *= self.imgsz[0]
+            keypoints[..., 1] *= self.imgsz[1]
+
+            pose_loss, kobj_loss = self.calculate_keypoints_loss(
+                fg_mask, target_gt_idx, keypoints, batch.bboxes_idx.view(-1, 1), stride_tensor, target_bboxes, pred_kpts
+            )
+
+        cls_loss *= self.cls_gain  # cls gain
+        box_loss *= self.box_gain  # box gain
+        dfl_loss *= self.dfl_gain  # dfl gain
+        pose_loss *= self.pose_gain  # pose_gain
+        kobj_loss *= self.kobj_gain  # kobj_gain
+        total_loss = (cls_loss + box_loss + dfl_loss + pose_loss + kobj_loss) * batch_size
+        loss_items = {
+            "cls_loss": cls_loss.detach(),
+            "box_loss": box_loss.detach(),
+            "dfl_loss": dfl_loss.detach(),
+            "pose_loss": pose_loss.detach(),
+            "kobj_loss": kobj_loss.detach(),
+        }
+
+        return total_loss, loss_items
+
+    @staticmethod
+    def kpts_decode(anchor_points, pred_kpts):
+        """Decodes predicted keypoints to image coordinates."""
+        y = pred_kpts.clone()
+        y[..., :2] *= 2.0
+        y[..., 0] += anchor_points[:, [0]] - 0.5
+        y[..., 1] += anchor_points[:, [1]] - 0.5
+        return y
+
+    def calculate_keypoints_loss(
+            self, masks, target_gt_idx, keypoints, batch_idx, stride_tensor, target_bboxes, pred_kpts
+    ):
+        """
+        Calculate the keypoints loss for the model.
+
+        This function calculates the keypoints loss and keypoints object loss for a given batch. The keypoints loss is
+        based on the difference between the predicted keypoints and ground truth keypoints. The keypoints object loss is
+        a binary classification loss that classifies whether a keypoint is present or not.
+
+        Args:
+            masks (torch.Tensor): Binary mask tensor indicating object presence, shape (BS, N_anchors).
+            target_gt_idx (torch.Tensor): Index tensor mapping anchors to ground truth objects, shape (BS, N_anchors).
+            keypoints (torch.Tensor): Ground truth keypoints, shape (N_kpts_in_batch, N_kpts_per_object, kpts_dim).
+            batch_idx (torch.Tensor): Batch index tensor for keypoints, shape (N_kpts_in_batch, 1).
+            stride_tensor (torch.Tensor): Stride tensor for anchors, shape (N_anchors, 1).
+            target_bboxes (torch.Tensor): Ground truth boxes in (x1, y1, x2, y2) format, shape (BS, N_anchors, 4).
+            pred_kpts (torch.Tensor): Predicted keypoints, shape (BS, N_anchors, N_kpts_per_object, kpts_dim).
+
+        Returns:
+            kpts_loss (torch.Tensor): The keypoints loss.
+            kpts_obj_loss (torch.Tensor): The keypoints object loss.
+        """
+        batch_idx = batch_idx.flatten()
+        batch_size = len(masks)
+
+        # Find the maximum number of keypoints in a single image
+        max_kpts = torch.unique(batch_idx, return_counts=True)[1].max()
+
+        # Create a tensor to hold batched keypoints
+        batched_keypoints = torch.zeros(
+            (batch_size, max_kpts, keypoints.shape[1], keypoints.shape[2]), device=keypoints.device
+        )
+
+        # Fill batched_keypoints with keypoints based on batch_idx
+        for i in range(batch_size):
+            keypoints_i = keypoints[batch_idx == i]
+            batched_keypoints[i, : keypoints_i.shape[0]] = keypoints_i
+
+        # Expand dimensions of target_gt_idx to match the shape of batched_keypoints
+        target_gt_idx_expanded = target_gt_idx.unsqueeze(-1).unsqueeze(-1)
+
+        # Use target_gt_idx_expanded to select keypoints from batched_keypoints
+        selected_keypoints = batched_keypoints.gather(
+            1, target_gt_idx_expanded.expand(-1, -1, keypoints.shape[1], keypoints.shape[2])
+        )
+
+        # Divide coordinates by stride
+        selected_keypoints /= stride_tensor.view(1, -1, 1, 1)
+
+        kpts_loss = 0
+        kpts_obj_loss = 0
+
+        if masks.any():
+            gt_kpt = selected_keypoints[masks]
+            area = lxlyrxry_2_cxcywh(target_bboxes[masks])[:, 2:].prod(1, keepdim=True)
+            pred_kpt = pred_kpts[masks]
+            kpt_mask = gt_kpt[..., 2] != 0 if gt_kpt.shape[-1] == 3 else torch.full_like(gt_kpt[..., 0], True)
+            kpts_loss = self.keypoint_loss(pred_kpt, gt_kpt, kpt_mask, area)  # pose loss
+
+            if pred_kpt.shape[-1] == 3:
+                kpts_obj_loss = self.bce_pose(pred_kpt[..., 2], kpt_mask.float())  # keypoint obj loss
+
+        return kpts_loss, kpts_obj_loss

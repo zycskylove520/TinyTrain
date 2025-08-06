@@ -74,11 +74,31 @@ def _atomic_save_npy(arr: np.ndarray, path: PathLike, allow_pickle=False):
 # ------------------------------------------------------------------
 # 3. 公开接口
 # ------------------------------------------------------------------
-def cv_imread(file_path: PathLike) -> np.ndarray:
+from os import PathLike
+import cv2
+import numpy as np
+
+def cv_imread(file_path: PathLike, flag: int = cv2.IMREAD_COLOR) -> np.ndarray:
     """
-    支持中文路径的 cv2.imread 封装。
+    支持中文路径的 cv2.imread 封装，并可指定读取模式。
+
+    Args:
+        file_path : PathLike
+            待读取图像文件路径，支持中文。
+        flag : int, optional
+            cv2 读取标志，默认 cv2.IMREAD_COLOR(BGR)。
+            常用取值：
+            - cv2.IMREAD_COLOR 或 1   -> BGR, 忽略透明通道
+            - cv2.IMREAD_GRAYSCALE or 0 -> 单通道灰度
+            - cv2.IMREAD_UNCHANGED or -1 -> 原图，包括 alpha 通道
+
+    Returns:
+        读取到的图像数组，形状与 dtype 由 cv2.imdecode 决定。
     """
-    return cv2.imdecode(np.fromfile(file_path, dtype=np.uint8), -1)
+    img = cv2.imdecode(np.fromfile(file_path, dtype=np.uint8), flag)
+    if img is None:
+        raise IOError(f'Cannot read image: {file_path}')
+    return img
 
 def get_hash(paths):
     """

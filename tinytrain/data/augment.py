@@ -3,8 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tinytrain.cfg.config_manager import ConfigManager
-from .augment_base import BaseAugmentation, TTCompose
 from tinytrain.utils.any_utils import make2tuple
+
+from .data_format import ClassifyDataInfo
+from .augment_base import BaseAugmentation
 
 if TYPE_CHECKING:
     import albumentations as A
@@ -28,7 +30,7 @@ class ClassificationAugmentation(BaseAugmentation):
     """
 
     def __init__(self, config_manager: ConfigManager):
-        self.config_manager = config_manager
+        super().__init__(config_manager)
         self._load_cfg()
 
     def _load_cfg(self) -> None:
@@ -46,18 +48,14 @@ class ClassificationAugmentation(BaseAugmentation):
         self.color_jitter = augment_cfg["color_jitter"]
         self.erasing = augment_cfg["erasing"]
 
-    def augment(self) -> TTCompose:
+    def set_augment(self):
         """
         构建 **训练阶段** 增强流水线。
-
-        Returns:
-            TTCompose: 包含随机裁剪、翻转、颜色抖动、擦除、Resize 的增强器。
         """
 
         import albumentations as A
-        from .augment_base import AlbumentationsAdapter, TTCompose
 
-        albumentations_pixel_compose = A.Compose([
+        self.augment = A.Compose([
             A.HorizontalFlip(p=self.hflip),
             A.VerticalFlip(p=self.vflip),
             A.ColorJitter(brightness=self.hsv_v, contrast=self.hsv_v, saturation=self.hsv_s, hue=self.hsv_h, p=self.color_jitter),
@@ -68,38 +66,28 @@ class ClassificationAugmentation(BaseAugmentation):
             # A.Normalize(mean=self.mean, std=self.std),
         ])
 
-        albumentations_adapter = AlbumentationsAdapter(
-            transforms=albumentations_pixel_compose,
-            task="classify")
-
-        # combine all augmentations
-        final_compose = TTCompose([albumentations_adapter])
-
-        return final_compose
-
-    def transform(self) -> TTCompose:
+    def set_transform(self):
         """
         构建 **验证/预测阶段** 轻量增强流水线（仅 Resize）。
-
-        Returns:
-            TTCompose: 仅包含 Resize 的增强器。
         """
 
         import albumentations as A
-        from .augment_base import AlbumentationsAdapter, TTCompose
 
-        albumentations_pixel_compose = A.Compose([
+        self.transform = A.Compose([
             A.Resize(width=self.target_size[0], height=self.target_size[1]),
             # 以下两步在移到对应的device后在做,可以提速
             # A.ToFloat(),
             # A.Normalize(mean=self.mean, std=self.std),
         ])
 
-        albumentations_adapter = AlbumentationsAdapter(
-            transforms=albumentations_pixel_compose,
-            task="classify")
+    def do_augment(self, sample: ClassifyDataInfo):
+        assert isinstance(sample, ClassifyDataInfo)
+        if self.augment is not None:
+            sample.img = self.augment(image=sample.img)['image']
+        return sample
 
-        # combine all augmentations
-        final_compose = TTCompose([albumentations_adapter])
-
-        return final_compose
+    def do_transform(self, sample: ClassifyDataInfo):
+        assert isinstance(sample, ClassifyDataInfo)
+        if self.transform is not None:
+            sample.img = self.transform(image=sample.img)['image']
+        return sample

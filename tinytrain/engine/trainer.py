@@ -1314,7 +1314,10 @@ class BaseTrainer:
         """
 
         task = self.config_manager.core["task"]
-        return TTRegistry.get(task, "validator")(self, world_size)
+        try:
+            return TTRegistry.get(task, "validator")(self, world_size)
+        except Exception:
+            return None
 
     def do_validate(self) -> float:
         """

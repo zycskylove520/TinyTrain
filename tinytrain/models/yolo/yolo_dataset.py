@@ -73,7 +73,6 @@ class YOLODetectionDataset(TTBaseVisionDataset):
         """
         self.rgb: bool = config_manager.augment["rgb"]
         self.samples: list[DetectDataInfo] = []
-        self.detect_augmentation = YOLODetectionAugmentation(config_manager)
         super().__init__(config_manager=config_manager, img_path=img_path, mode=mode)
 
     def __len__(self):
@@ -106,11 +105,13 @@ class YOLODetectionDataset(TTBaseVisionDataset):
 
         origin_shape = sample.img.shape[:2][::-1]  # w,h
         sample.origin_shape = origin_shape
-        sample.current_shape = origin_shape
         sample.target_shape = self.img_size
 
         # use transform
-        sample = self.transform(sample)
+        if self.mode == "train":
+            sample = self.transform.do_augment(sample)
+        else:
+            sample = self.transform.do_transform(sample)
 
         return sample
 
@@ -177,10 +178,12 @@ class YOLODetectionDataset(TTBaseVisionDataset):
 
     def set_transform(self):
         """根据模式返回训练增强或验证/测试转换。"""
+        detect_augmentation = YOLODetectionAugmentation(self.config_manager)
         if self.mode == "train":
-            return self.detect_augmentation.augment()
+            detect_augmentation.set_augment()
         else:
-            return self.detect_augmentation.transform()
+            detect_augmentation.set_transform()
+        return detect_augmentation
 
     def collate_fn(self, batch_samples: list[DetectDataInfo]):
         """
@@ -262,7 +265,6 @@ class YOLOPoseDataset(TTBaseVisionDataset):
         self.rgb: bool = config_manager.augment["rgb"]
         self.keypoint_shape= config_manager.dataset["keypoint_shape"]
         self.samples: list[PoseDataInfo] = []
-        self.augmentation = YOLOPoseAugmentation(config_manager)
         super().__init__(config_manager=config_manager, img_path=img_path, mode=mode)
 
     def __len__(self):
@@ -295,11 +297,11 @@ class YOLOPoseDataset(TTBaseVisionDataset):
 
         origin_shape = sample.img.shape[:2][::-1]  # w,h
         sample.origin_shape = origin_shape
-        sample.current_shape = origin_shape
         sample.target_shape = self.img_size
 
         # use transform
-        sample = self.transform(sample)
+        sample.img = cv2.resize(sample.img, self.img_size, interpolation=cv2.INTER_LINEAR)
+        # sample = self.transform(sample)
 
         return sample
 
@@ -316,7 +318,7 @@ class YOLOPoseDataset(TTBaseVisionDataset):
             # 检查非背景图片
             results1 = pool.imap(
                 func=wrapper,
-                iterable=zip(self.img_files, self.keypoint_shape, self.npy_files if len(self.npy_files) else repeat(None), self.label_files))
+                iterable=zip(self.img_files, repeat(self.keypoint_shape), self.npy_files if len(self.npy_files) else repeat(None), self.label_files))
 
             pbar = TTProgressBar(results1, total=len(self.img_files), desc="check nor background images")
 
@@ -326,7 +328,7 @@ class YOLOPoseDataset(TTBaseVisionDataset):
                     label=cls,
                     bboxes=boxes,
                     bbox_format="cxcywh",
-                    keypoints=keypoints,
+                    key_points=keypoints,
                     kpt_shape=self.keypoint_shape,
                     normalized=True
                 )
@@ -338,7 +340,7 @@ class YOLOPoseDataset(TTBaseVisionDataset):
             # 检查背景图片
             results2 = pool.imap(
                 func=wrapper,
-                iterable=zip(self.bg_img_files, self.keypoint_shape, self.bg_npy_files if len(self.bg_npy_files) else repeat(None)))
+                iterable=zip(self.bg_img_files, repeat(self.keypoint_shape), self.bg_npy_files if len(self.bg_npy_files) else repeat(None)))
 
             pbar = TTProgressBar(results2, total=len(self.bg_img_files), desc="check background images")
 
@@ -348,7 +350,7 @@ class YOLOPoseDataset(TTBaseVisionDataset):
                     label=cls,
                     bboxes=boxes,
                     bbox_format="cxcywh",
-                    keypoints=keypoints,
+                    key_points=keypoints,
                     kpt_shape=self.keypoint_shape,
                     normalized=True
                 )
@@ -370,10 +372,12 @@ class YOLOPoseDataset(TTBaseVisionDataset):
 
     def set_transform(self):
         """根据模式返回训练增强或验证/测试转换。"""
+        pose_augmentation = YOLOPoseAugmentation(self.config_manager)
         if self.mode == "train":
-            return self.augmentation.augment()
+            pose_augmentation.set_augment()
         else:
-            return self.augmentation.transform()
+            pose_augmentation.set_transform()
+        return pose_augmentation
 
     def collate_fn(self, batch_samples: list[PoseDataInfo]):
         """

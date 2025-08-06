@@ -1,0 +1,5 @@
+cls_loss_gain = 0.5
+box_loss_gain = 7.5
+dfl_loss_gain = 1.5
+pose_loss_gain = 12.0
+kobj_loss_gain = 1.0

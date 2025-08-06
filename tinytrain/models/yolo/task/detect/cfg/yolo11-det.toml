@@ -1,4 +1,4 @@
-# YOLO11-det image classification model_config.
+# YOLO11-det model_config.
 
 # number of classes
 scale = "n"

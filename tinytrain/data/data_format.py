@@ -104,12 +104,9 @@ class ImgDataInfo(BaseDataInfo):
                  frame_id: int = 0,
                  img: np.ndarray | None = None,
                  origin_shape: tuple[int, int] | None = None,
-                 current_shape: tuple[int, int] | None = None,
                  target_shape: tuple[int, int] | None = None,
                  img_file: Path | None = None,
                  next_ImgDataInfo=None,
-                 affine_matrix=np.array([[1.0, 0.0, 0.0],
-                                         [0.0, 1.0, 0.0]], dtype=np.float32),
                  **kwargs
                  ) -> None:
         """
@@ -117,22 +114,18 @@ class ImgDataInfo(BaseDataInfo):
             frame_id: 视频帧序号（文件/摄像头场景下可设为 0）。
             img: HWC 格式的 numpy 数组。
             origin_shape: 原始宽高 (W, H)。
-            current_shape: 经过当前步骤后的宽高 (W, H)。
             target_shape: 最终模型输入宽高 (W, H)。
             img_file: 图像文件路径。
             next_ImgDataInfo: 下一张图（用于 Mosaic 等融合增强）。
-            affine_matrix: 2×3 仿射矩阵，记录所有几何变换。
             **kwargs: 透传给父类。
         """
         super().__init__(**kwargs)
         self.frame_id = frame_id
         self.img = img
         self.origin_shape = origin_shape
-        self.current_shape = current_shape
         self.target_shape = target_shape
         self.img_file = img_file
         self.next_ImgDataInfo = next_ImgDataInfo
-        self.affine_matrix = affine_matrix
 
         # self._exclude_from_deepcopy.add('next_ImgDataInfo')  # dataloader多进程拷贝存在问题，暂时不开放
 

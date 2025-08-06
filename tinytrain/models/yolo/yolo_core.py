@@ -58,6 +58,7 @@ detect
 """
 
 from tinytrain.engine import Core, BaseExporter
+from tinytrain.utils.register import TTRegistry
 from tinytrain.models.yolo.task.classify import (
     YOLOClassificationModel,
     YOLOClassificationTrainer,
@@ -73,10 +74,11 @@ from tinytrain.models.yolo.task.detect import (
     YOLODetectionTrainer,
     YOLODetectionTuner
 )
+from tinytrain.models.yolo.task.pose import YOLOPoseModel, YOLOPoseTrainer
 from tinytrain.server.track_server.bytetrack_server import ByteTrackServer
 from tinytrain.server.export_server.onnx_export_server import BaseOnnxExportServer
 from tinytrain.server.inference_server import BaseOnnxInferenceServer
-from tinytrain.utils.register import TTRegistry
+
 
 
 class YOLOCore(Core):
@@ -102,3 +104,5 @@ class YOLOCore(Core):
     TTRegistry.register("detect", "track_server", "bytetrack")(ByteTrackServer)
 
     # ---------- pose ----------
+    TTRegistry.register("pose", "model")(YOLOPoseModel)
+    TTRegistry.register("pose", "trainer")(YOLOPoseTrainer)

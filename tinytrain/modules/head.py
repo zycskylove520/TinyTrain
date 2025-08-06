@@ -39,9 +39,6 @@ class Classify(nn.Module):
 
 class YOLODetect(nn.Module):
     """YOLO detection head."""
-    # anchors = torch.empty(0)  # init
-    # strides = torch.empty(0)  # init
-
     def __init__(self, nc, from_channels: list):
         """
         @param nc: 输出类别个数
@@ -75,7 +72,7 @@ class YOLODetect(nn.Module):
 
     def forward(self, x: list[torch.Tensor]):
         """
-        训练模式返回的shape为：[batch,
+        训练模式返回的shape为：[batch, 4*16+nc, h, w]
         """
         for i, (cv2_module, cv3_module) in enumerate(zip(self.cv2, self.cv3)):
             x[i] = torch.cat((cv2_module(x[i]), cv3_module(x[i])), 1)
@@ -85,9 +82,8 @@ class YOLODetect(nn.Module):
         x = self.inference(x)
         return x
 
-
     def inference(self, x: list[torch.Tensor]):
-        # inference模式下，bboxes已解码
+        # inference模式下，bboxes已解码,返回的shape为：[batch, num_anchors, 4+nc]
 
         # 解码锚框,self.stride是在构建模型时添加的属性，详见TinyTrain\models\yolo\detect\model中的__init__函数
         anchors, strides = make_anchors(x, self.stride)
@@ -112,3 +108,36 @@ class YOLODetect(nn.Module):
         for a, b, s in zip(self.cv2, self.cv3, [8, 16, 32]):  # from
             a[-1].bias.data[:] = 1.0  # box
             b[-1].bias.data[: self.nc] = math.log(5 / self.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
+
+
+class YOLOPose(YOLODetect):
+    """YOLO Pose head."""
+
+    def __init__(self, nc, from_channels: list, kpt_shape=(17, 3)):
+        """Initialize YOLO network with default parameters and Convolutional Layers."""
+        super().__init__(nc, from_channels)
+        self.kpt_shape = kpt_shape  # number of keypoints, number of dims (2 for x,y or 3 for x,y,visible)
+        self.nk = kpt_shape[0] * kpt_shape[1]  # number of keypoints total
+
+        c4 = max(from_channels[0] // 4, self.nk)
+        self.cv4 = nn.ModuleList(nn.Sequential(Conv(x, c4, 3), Conv(c4, c4, 3), nn.Conv2d(c4, self.nk, 1)) for x in from_channels)
+
+    def forward(self, x):
+        """Perform forward pass through YOLO model and return predictions."""
+        batch_size = x[0].shape[0]  # batch size
+        kpt = torch.cat([self.cv4[i](x[i]).view(batch_size, self.nk, -1) for i in range(len(self.from_channels))], -1)  # (batch_size, 17*3, h*w)
+        x = YOLODetect.forward(self, x)
+        if self.training:
+            return x, kpt
+        pred_kpt = self.kpts_decode(batch_size, kpt)
+        return torch.cat([x, pred_kpt], 1) if self.export else (torch.cat([x[0], pred_kpt], 1), (x[1], kpt))
+
+    def kpts_decode(self, batch_size, kpts):
+        """Decodes keypoints."""
+        ndim = self.kpt_shape[1]
+        y = kpts.clone()
+        if ndim == 3:
+            y[:, 2::3] = y[:, 2::3].sigmoid()  # sigmoid (WARNING: inplace .sigmoid_() Apple MPS bug)
+        y[:, 0::ndim] = (y[:, 0::ndim] * 2.0 + (self.anchors[0] - 0.5)) * self.strides
+        y[:, 1::ndim] = (y[:, 1::ndim] * 2.0 + (self.anchors[1] - 0.5)) * self.strides
+        return y

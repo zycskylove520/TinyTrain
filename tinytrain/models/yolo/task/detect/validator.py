@@ -39,7 +39,6 @@ class YOLODetectionValidator(BaseValidator):
         return batch_samples
 
     def postprocess(self, preds: list[torch.Tensor]) -> list[torch.Tensor]:
-
         # 进行nms
         outputs: list[torch.Tensor] = detect_nms(pred=preds[0],
                                                  conf_threshold=self.config_manager.core["conf_threshold"],
