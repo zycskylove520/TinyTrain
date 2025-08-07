@@ -27,7 +27,7 @@ from tinytrain.utils.callback import Callback
 from tinytrain.utils.checks import check_amp
 from tinytrain.utils.dist import generate_ddp_command
 from tinytrain.utils.train_utils import ModelEMA, EarlyStopping
-from tinytrain.utils.register import TTRegistry
+from tinytrain.cfg.TT_register import TTEngineRegistry
 
 if TYPE_CHECKING:
     from .model import BaseModel
@@ -1313,9 +1313,8 @@ class BaseTrainer:
             BaseValidator: 验证器实例。
         """
 
-        task = self.config_manager.core["task"]
         try:
-            return TTRegistry.get(task, "validator")(self, world_size)
+            return TTEngineRegistry.get(self.config_manager, "validator")(self, world_size)
         except Exception:
             return None
 

@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from tinytrain.cfg.config_manager import ConfigManager
-from tinytrain.data import BaseDataInfo, DetectDataInfo
-from tinytrain.data.augment_base import BaseAugmentation, TTCompose, AlbumentationsAdapter
+from tinytrain.data import DetectDataInfo
+from tinytrain.data.augment_base import BaseAugmentation
 from tinytrain.utils.any_utils import make2tuple
 from tinytrain.data.augment_ops import DynamicFilling
 

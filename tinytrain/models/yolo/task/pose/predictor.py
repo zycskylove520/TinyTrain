@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from tinytrain.data import ImgDataInfo, DetectDataInfo
 from tinytrain.engine.predictor import BasePredictor
 from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry
-from tinytrain.utils.register import TTRegistry
+from tinytrain.cfg.TT_register import TTEngineRegistry
 
 if TYPE_CHECKING:
     import torch
@@ -33,7 +33,7 @@ class YOLOPosePredictor(BasePredictor):
             assert isinstance(kwargs["track"], bool)
             track_backend = kwargs.get("track_backend", "bytetrack")
             task = self.config_manager.core["task"]
-            self.tracker_server =TTRegistry.get(task, "track_server", track_backend)(config_manager=self.config_manager, callback=self.callback)
+            self.tracker_server = TTEngineRegistry.get(self.config_manager, "track_server", track_backend)(config_manager=self.config_manager, callback=self.callback)
 
         # 注册解析器可以在 __init__ 里做，也可以放到首次调用时懒加载
         self.register_parsers()

@@ -1,10 +1,12 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
 """Activation modules."""
 
 import torch
 import torch.nn as nn
 
+from tinytrain.cfg.TT_register import TTModuleRegistry
 
+
+@TTModuleRegistry.register
 class AGLU(nn.Module):
     """Unified activation function module from https://github.com/kostas1515/AGLU."""
 

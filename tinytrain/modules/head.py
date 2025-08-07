@@ -1,14 +1,14 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
-"""Model head modules."""
 import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from .conv import Conv, DWConv
-from ..utils.tal import make_anchors, dist2bbox
+from tinytrain.cfg.TT_register import TTModuleRegistry
+from tinytrain.utils.tal import make_anchors, dist2bbox
 
 
+@TTModuleRegistry.register
 class Classify(nn.Module):
     """YOLO classification head, i.e. x(b,c1,20,20) to x(b,c2)."""
 
@@ -37,8 +37,10 @@ class Classify(nn.Module):
         return x
 
 
+@TTModuleRegistry.register
 class YOLODetect(nn.Module):
     """YOLO detection head."""
+
     def __init__(self, nc, from_channels: list):
         """
         @param nc: 输出类别个数
@@ -110,6 +112,7 @@ class YOLODetect(nn.Module):
             b[-1].bias.data[: self.nc] = math.log(5 / self.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
 
 
+@TTModuleRegistry.register
 class YOLOPose(YOLODetect):
     """YOLO Pose head."""
 

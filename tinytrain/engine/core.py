@@ -4,14 +4,13 @@ import inspect
 import setproctitle
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Generator, Any, Union, Dict
+from typing import TYPE_CHECKING, Generator, Any, Dict
 
-from tinytrain.utils.register import TTRegistry
+from tinytrain.cfg.TT_register import TTEngineRegistry
 from tinytrain.utils import LOGGER
 from tinytrain.utils.callback import Callback
 from tinytrain.cfg.config_manager import ConfigManager
 from tinytrain.utils.checks import check_file
-from .tuner import BaseTuner
 
 if TYPE_CHECKING:
     from .model import BaseModel
@@ -39,6 +38,11 @@ class Core:
         Args:
             link_file (str | Path, optional): link 配置文件路径（yaml / toml）。
         """
+        # register manager and components
+        self.config_manager = ConfigManager(link_file=link_file)
+        # self.config_manager.register_name = self.__class__.__name__
+        self.register_components()
+
         self.task: str | None = None
 
         # register callback
@@ -51,9 +55,6 @@ class Core:
         self.exporter = None
         self.tuner = None
 
-        # register manager
-        self.config_manager = ConfigManager(link_file=link_file)
-
         # 保存当前主脚本路径（用于 DDP 启动）
         frame = inspect.stack()[-1]
         self.main_script_path = Path(frame.filename).resolve()
@@ -61,6 +62,27 @@ class Core:
     # ------------------------------------------------------------------
     # 外部调用主要 API
     # ------------------------------------------------------------------
+    @classmethod
+    def register_components(cls):
+        """
+        类级钩子：一次性地把该 Core 所支持的全部 (task, engine_type, backend) → 实现类的映射注册到 TTEngineRegistry。
+
+        任何继承自 Core 的子类 **必须** 实现此方法，否则在基类里会抛出
+           NotImplementedError。
+
+        示例：
+        >>> class MyCore(Core):
+        ...     @classmethod
+        ...     def register_components(cls):
+        ...         TTEngineRegistry.register_class(
+        ...             cls, "classify", "model", MyClassificationModel
+        ...         )
+        ...         TTEngineRegistry.register_class(
+        ...             cls, "detect", "model", MyDetectionModel
+        ...         )
+        """
+        raise NotImplementedError
+
     def set_config_overrides(self, link_type: str = 'core', **kwargs):
         """
         在运行时动态覆盖指定配置段（link 除外）。
@@ -177,6 +199,8 @@ class Core:
     def tune(self, model_scale: str = None, pop_size=40, generations=20) -> Dict[str, Any]:
         """
         启动遗传算法超参数调优，启动 GA 搜索并返回完整结果。
+        使用注意：
+            link.toml文件内的所有的配置文件路径必须使用完整的绝对路径！
 
         Args:
             model_scale (str | None, optional):
@@ -231,8 +255,7 @@ class Core:
                 self.config_manager.core["resume"] = resume
 
             self.config_manager.model = checkpoint["model_args"]
-            self.task = self.config_manager.core["task"]
-            self.model = TTRegistry.get(self.task, "model")(self.config_manager)
+            self.model = TTEngineRegistry.get(self.config_manager, "model")(self.config_manager)
             self.model.load_model_state_dict(checkpoint["model"], force_load)
 
             LOGGER.info(f"load pt model: {model}")
@@ -248,14 +271,13 @@ class Core:
             if self.config_manager.model["scale"] not in scales:
                 raise KeyError(f"{self.config_manager.link["model"]} not support scale:{self.config_manager.model["scale"]}")
 
-            self.task = self.config_manager.core["task"]
-            self.model = TTRegistry.get(self.task, "model")(self.config_manager)
+            self.model = TTEngineRegistry.get(self.config_manager, "model")(self.config_manager)
 
     def _bind_trainer(self) -> None:
         """
         实例化并绑定 trainer。
         """
-        self.trainer = TTRegistry.get(self.task, "trainer")(
+        self.trainer = TTEngineRegistry.get(self.config_manager, "trainer")(
             config_manager=self.config_manager,
             model=self.model,
             callback=self.callbacks,
@@ -272,7 +294,7 @@ class Core:
 
         # 场景 1：训练完直接预测
         if self.model is not None:
-            self.predictor = TTRegistry.get(self.task, "predictor")(
+            self.predictor = TTEngineRegistry.get(self.config_manager, "predictor")(
                 config_manager=self.config_manager,
                 model=self.model,
                 callback=self.callbacks,
@@ -291,7 +313,7 @@ class Core:
         # 场景 2：权重文件 → 先绑定模型
         if model_path.suffix in {".pt", ".pth"}:
             self._bind_model(model=model_path, force_load=False)
-            self.predictor = TTRegistry.get(self.task, "predictor")(
+            self.predictor = TTEngineRegistry.get(self.config_manager, "predictor")(
                 config_manager=self.config_manager,
                 model=self.model,
                 callback=self.callbacks,
@@ -301,8 +323,7 @@ class Core:
 
         # 场景 3：直接推理后端文件（onnx、engine、tensorrt...）
         if backend is not None:
-            self.task = self.config_manager.core["task"]
-            self.predictor = TTRegistry.get(self.task, "predictor")(
+            self.predictor = TTEngineRegistry.get(self.config_manager, "predictor")(
                 config_manager=self.config_manager,
                 model=model_path,  # 直接把文件路径传进去
                 callback=self.callbacks,
@@ -319,7 +340,7 @@ class Core:
 
         # 场景 1：训练完直接导出
         if self.model is not None:
-            self.exporter = TTRegistry.get(self.task, "exporter")(
+            self.exporter = TTEngineRegistry.get(self.config_manager, "exporter")(
                 config_manager=self.config_manager,
                 model=self.model,
                 callback=self.callbacks,
@@ -342,7 +363,7 @@ class Core:
         # 加载权重并绑定模型
         self._bind_model(model=model_path, force_load=False)
 
-        self.exporter = TTRegistry.get(self.task, "exporter")(
+        self.exporter = TTEngineRegistry.get(self.config_manager, "exporter")(
             config_manager=self.config_manager,
             model=self.model,
             callback=self.callbacks,
@@ -354,8 +375,7 @@ class Core:
         """
         实例化并绑定 tuner。
         """
-        task = self.config_manager.core["task"]
-        self.tuner = TTRegistry.get(task, "tuner")(core=self, model_scale=model_scale)
+        self.tuner = TTEngineRegistry.get(self.config_manager, "tuner")(core=self, model_scale=model_scale)
 
     def _find_last_pt_file(self):
         """

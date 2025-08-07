@@ -4,11 +4,11 @@ import torch
 
 from torch import nn
 from copy import deepcopy
-from queue import Queue
 
 from tinytrain.cfg.config_manager import ConfigManager
 from tinytrain.data.data_format import BaseBatchDataInfo
 from tinytrain.utils import LOGGER
+from tinytrain.cfg.TT_register import TTModuleRegistry
 
 
 class BaseModel(nn.Module):
@@ -395,48 +395,39 @@ class BaseModel(nn.Module):
 
     @staticmethod
     def _get_layer(module_str: str):
-        """
-        根据字符串动态导入模块类，子类可进行扩展以增加新的第三方库的模块。
-
-        Args:
-            module_str (str): 模块名称，支持以下格式：
-                - nn.Conv2d
-                - torchvision.ops.DeformConv2d
-                - transformers.ViTModel
-                - tinytrain.modules.C3
-
-        Returns:
-            type: 对应的 PyTorch 模块类。
-
-        Raises:
-            ValueError: 模块未找到时抛出。
-        """
-
         import importlib
-
         module_str = module_str.strip()
-        try:
-            # 1️⃣ torch.nn.*
-            if module_str.lower().startswith("nn."):
-                name = module_str[3:]
-                return getattr(importlib.import_module("torch.nn"), name)
 
-            # 2️⃣ torchvision.ops.*
-            if module_str.lower().startswith("torchvision.ops."):
-                name = module_str[16:]
-                return getattr(importlib.import_module("torchvision.ops"), name)
+        # 1. 完整包路径
+        if "." in module_str:
+            *pkg_parts, cls_name = module_str.split(".")
+            pkg = ".".join(pkg_parts)
+            try:
+                mod = importlib.import_module(pkg)
+                return getattr(mod, cls_name)
+            except (ModuleNotFoundError, AttributeError):
+                pass
 
-            # 3️⃣ transformers.*
-            if module_str.lower().startswith("transformers."):
-                name = module_str[11:]
-                return getattr(importlib.import_module("transformers"), name)
+        # 2. 候选包搜索（保持与之前一致）
+        candidate_pkgs = [
+            # "tinytrain.modules",
+            "torch.nn",
+            "torchvision.ops",
+            "transformers",
+        ]
+        for pkg in candidate_pkgs:
+            try:
+                mod = importlib.import_module(pkg)
+                if hasattr(mod, module_str):
+                    return getattr(mod, module_str)
+            except ModuleNotFoundError:
+                continue
 
-            # 4️⃣ tinytrain.modules.*
-            return getattr(importlib.import_module("tinytrain.modules"), module_str)
+        # 3. ⭐ 查全局注册表 ⭐
+        if module_str in TTModuleRegistry.MODULE_REGISTRY:
+            return TTModuleRegistry.get(module_str)
 
-        except (ModuleNotFoundError, AttributeError) as e:
-            raise ValueError(
-                f"Unrecognized module string '{module_str}'. "
-                f"Please check spelling. "
-                f"Details: {e}"
-            ) from None
+        raise ValueError(
+            f"Unrecognized module string '{module_str}'. "
+            f"Please check spelling, add candidate package, or use @register_module."
+        )

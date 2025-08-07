@@ -1,4 +1,4 @@
-# YOLO11-cls image classification model_config.
+# YOLO11-cls model_config.
 
 # number of classes
 scale = "n"

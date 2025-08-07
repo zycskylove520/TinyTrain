@@ -151,7 +151,7 @@ args.n = 2
 # ----------------------------------head--------------------------------------
 [[network]]
 type = "flow"
-module = "nn.Upsample"
+module = "torch.nn.Upsample"
 repeat = 1
 from = [-1]
 args.scale_factor = 2
@@ -176,7 +176,7 @@ args.c3k = false
 
 [[network]]
 type = "flow"
-module = "nn.Upsample"
+module = "torch.nn.Upsample"
 repeat = 1
 from = [-1]
 args.scale_factor = 2

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import threading
-from time import sleep
 
 import torch
 
@@ -15,7 +14,7 @@ from tinytrain.data import BaseDataInfo
 from tinytrain.utils import LOGGER
 from tinytrain.utils.any_utils import create_iter_directory
 from tinytrain.utils.callback import Callback
-from tinytrain.utils.register import TTRegistry
+from tinytrain.cfg.TT_register import TTEngineRegistry
 
 if TYPE_CHECKING:
     from torch import nn
@@ -144,8 +143,7 @@ class BasePredictor:
             model.eval()
             return model
         elif isinstance(model, (str, Path)):
-            task = self.config_manager.core["task"]
-            return TTRegistry.get(task, "inference_server", self.backend)(model_file=model, device=self.device, **kwargs)
+            return TTEngineRegistry.get(self.config_manager,"inference_server", self.backend)(model_file=model, device=self.device, **kwargs)
         else:
             raise TypeError(f"Unsupported model type: {type(model)}")
 

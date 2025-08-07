@@ -2,7 +2,10 @@ import torch
 
 from torch import nn, Tensor
 
+from tinytrain.cfg.TT_register import TTModuleRegistry
 
+
+@TTModuleRegistry.register
 class Concat(nn.Module):
     """
     Concatenate a list of tensors along a specified dimension.
@@ -53,7 +56,7 @@ class Concat(nn.Module):
 
         return torch.cat(x, dim=self.d)
 
-
+@TTModuleRegistry.register
 class Add(nn.Module):
     """
     将任意多个输入tensor进行element-wise加法操作
@@ -65,7 +68,7 @@ class Add(nn.Module):
     def forward(self, x: list[Tensor]) -> Tensor:
         return torch.sum(torch.stack(x, dim=0), dim=0)
 
-
+@TTModuleRegistry.register
 class Combine(nn.Module):
     """
     将任意多个输入tensor作为列表返回

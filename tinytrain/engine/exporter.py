@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Union
 
 from tinytrain.cfg.config_manager import ConfigManager
 from tinytrain.utils.callback import Callback
-from tinytrain.utils.register import TTRegistry
+from tinytrain.cfg.TT_register import TTEngineRegistry
 
 if TYPE_CHECKING:
     from torch import nn
@@ -26,6 +26,7 @@ class BaseExporter:
     1. 创建实例：BaseExporter(cfg, model, callback, backend="onnx")
     2. 调用 export：exporter.export(Path("runs/export"))
     """
+
     def __init__(self,
                  config_manager: ConfigManager,
                  model: nn.Module,
@@ -92,7 +93,6 @@ class BaseExporter:
         if isinstance(model, nn.Module):
             model = model.to(self.device)
             model.eval()
-            task = self.config_manager.core["task"]
-            return TTRegistry.get(task, "export_server", self.backend)(model=model, device=self.device, **kwargs)
+            return TTEngineRegistry.get(self.config_manager,"export_server", self.backend)(model=model, device=self.device, **kwargs)
         else:
             raise TypeError(f"only supported pytorch model!")

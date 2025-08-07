@@ -6,7 +6,10 @@ import torch.nn as nn
 
 from .conv import Conv
 
+from tinytrain.cfg.TT_register import TTModuleRegistry
 
+
+@TTModuleRegistry.register
 class C2f(nn.Module):
     """Faster Implementation of CSP Bottleneck with 2 convolutions."""
 
@@ -25,6 +28,7 @@ class C2f(nn.Module):
         return self.cv2(torch.cat(y, 1))
 
 
+@TTModuleRegistry.register
 class C3(nn.Module):
     """CSP Bottleneck with 3 convolutions."""
 
@@ -42,6 +46,7 @@ class C3(nn.Module):
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
 
 
+@TTModuleRegistry.register
 class Bottleneck(nn.Module):
     """Standard bottleneck."""
 
@@ -58,6 +63,7 @@ class Bottleneck(nn.Module):
         return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
 
 
+@TTModuleRegistry.register
 class C3k2(C2f):
     """Faster Implementation of CSP Bottleneck with 2 convolutions."""
 
@@ -69,6 +75,7 @@ class C3k2(C2f):
         )
 
 
+@TTModuleRegistry.register
 class C3k(C3):
     """C3k is a CSP bottleneck module with customizable kernel sizes for feature extraction in neural networks."""
 
@@ -80,6 +87,7 @@ class C3k(C3):
         self.m = nn.Sequential(*(Bottleneck(c_, c_, shortcut, groups, kernel_size=(kernel_size, kernel_size), hidden_channels=1.0) for _ in range(n)))
 
 
+@TTModuleRegistry.register
 class C2PSA(nn.Module):
     """
     C2PSA module with attention mechanism for enhanced feature extraction and processing.
@@ -117,6 +125,7 @@ class C2PSA(nn.Module):
         return self.cv2(torch.cat((a, b), 1))
 
 
+@TTModuleRegistry.register
 class PSABlock(nn.Module):
     """
     PSABlock class implementing a Position-Sensitive Attention block for neural networks.
@@ -154,6 +163,7 @@ class PSABlock(nn.Module):
         return x
 
 
+@TTModuleRegistry.register
 class Attention(nn.Module):
     """
     Attention module that performs self-attention on the input tensor.
@@ -210,6 +220,7 @@ class Attention(nn.Module):
         return x
 
 
+@TTModuleRegistry.register
 class SPPF(nn.Module):
     """Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv5 by Glenn Jocher."""
 
@@ -230,6 +241,7 @@ class SPPF(nn.Module):
         y = [self.cv1(x)]
         y.extend(self.m(y[-1]) for _ in range(3))
         return self.cv2(torch.cat(y, 1))
+
 
 class DFL(nn.Module):
     """

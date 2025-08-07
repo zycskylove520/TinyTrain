@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 from tinytrain.cfg.config_manager import ConfigManager
 from tinytrain.data import DetectDataInfo
 from tinytrain.server.track_server.base_track_server import BaseTrackServer
-from tinytrain.tools import images_to_video
 from tinytrain.tracker.bytetracker.byte_tracker import STrack, BYTETracker
 from tinytrain.utils import LOGGER
 from tinytrain.utils.callback import Callback

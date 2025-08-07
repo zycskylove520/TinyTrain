@@ -3,6 +3,8 @@
 import math
 import torch.nn as nn
 
+from tinytrain.cfg.TT_register import TTModuleRegistry
+
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
     """Pad to 'same' shape outputs."""
@@ -13,6 +15,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
     return p
 
 
+@TTModuleRegistry.register
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
 
@@ -36,3 +39,4 @@ class DWConv(Conv):
     def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, dilation=1, act=True):  # ch_in, ch_out, kernel, stride, dilation, activation
         """Initialize Depth-wise convolution with given parameters."""
         super().__init__(in_channels, out_channels, kernel_size, stride, groups=math.gcd(in_channels, out_channels), dilation=dilation, act=act)
+

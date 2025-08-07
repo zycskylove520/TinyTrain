@@ -1,1 +1,1 @@
-from .yolo import *
+from .yolo import YOLOCore

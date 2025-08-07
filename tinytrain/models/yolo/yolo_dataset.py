@@ -40,7 +40,7 @@ from multiprocessing.pool import ThreadPool
 from pathlib import Path
 
 from tinytrain.data import PoseBatchDataInfo
-from tinytrain.global_var import NUM_THREADS, RANK
+from tinytrain.global_var import NUM_THREADS
 from tinytrain.utils import LOGGER
 from tinytrain.utils.TT_progress_bar import TTProgressBar
 from tinytrain.utils.checks import check_detect_yolo_label, check_pose_yolo_label

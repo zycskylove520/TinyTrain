@@ -34,7 +34,28 @@ class ConfigManager(SimpleNamespace):
         """
         super().__init__(link_file=link_file, **kwargs)
         self.link = None
+        self.register_name = self._infer_register_name()
         self.parse_link_file(link_file)
+
+    def _infer_register_name(self) -> str | None:
+        """
+        自动推断调用者类名（例如 Core 的子类）。
+        如果无法推断，返回 None。
+        """
+        import inspect
+
+        frame = inspect.currentframe()
+        try:
+            # 向上查找调用栈，跳过 ConfigManager 自身的 __init__
+            while frame:
+                locals_dict = frame.f_locals
+                self_arg = locals_dict.get('self')
+                if self_arg and self_arg.__class__ is not ConfigManager:
+                    return self_arg.__class__.__name__
+                frame = frame.f_back
+        finally:
+            del frame  # 避免引用泄漏
+        return None
 
     def parse_link_file(self, link_file: str | Path):
         """

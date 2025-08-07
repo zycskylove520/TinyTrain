@@ -12,10 +12,6 @@ from matplotlib.font_manager import FontProperties
 # path
 ROOT = Path(__file__).resolve().parent.parent  # TinyTrain/
 DEFAULT_CFG_PATH = ROOT / "cfg"
-DEFAULT_MODEL_CONFIG_PATH = ROOT / "cfg/models"
-DEFAULT_DATASET_CONFIG_PATH = ROOT / "cfg/datasets"
-DEFAULT_TRACKER_CONFIG_PATH = ROOT / "cfg/trackers"
-DEFAULT_CORE_CONFIG_FILE = ROOT / "cfg/link.toml"
 ASSETS_PATH = ROOT / "assets"
 
 # PyTorch Multi-GPU DDP
