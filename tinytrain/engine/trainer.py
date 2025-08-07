@@ -514,7 +514,8 @@ class BaseTrainer:
 
             # validation
             self.fitness = self.do_validate()  # 不可设置RANK in {-1, 0}，存在多卡验证情况
-            self.train_result.add("fitness", self.fitness)
+            if RANK in {-1, 0}:
+                self.train_result.add("fitness", self.fitness)
             if world_size > 1:
                 fitness_tensor = torch.tensor(self.fitness, dtype=torch.float32, device=self.device)
                 dist.broadcast(fitness_tensor, src=0)
