@@ -34,7 +34,7 @@ width = 1.50
 max_channels = 512
 summary = "309 layers, 28458544 parameters, 28458544 gradients, 111.1 GFLOPs"
 
-# YOLO11n-cls backbone
+# YOLO11n-cls
 [[network]]
 # 0-P1/2
 type = "entry"

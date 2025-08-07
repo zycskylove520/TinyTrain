@@ -53,6 +53,6 @@ def tune(model):
 
 if __name__ == '__main__':
     yolo = YOLOCore(link_file=r"link.toml")
-    # train(yolo)
-    predict(yolo)
+    train(yolo)
+    # predict(yolo)
     # export(yolo)

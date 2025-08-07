@@ -4,7 +4,6 @@ from typing import Literal, List
 from pydantic import BaseModel
 
 
-
 class CoreConfig(BaseModel):
     """
     核心配置类，包含训练的基本设置、训练参数、验证参数、超参数、分布式训练设置等。
@@ -29,18 +28,23 @@ class CoreConfig(BaseModel):
     deterministic: bool  # 是否启用确定性模式。启用后，确保在相同的输入、硬件和软件环境下，每次运行的结果完全一致。
     ema: bool  # 是否启用指数移动平均（EMA）。EMA 可以生成参数更平滑的模型，但会增加训练时间。适用于中小型模型。
     shuffle_val_dataloader: bool  # 是否在验证集 DataLoader 中打乱数据。在分类任务中启用后，可以在验证阶段看到更多样的图片。
+    launch_tb: bool  # 是否启动 TensorBoard 可视化训练过程。
+    grad_clip: float  # 梯度裁剪阈值。用于防止梯度爆炸。
+    bf16: bool  # 是否使用 bfloat16 精度进行训练。bfloat16 精度比 float16 精度更高，但可能不支持所有硬件。
+    only_val: bool  # 是否仅执行验证而不进行训练。
 
     # Validation Settings
     conf_threshold: float  # 验证时的置信度阈值。用于非极大值抑制（NMS）。该值越大，在验证集数据大的情况下，效率越高，对召回率的要求越严格，这会导致召回率更低。
     nms_threshold: float  # 验证时的 NMS 阈值。
 
     # Hyperparameters
-    optimizer: Literal["SGD", "Adam", "Adamax", "AdamW", "NAdam", "RAdam", "RMSProp"]  # 优化器类型。
+    optimizer: Literal["Adam", "AdamW", "Adamax", "NAdam", "RAdam", "RMSProp", "SGD", "Adadelta", "Adagrad"]  # 优化器类型。
     momentum: float  # 优化器的动量值。
     weight_decay: float  # 权重衰减（L2 正则化）值。用于防止过拟合。
-    scheduler: Literal["LinearLR", "CosineLR", "auto"]  # 学习率调度器类型。`auto` 模式下，模型会根据训练效果自动调整学习率。
+    scheduler: Literal["LinearLR", "CosineLR", "ExponentialLR", "StepLR", "MultiStepLR", "auto"]  # 学习率调度器类型。`auto` 模式下，模型会根据训练效果自动调整学习率。如果衰减器不存在，则默认使用LinearLR。
     lr0: float  # 初始学习率。
-    lr1: float  # 结束学习率（`lr0 * lr1`）。在 `scheduler` 为 `auto` 时无效。
+    lr1: float  # 结束学习率（`lr0 * lr1`）。
+    warmup_scheduler: Literal["LinearWarmupLR", "CosineWarmUpLR", "ExponentialWarmUpLR", "ConstantWarmupLR"]  # 预热阶段的学习率调度器类型。如果衰减器不存在，则默认使用LinearWarmupLR。
     warmup_lr: float  # 预热阶段的学习率。
     warmup_epochs: int  # 预热阶段的 epoch 数量。
     l1_norm: float  # L1 正则化值。用于防止过拟合。
@@ -77,4 +81,3 @@ class DatasetConfig(BaseModel):
 
     # pose
     kpt_shape: list | None  # 关键点的形状。仅在处理关键点检测任务时使用。
-    flip_idx: list | None  # 对称镜像索引。仅在处理关键点检测任务时使用。

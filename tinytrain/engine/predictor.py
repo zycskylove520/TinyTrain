@@ -97,6 +97,56 @@ class BasePredictor:
         save_dir = save_dir / project_name
         self.output_dir = create_iter_directory(save_dir, start_string="predict_")
 
+    # ------------------------------------------------------------------
+    # 以下子类可重写的方法
+    # ------------------------------------------------------------------
+    def register_parsers(self) -> None:
+        """
+        注册自定义 SourceParser（子类重写以添加解析器）。
+        """
+        pass
+
+    def preprocess(self, data_info: BaseDataInfo) -> Any:
+        """
+        对输入数据进行预处理，如 resize、归一化、to(device) 等。
+
+        Args:
+            data_info (BaseDataInfo): 原始数据。
+
+        Returns:
+            Any: 预处理后的数据，可直接送入模型。
+        """
+        return data_info
+
+    def postprocess(self, data_info: BaseDataInfo, inference_result: list[torch.Tensor]):
+        """
+        对模型输出进行后处理，如 softmax、NMS、阈值过滤、解码等。
+
+        Args:
+            data_info (BaseDataInfo): 对应输入数据。
+            inference_result (list[torch.Tensor]): 模型原始输出。
+
+        Returns:
+            Any: 后处理结果，通常是结构化的预测对象。
+        """
+        return inference_result[0]
+
+    def show(self, data_info: BaseDataInfo, postprocess_result) -> Any:
+        """
+        可视化或序列化最终结果，如绘制框、保存图片、生成 JSON 等。
+
+        Args:
+            data_info (BaseDataInfo): 输入数据（含原始路径、尺寸等信息）。
+            postprocess_result: 后处理后的结果。
+
+        Returns:
+            Any: 最终输出，供业务侧消费。
+        """
+        return data_info
+
+    # ------------------------------------------------------------------
+    # 以下不建议子类重写的方法
+    # ------------------------------------------------------------------
     def predict(self, source) -> Union[Generator[Any, None, None], list[Any]]:
         """
         启动推理流程，返回结果生成器。
@@ -143,7 +193,7 @@ class BasePredictor:
             model.eval()
             return model
         elif isinstance(model, (str, Path)):
-            return TTEngineRegistry.get(self.config_manager,"inference_server", self.backend)(model_file=model, device=self.device, **kwargs)
+            return TTEngineRegistry.get(self.config_manager, "inference_server", self.backend)(model_file=model, device=self.device, **kwargs)
         else:
             raise TypeError(f"Unsupported model type: {type(model)}")
 
@@ -214,50 +264,3 @@ class BasePredictor:
             self.callback.run_callback(self, "on_predict_batch_end")
 
             yield self.show(data_info, self.postprocess_result)
-
-    # ------------------------------------------------------------------
-    # 以下子类可重写的方法
-    # ------------------------------------------------------------------
-    def register_parsers(self) -> None:
-        """
-        注册自定义 SourceParser（子类重写以添加解析器）。
-        """
-        pass
-
-    def preprocess(self, data_info: BaseDataInfo) -> Any:
-        """
-        对输入数据进行预处理，如 resize、归一化、to(device) 等。
-
-        Args:
-            data_info (BaseDataInfo): 原始数据。
-
-        Returns:
-            Any: 预处理后的数据，可直接送入模型。
-        """
-        return data_info
-
-    def postprocess(self, data_info: BaseDataInfo, inference_result: list[torch.Tensor]):
-        """
-        对模型输出进行后处理，如 softmax、NMS、阈值过滤、解码等。
-
-        Args:
-            data_info (BaseDataInfo): 对应输入数据。
-            inference_result (list[torch.Tensor]): 模型原始输出。
-
-        Returns:
-            Any: 后处理结果，通常是结构化的预测对象。
-        """
-        return inference_result[0]
-
-    def show(self, data_info: BaseDataInfo, postprocess_result) -> Any:
-        """
-        可视化或序列化最终结果，如绘制框、保存图片、生成 JSON 等。
-
-        Args:
-            data_info (BaseDataInfo): 输入数据（含原始路径、尺寸等信息）。
-            postprocess_result: 后处理后的结果。
-
-        Returns:
-            Any: 最终输出，供业务侧消费。
-        """
-        return data_info

@@ -6,7 +6,46 @@ from typing import Dict, Iterable, Set, Type, List, Tuple, Any, Optional, ClassV
 
 
 class TTEngineRegistry:
+    """
+    TTEngineRegistry
+    ================
+    引擎级实现注册器，用于统一管理 **核心(core) × 任务(task) × 引擎类型(engine_type) × 后端(backend)** 的四维实现注册与查询。
+
+    支持：
+    - 装饰器注册
+    - 显式注册核心
+    - 按路径精确/模糊查询实现类
+    - 批量冲突检测（注册阶段即报错）
+
+    数据结构示意：
+        _impl[core][task][engine_type][backend] = impl_cls
+        当 backend 为 None 时，key 固定为 ""，实现“默认实现”语义。
+
+    Examples:
+        >>> from tinytrain.cfg.TT_register import TTEngineRegistry
+        >>>
+        >>> # 1) 装饰器方式注册
+        >>> @TTEngineRegistry.register(core=MyCore, task="classify", engine_type="model")
+        ... class MyClassificationModel:
+        ...     pass
+        >>>
+        >>> # 2) 指定后端
+        >>> @TTEngineRegistry.register(core=MyCore, task="detect", engine_type="inference_server", backend="onnx")
+        ... class MyClassificationOnnxInferenceServer:
+        ...     pass
+        >>>
+        >>> # 3) 查询实现
+        >>> cls = TTEngineRegistry.get(config_manager, engine_type="inference_server", backend="onnx")
+        >>> assert cls is MyClassificationOnnxInferenceServer
+    """
+
+    """已注册的核心名称集合。"""
     _cores: ClassVar[Set[str]] = set()
+
+    """
+    多级嵌套实现仓库：
+        _impl[core_name][task][engine_type][backend] -> 实现类
+    """
     _impl: ClassVar[Dict[str,  # core
     Dict[str,  # task
     Dict[str,  # engine_type
@@ -16,6 +55,15 @@ class TTEngineRegistry:
     # ---------- 1. 核心注册 ----------
     @classmethod
     def register_core(cls, core_name: str):
+        """
+        显式注册一个核心名称，防止拼写错误或重复注册。
+
+        Args:
+            core_name(str): 核心类的名称（通常使用 core.__name__）。
+
+        Raises:
+            ValueError: 如果该核心已被注册。
+        """
         if core_name in cls._cores:
             raise ValueError(f"Core {core_name} already registered")
         cls._cores.add(core_name)
@@ -29,12 +77,29 @@ class TTEngineRegistry:
             engine_type: str,
             backend: Optional[str] = None,
     ) -> Callable[[Type], Type]:
+        """
+        装饰器，用于把某个实现类注册到指定四维路径下。
+
+        如果对应核心尚未注册，会自动调用 register_core 进行注册。
+
+        Args:
+            core(Type): 核心类（取其 __name__ 作为核心名称）。
+            task(str): 任务名称，如 "classify"、"detect"、"pose"。
+            engine_type(str): 引擎类型，如 "model"、"trainer"、"validator"。
+            backend(str, optional): 后端名称，如 "tensorrt"、"onnx"、"ncnn"。
+                若为 None 或空字符串，则视为默认实现，key 固定为 ""。
+
+        Returns:
+            Callable[[Type], Type]: 装饰器函数，返回被装饰的类本身。
+        """
         core_name = core.__name__
 
         def decorator(impl_cls: Type) -> Type:
+            # 核心未注册时自动注册
             if core_name not in cls._cores:
                 cls.register_core(core_name)
 
+            # 构建多级字典
             bucket = (
                 cls._impl
                 .setdefault(core_name, {})
@@ -42,6 +107,13 @@ class TTEngineRegistry:
                 .setdefault(engine_type, {})
             )
             key = "" if backend is None else backend
+
+            # 冲突检测：同一路径只能注册一次
+            if key in bucket:
+                raise KeyError(
+                    f"Implementation already registered at "
+                    f"core={core_name}, task={task}, engine_type={engine_type}, backend={backend}"
+                )
             bucket[key] = impl_cls
             return impl_cls
 
@@ -55,6 +127,23 @@ class TTEngineRegistry:
             engine_type: str,
             backend: Optional[str] = None,
     ) -> Type:
+        """
+        根据配置管理器与引擎类型，精确查询实现类。
+
+        Args:
+            config_manager: 必须实现以下属性：
+                - register_name -> 核心名称
+                - core["task"]   -> 任务名称
+            engine_type(str): 引擎类型。
+            backend(str, optional): 后端名称，若为 None 则查询默认实现。
+
+        Returns:
+            Type: 查询到的实现类。
+
+        Raises:
+            KeyError: 核心未注册。
+            NotImplementedError: 在指定四维路径下找不到实现。
+        """
         core_name = config_manager.register_name
         task = config_manager.core["task"]
         if core_name not in cls._cores:
@@ -76,49 +165,6 @@ class TTEngineRegistry:
             )
 
 
-# class TTEngineRegistry:
-#     """负责 task × engine_type × backend 的多级注册"""
-#     _map: Dict[str, Dict[str, Dict[str, Type[Any]]]] = {}
-#
-#     @classmethod
-#     def register(cls,
-#                  task: str,
-#                  engine_type: str,
-#                  backend: str | None = None):
-#         """
-#         装饰器：
-#         @Registry.register(task="detect", engine_type="exporter", backend="onnx")
-#         class MyExporter(...): ...
-#         若 engine_type 本身无 backend 概念（如 model/trainer），backend 传 None
-#         """
-#
-#         def decorator(subcls: Type[Any]):
-#             cls._map.setdefault(task, {}).setdefault(engine_type, {})
-#             if backend is None:
-#                 cls._map[task][engine_type] = subcls  # type: ignore[arg-type]
-#             else:
-#                 cls._map[task][engine_type][backend] = subcls
-#             return subcls
-#
-#         return decorator
-#
-#     @classmethod
-#     def get(cls,
-#             task: str,
-#             engine_type: str,
-#             backend: str | None = None) -> Type[Any]:
-#         """根据 task / engine_type / backend 取出注册类"""
-#         try:
-#             bucket = TTEngineRegistry._map[task][engine_type]
-#             if backend is None:  # 如 model/trainer
-#                 return bucket
-#             return bucket[backend]  # 如 exporter/inference_server
-#         except KeyError as e:
-#             raise NotImplementedError(
-#                 f"No implementation for task={task}, engine_type={engine_type}, backend={backend}"
-#             ) from e
-
-
 class TTModuleRegistry:
     """
     TTModuleRegistry
@@ -131,7 +177,7 @@ class TTModuleRegistry:
 
     Examples:
         >>> from torch import nn
-        >>> from tinytrain.utils.register import TTModuleRegistry
+        >>> from tinytrain.cfg.TT_register import TTModuleRegistry
         >>>
         >>> # 1) 装饰器方式：无参
         >>> @TTModuleRegistry.register
@@ -171,6 +217,9 @@ class TTModuleRegistry:
             class MyModule(nn.Module): ...
 
         2. 指定别名：
+            @TTModuleRegistry.register("Alias1")
+            class MyModule(nn.Module): ...
+
             @TTModuleRegistry.register("Alias1", "Alias2")
             class MyModule(nn.Module): ...
 

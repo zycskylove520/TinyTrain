@@ -128,9 +128,12 @@ class TTBaseVisionDataset(TTBaseDataset):
         # samples clip, reduce training fraction
         if self.mode == "train" and self.crop_fraction < 1.0:
             self.img_files = self.img_files[: round(len(self.img_files) * self.crop_fraction)]
+            self.bg_img_files = self.bg_img_files[: round(len(self.bg_img_files) * self.crop_fraction)]
             self.label_files = self.label_files[: round(len(self.label_files) * self.crop_fraction)]
+
             if self.cache:
                 self.npy_files = self.npy_files[: round(len(self.npy_files) * self.crop_fraction)]
+                self.bg_npy_files = self.bg_npy_files[: round(len(self.bg_npy_files) * self.crop_fraction)]
 
     def init(self):
         """统一入口：检查尺寸、类别、图片、标签、缓存。"""

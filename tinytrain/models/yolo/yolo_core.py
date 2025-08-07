@@ -82,9 +82,9 @@ class YOLOCore(Core):
         TTEngineRegistry.register(cls, "classify", "validator")(YOLOClassificationValidator)
         TTEngineRegistry.register(cls, "classify", "tuner")(YOLOClassificationTuner)
         TTEngineRegistry.register(cls, "classify", "predictor")(YOLOClassificationPredictor)
+        TTEngineRegistry.register(cls, "classify", "inference_server", "onnx")(YOLOClassificationOnnxInferenceServer)
         TTEngineRegistry.register(cls, "classify", "exporter")(BaseExporter)
         TTEngineRegistry.register(cls, "classify", "export_server", "onnx")(BaseOnnxExportServer)
-        TTEngineRegistry.register(cls, "classify", "inference_server", "onnx")(YOLOClassificationOnnxInferenceServer)
 
         # ---------- detect ----------
         TTEngineRegistry.register(cls, "detect", "model")(YOLODetectionModel)

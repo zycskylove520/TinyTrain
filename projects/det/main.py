@@ -78,4 +78,3 @@ if __name__ == '__main__':
     # predict(yolo)
     # track(yolo)
     # export(yolo)
-    print(1)

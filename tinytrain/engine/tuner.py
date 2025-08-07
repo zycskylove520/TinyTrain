@@ -66,6 +66,7 @@ class BaseTuner:
 
     # ------------------------------------------------------------------
     # 子类可覆写：新增/修改超参
+    # ------------------------------------------------------------------
     @staticmethod
     def build_param_tree() -> Dict[str, Dict[str, Dict]]:
         """
@@ -92,6 +93,46 @@ class BaseTuner:
                 "weight_decay": {"type": "continuous", "low": 0.0, "high": 1e-4},
             }
         }
+
+    # ------------------------------------------------------------------
+    # 以下不建议子类重写的方法
+    # ------------------------------------------------------------------
+    def tune(
+            self,
+            pop_size: int = 30,
+            generations: int = 50,
+            elite_ratio: float = 0.1,
+            crossover_rate: float = 0.9,
+            mutation_rate: float = 0.1,
+            mutation_sigma: float = 0.1,
+    ) -> Dict[str, Any]:
+        """
+        启动遗传算法搜索。
+
+        Args:
+            pop_size (int, optional): 种群规模，需 ≥3。默认 30。
+            generations (int, optional): 迭代代数。默认 50。
+            elite_ratio (float, optional): 精英保留比例。默认 0.1。
+            crossover_rate (float, optional): 交叉概率。默认 0.9。
+            mutation_rate (float, optional): 变异概率。默认 0.1。
+            mutation_sigma (float, optional): 高斯变异标准差。默认 0.1。
+
+        Returns:
+            Dict[str, Any]: {"history": DataFrame 格式的历史记录, "best_config": 最优配置字典}
+        """
+        if pop_size < 3:
+            raise ValueError("pop_size must be >= 3 for GA to work")
+
+        history, best_config = self._ga_search(
+            pop_size=pop_size,
+            generations=generations,
+            elite_ratio=elite_ratio,
+            crossover_rate=crossover_rate,
+            mutation_rate=mutation_rate,
+            mutation_sigma=mutation_sigma,
+        )
+        self._save(history, best_config)
+        return {"history": history, "best_config": best_config}
 
     @staticmethod
     def _flatten_param_tree(tree: Dict[str, Any]) -> Tuple[List[Tuple[str, str]], List[Dict]]:
@@ -136,46 +177,8 @@ class BaseTuner:
         return cfg
 
     # ------------------------------------------------------------------
-    # 公共入口
-    def tune(
-            self,
-            pop_size: int = 30,
-            generations: int = 50,
-            elite_ratio: float = 0.1,
-            crossover_rate: float = 0.9,
-            mutation_rate: float = 0.1,
-            mutation_sigma: float = 0.1,
-    ) -> Dict[str, Any]:
-        """
-        启动遗传算法搜索。
-
-        Args:
-            pop_size (int, optional): 种群规模，需 ≥3。默认 30。
-            generations (int, optional): 迭代代数。默认 50。
-            elite_ratio (float, optional): 精英保留比例。默认 0.1。
-            crossover_rate (float, optional): 交叉概率。默认 0.9。
-            mutation_rate (float, optional): 变异概率。默认 0.1。
-            mutation_sigma (float, optional): 高斯变异标准差。默认 0.1。
-
-        Returns:
-            Dict[str, Any]: {"history": DataFrame 格式的历史记录, "best_config": 最优配置字典}
-        """
-        if pop_size < 3:
-            raise ValueError("pop_size must be >= 3 for GA to work")
-
-        history, best_config = self._ga_search(
-            pop_size=pop_size,
-            generations=generations,
-            elite_ratio=elite_ratio,
-            crossover_rate=crossover_rate,
-            mutation_rate=mutation_rate,
-            mutation_sigma=mutation_sigma,
-        )
-        self._save(history, best_config)
-        return {"history": history, "best_config": best_config}
-
-    # ------------------------------------------------------------------
     # 遗传算法实现
+    # ------------------------------------------------------------------
     def _ga_search(
             self,
             pop_size: int,
@@ -237,7 +240,6 @@ class BaseTuner:
         best_config = self._decode_vector(best_ind.tolist())
         return history, best_config
 
-    # ------------------------------------------------------------------
     # 遗传算法内部工具
     def _random_genome(self) -> np.ndarray:
         """
@@ -358,6 +360,7 @@ class BaseTuner:
 
     # ------------------------------------------------------------------
     # 保存
+    # ------------------------------------------------------------------
     def _save(self, history: List[Dict], best_config: Dict):
         """
         持久化调优结果。

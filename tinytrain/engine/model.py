@@ -40,10 +40,60 @@ class BaseModel(nn.Module):
         self.criterion = None
         self.config_manager = config_manager
         self.module_list, self.record_list, self.ask_set, self.log_info = self.parse_model(config_manager)
+        self.initialize_weights()
+
         # 只有第一次启动时打印模型信息
         if "LOCAL_RANK" not in os.environ:
             self._model_log()
 
+    # ------------------------------------------------------------------
+    # 以下建议子类可重写的方法
+    # ------------------------------------------------------------------
+    def init_criterion(self):
+        """
+        初始化任务特定的损失函数。
+
+        Returns:
+            nn.Module: 损失模块。
+
+        Raises:
+            NotImplementedError: 必须由子类实现。
+        """
+        raise NotImplementedError("compute_loss() needs to be implemented by task heads")
+
+    def custom_parse_model(self, module_info):
+        """
+        钩子：子类可重写以动态修改模块配置。
+
+        Args:
+            module_info (dict): 当前模块的配置字典。
+        """
+        pass
+
+    def initialize_weights(self):
+        """
+        初始化模型权重：
+        - Conv2d: Kaiming 正态分布
+        - BatchNorm2d: γ=1, β=0, running_mean=0, running_var=1
+        - 激活函数: 设置为 inplace=True
+        """
+
+        for m in self.modules():
+            t = type(m)
+            if t is nn.Conv2d:
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif t is nn.BatchNorm2d:
+                # 自定义初始化
+                nn.init.constant_(m.weight, 1.0)  # gamma 初始化为 1.0
+                nn.init.constant_(m.bias, 0.0)  # beta 初始化为 0.0
+                nn.init.constant_(m.running_mean, 0.0)  # running_mean 初始化为 0.0
+                nn.init.constant_(m.running_var, 1.0)  # running_var 初始化为 1.0
+            elif t in {nn.Hardswish, nn.LeakyReLU, nn.ReLU, nn.ReLU6, nn.SiLU}:
+                m.inplace = True
+
+    # ------------------------------------------------------------------
+    # 以下不建议子类重写的方法
+    # ------------------------------------------------------------------
     def forward(self, data, **kwargs):
         """
         统一入口：根据输入类型自动选择推理或训练模式。
@@ -178,18 +228,6 @@ class BaseModel(nn.Module):
         preds = self.forward(batch_samples.data) if preds is None else preds
         return self.criterion(preds, batch_samples)
 
-    def init_criterion(self):
-        """
-        初始化任务特定的损失函数。
-
-        Returns:
-            nn.Module: 损失模块。
-
-        Raises:
-            NotImplementedError: 必须由子类实现。
-        """
-        raise NotImplementedError("compute_loss() needs to be implemented by task heads")
-
     def load_model_state_dict(self, state_dict, force_load=True):
         """
         加载权重，支持强制匹配或宽松匹配。
@@ -216,15 +254,6 @@ class BaseModel(nn.Module):
                 LOGGER.warning(f"not exist key:{key}")
 
         self.load_state_dict(match_state_dict, strict=False)
-
-    def custom_parse_model(self, module_info):
-        """
-        钩子：子类可重写以动态修改模块配置。
-
-        Args:
-            module_info (dict): 当前模块的配置字典。
-        """
-        pass
 
     def parse_model(self, config_manager: ConfigManager):
         """
@@ -371,27 +400,6 @@ class BaseModel(nn.Module):
                 f'|{str(info.get("args", {})):<{align_len["args"]}}|'
             )
         print(f"model summary: {scale_info['summary']}\n")
-
-    def initialize_weights(self):
-        """
-        初始化模型权重：
-        - Conv2d: Kaiming 正态分布
-        - BatchNorm2d: γ=1, β=0, running_mean=0, running_var=1
-        - 激活函数: 设置为 inplace=True
-        """
-
-        for m in self.modules():
-            t = type(m)
-            if t is nn.Conv2d:
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif t is nn.BatchNorm2d:
-                # 自定义初始化
-                nn.init.constant_(m.weight, 1.0)  # gamma 初始化为 1.0
-                nn.init.constant_(m.bias, 0.0)  # beta 初始化为 0.0
-                nn.init.constant_(m.running_mean, 0.0)  # running_mean 初始化为 0.0
-                nn.init.constant_(m.running_var, 1.0)  # running_var 初始化为 1.0
-            elif t in {nn.Hardswish, nn.LeakyReLU, nn.ReLU, nn.ReLU6, nn.SiLU}:
-                m.inplace = True
 
     @staticmethod
     def _get_layer(module_str: str):

@@ -1,5 +1,5 @@
 rgb = true
-img_crop_fraction = 1  # 有bug，会影响验证集的速度
+img_crop_fraction = 1
 
 # ColorJitter
 hsv_h = 0.5
