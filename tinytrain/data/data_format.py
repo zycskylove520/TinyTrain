@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import numpy as np
-
 from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Dict, Any
 
 if TYPE_CHECKING:
     import torch
+    import numpy as np
 
 
+# region
 # -----------------------------------------------------------------------------
 # 基础数据容器
 # -----------------------------------------------------------------------------
@@ -21,11 +21,6 @@ class BaseDataInfo:
     ----
     - **动态字段管理**：构造函数支持任意关键字参数，自动绑定为成员变量。
     - **智能深拷贝**：通过 __deepcopy__ 跳过指定字段，避免多进程/多线程拷贝大对象或共享资源。
-
-    使用示例
-    --------
-    >>> data = BaseDataInfo(img=img_tensor, path=Path("a.jpg"))
-    >>> data_copy = deepcopy(data)  # 跳过 _exclude_from_deepcopy 中的字段
     """
 
     def __init__(self, **kwargs):
@@ -205,42 +200,6 @@ class DetectDataInfo(ClassifyDataInfo):
         self.bboxes[..., 0::2] *= scale_x
         self.bboxes[..., 1::2] *= scale_y
 
-    def affine_transform(self):
-        """根据 self.affine_matrix 对 bbox 做仿射变换（仅像素坐标下生效）。"""
-        assert not self.normalized and self.bboxes is not None
-
-        # in yolo dataset, background image bboxes shape is: [0, 4]
-        if self.bboxes.shape[0] == 0:
-            return
-
-        old_box_format = self.bbox_format
-        self.convert_format(box_format="lxlyrxry")
-        new_bboxes = []
-
-        for bbox in self.bboxes:
-            lx, ly, rx, ry = bbox
-
-            # Transform 4 corners
-            corners = np.array([
-                [lx, ly],
-                [rx, ly],
-                [lx, ry],
-                [rx, ry]
-            ], dtype=np.float32)
-
-            ones = np.ones((4, 1), dtype=np.float32)
-            corners_homo = np.hstack([corners, ones])  # [x, y, 1]
-            transformed = (self.affine_matrix @ corners_homo.T).T
-
-            transformed_lx = transformed[:, 0].min()
-            transformed_ly = transformed[:, 1].min()
-            transformed_rx = transformed[:, 0].max()
-            transformed_ry = transformed[:, 1].max()
-
-            new_bboxes.append([transformed_lx, transformed_ly, transformed_rx, transformed_ry])
-        self.bboxes = np.array(new_bboxes)
-        self.convert_format(box_format=old_box_format)
-
     def normalize(self, w, h):
         """将像素坐标归一化到 [0, 1]。"""
         assert self.bboxes is not None
@@ -376,6 +335,12 @@ class PoseDataInfo(DetectDataInfo):
         self.kpt_shape = kpt_shape
 
 
+# endregion
+
+# region
+# -----------------------------------------------------------------------------
+# 批数据容器
+# -----------------------------------------------------------------------------
 class BaseBatchDataInfo:
     """
     单个 batch 的 **通用容器**，data 字段可存放张量 / 列表 / 任意对象。
@@ -485,3 +450,4 @@ class PoseBatchDataInfo(DetectBatchDataInfo):
         """
         super().__init__(**kwargs)
         self.batch_key_points = batch_key_points
+# endregion

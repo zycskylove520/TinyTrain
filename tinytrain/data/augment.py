@@ -9,7 +9,7 @@ from .data_format import ClassifyDataInfo
 from .augment_base import BaseAugmentation
 
 if TYPE_CHECKING:
-    import albumentations as A
+    pass
 
 
 class ClassificationAugmentation(BaseAugmentation):

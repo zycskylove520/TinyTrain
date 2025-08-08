@@ -3,7 +3,6 @@ from __future__ import annotations
 from .data_format import BaseDataInfo
 
 
-# base augmentations class -----------------------------------------------------------------------------------------
 class BaseAugmentation:
     """
     所有数据增强/变换策略的抽象基类，定义统一接口：

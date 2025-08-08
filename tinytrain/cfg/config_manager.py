@@ -58,6 +58,7 @@ class ConfigManager(SimpleNamespace):
                 if not isinstance(value, str):
                     raise ValueError(f"{key} must be a valid file")
                 value = check_file(value)
+                self.link[key] = value
                 if value.suffix != ".toml":
                     raise ValueError(f"{key} must be '.toml' file")
                 data = self.load_toml(value)

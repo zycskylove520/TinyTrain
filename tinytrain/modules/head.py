@@ -10,10 +10,10 @@ from tinytrain.utils.tal import make_anchors, dist2bbox
 
 @TTModuleRegistry.register
 class Classify(nn.Module):
-    """YOLO classification head, i.e. x(b,c1,20,20) to x(b,c2)."""
+    """classification head, i.e. x(b,c1,20,20) to x(b,c2)."""
 
     def __init__(self, in_channels, nc, kernel_size=1, stride=1, padding=None, groups=1):
-        """Initializes YOLO classification head to transform input tensor from (b,c1,20,20) to (b,c2) shape."""
+        """Initializes classification head to transform input tensor from (b,c1,20,20) to (b,c2) shape."""
         super().__init__()
         c_ = 1280  # efficientnet_b0 size
         self.conv = Conv(in_channels, c_, kernel_size, stride, padding, groups)

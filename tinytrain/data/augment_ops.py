@@ -18,8 +18,7 @@ if TYPE_CHECKING:
 # -----------------------------------------------------------------------------
 class DynamicFilling:
     """
-    纯 OpenCV 实现的动态填充 / 拉伸变换类，仅处理图像，
-    返回的 sample 中附带 2×3 仿射矩阵（self.affine_matrix）。
+    纯 OpenCV 实现的动态填充 / 拉伸变换类，仅处理图像.
     """
 
     def __init__(
@@ -41,6 +40,24 @@ class DynamicFilling:
         self.fill_value = fill_value
 
     def __call__(self, sample: ImgDataInfo):
+        """
+        对输入样本执行动态填充 / 拉伸变换。
+
+        职责
+        ----
+        1. 以概率 `p` 决定「保持宽高比 + 填充」或「直接拉伸」。
+        2. 更新 `sample.img` 为变换后的图像。
+        3. 计算并返回归一化仿射矩阵 `M`，用于后续同步变换标注（如 bbox、关键点等）。
+
+        Args:
+            sample (ImgDataInfo): 输入样本，必须包含非空 `img` 字段。
+
+        Returns:
+            tuple[ImgDataInfo, np.ndarray]:
+                - 第 0 个元素：已更新的 `ImgDataInfo`，其 `img` 字段被替换为目标尺寸的新图像。
+                - 第 1 个元素：形状为 (2, 3) 的 `np.float32` 仿射矩阵 `M`，
+                  可将原图归一化坐标映射到目标图归一化坐标，供 `transform_yolo_bboxes_norm` 等函数使用。
+        """
         assert isinstance(sample, ImgDataInfo), "sample must be ImgDataInfo"
         assert sample.img is not None, "sample.img is None"
 
