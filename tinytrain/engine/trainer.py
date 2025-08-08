@@ -1160,8 +1160,13 @@ class BaseTrainer:
         # 构建数据集
         dataset = self.build_dataset(mode=mode)
 
+        # 判断是否shuffle
+        if mode == "train":
+            shuffle = True
+        else:
+            shuffle = self.config_manager.core["shuffle_val_dataloader"]
+
         # 计算每个 rank 实际分到的样本数
-        shuffle = mode == "train"
         if world_size > 1:
             from torch.utils.data.distributed import DistributedSampler
             sampler = DistributedSampler(dataset, shuffle=shuffle, drop_last=False)
@@ -1172,7 +1177,7 @@ class BaseTrainer:
 
         # 确保 batch_size 不超过实际样本数
         batch_size = min(batch_size, effective_samples)
-        if batch_size <= 0:
+        if batch_size < 2:
             raise ValueError(
                 f"Dataset too small for DDP: rank {RANK} has {effective_samples} samples, "
                 f"but batch_size is {batch_size}. Reduce world_size or increase dataset."
@@ -1186,14 +1191,10 @@ class BaseTrainer:
         generator = torch.Generator()
         generator.manual_seed(self.config_manager.core["seed"] + RANK)
 
-        # 调整 val/test 的 batch_size 和 shuffle
+        # 调整 val/test 的 batch_size和 num_workers
         if mode != "train":
-            batch_size = max(1, batch_size // 2)
-            shuffle = shuffle and self.config_manager.core["shuffle_val_dataloader"]
-
-        # 分mode计算num_workers
-        if mode != "train":
-            num_workers = min(1, num_workers // 2)
+            batch_size = max(2, batch_size // 2)
+            num_workers = min(0, num_workers // 2)
 
         # 创建 DataLoader
         dataloader = DataLoader(
@@ -1245,7 +1246,7 @@ class BaseTrainer:
         """
 
         self.scaler.unscale_(self.optimizer)  # unscale gradients
-        grad_clip = self.config_manager.core["grad_clip"]
+        grad_clip = self.config_manager.core.get("grad_clip", 10)
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=grad_clip)  # clip gradients
         self.scaler.step(self.optimizer)
         self.scaler.update()
