@@ -147,9 +147,9 @@ class BaseModel(nn.Module):
                 if record_info["type"] == "entry":
                     try:
                         entry_idx_mapping[i] = inputs_idx
-                    except KeyError as e:
+                    except KeyError:
                         LOGGER.error(f"model input num != entry num, inputs num: {len(inputs)}, entry num: {inputs_idx}")
-                        raise e
+                        raise
                     inputs_idx += 1
 
                     if len(record_info["from"]) == 1:
@@ -204,7 +204,7 @@ class BaseModel(nn.Module):
                     self.record_list[i]["data"] = data  # add new key-value to record_list
             except Exception as e:
                 LOGGER.error(f"inference error: {e}, in layer: {i}.")
-                raise e
+                raise
 
         if len(outputs) == 0:
             raise RuntimeError("No output.")

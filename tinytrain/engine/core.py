@@ -67,19 +67,14 @@ class Core:
         """
         类级钩子：一次性地把该 Core 所支持的全部 (task, engine_type, backend) → 实现类的映射注册到 TTEngineRegistry。
 
-        任何继承自 Core 的子类 **必须** 实现此方法，否则在基类里会抛出
-           NotImplementedError。
+        任何继承自 Core 的子类 **必须** 实现此方法，否则在基类里会抛出NotImplementedError。
 
         示例：
         >>> class MyCore(Core):
         ...     @classmethod
         ...     def register_components(cls):
-        ...         TTEngineRegistry.register_class(
-        ...             cls, "classify", "model", MyClassificationModel
-        ...         )
-        ...         TTEngineRegistry.register_class(
-        ...             cls, "detect", "model", MyDetectionModel
-        ...         )
+        ...         TTEngineRegistry.register(cls, "classify", "model", MyClassificationModel)
+        ...         TTEngineRegistry.register(cls, "detect", "model", MyDetectionModel)
         """
         raise NotImplementedError
 

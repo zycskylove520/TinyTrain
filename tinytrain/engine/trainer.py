@@ -282,7 +282,7 @@ class BaseTrainer:
             subprocess.run(cmd, check=True)
         except Exception as e:
             LOGGER.error(f"An unexpected error occurred: {e}")
-            raise e
+            raise
         finally:
             LOGGER.info("Releasing memory...")
             self._clear_memory()
@@ -301,17 +301,16 @@ class BaseTrainer:
             if self.intra_node_group is None and world_size > 1 and dist.is_initialized():
                 self.intra_node_group = self._get_intra_node_group()
             self._do_train(world_size)
-        except Exception as e:
-            LOGGER.error(f"An unexpected error occurred: {e}")
-            raise e
         except KeyboardInterrupt:
             LOGGER.warning(f"Training interrupted by user (Rank {RANK}).")
-            self._graceful_shutdown(world_size)
         except SystemExit as e:
             LOGGER.warning(f"SystemExit received (Rank {RANK}), code: {e.code}")
-            self._graceful_shutdown(world_size)
+        except Exception as e:
+            LOGGER.error(f"An unexpected error occurred: {e}")
+            raise
         finally:
-            if world_size > 1:
+            self._graceful_shutdown(world_size)
+            if world_size > 1 and dist.is_initialized():
                 LOGGER.info("Destroying DDP...")
                 self.destroy_ddp()
             LOGGER.info("Releasing memory...")
@@ -319,22 +318,23 @@ class BaseTrainer:
 
     def _graceful_shutdown(self, world_size):
         """
-        训练中断时进行优雅退出，清理资源并保存结果。
+        训练结束或中断时进行优雅退出，清理资源并保存结果。
 
         Args:
             world_size (int): 分布式训练中的进程数量。
         """
-        if world_size > 1:
-            self.destroy_ddp()
+        try:
+            # 1.触发 DataLoaderIter.__del__()，从而安全地关闭 worker 和线程
+            self.train_dataloader = None
+            self.val_dataloader = None
 
-        # 绘制train result
-        if RANK in {-1, 0} and self.train_result:
-            # plot train result to csv file and close train result
-            self.train_result.plot(start=self.start_epoch + 1)
-            self.train_result.close()  # 可以选择不close，那么tensorboard训练完不会关闭
-
-        self._clear_memory()
-        sys.exit(0)
+            # 2.绘制train result
+            if RANK in {-1, 0} and self.train_result:
+                LOGGER.info(f"Training process will terminate on rank {RANK}.")
+                self.train_result.plot(start=self.start_epoch + 1)
+                self.train_result.close()  # 可以选择不close，那么tensorboard训练完不会关闭
+        except Exception as e:
+            LOGGER.error(f"Error during graceful shutdown: {e}")
 
     def _before_train(self, world_size: int):
         """
@@ -592,11 +592,6 @@ class BaseTrainer:
         self.do_validate()
 
         if RANK in {-1, 0}:
-            # plot train result to csv file and close train result
-            if self.train_result:
-                self.train_result.plot(start=self.start_epoch + 1)
-                self.train_result.close()  # 可以选择不close，那么tensorboard训练完不会关闭
-
             # export simplified model
             self.simplified_model(world_size)
 
@@ -1370,19 +1365,19 @@ class BaseTrainer:
                 "model_args": {k: (v.as_posix() if isinstance(v, Path) else v) for k, v in self.config_manager.model.items()}
             }
 
-            # 保存最新的模型
             if LOCAL_RANK in {-1, 0}:
+                # 保存最新的模型
                 torch.save(checkpoint, self.last_pt.as_posix())
 
-            # 保存最佳模型（仅主进程）
-            if LOCAL_RANK in {-1, 0} and self.best_fitness == self.fitness:
-                torch.save(checkpoint, self.best_pt.as_posix())
+                # 保存最佳模型
+                if self.best_fitness == self.fitness:
+                    torch.save(checkpoint, self.best_pt.as_posix())
 
-            # 按周期保存模型（仅主进程）
-            save_period = self.config_manager.core["save_period"]
-            if LOCAL_RANK in {-1, 0} and save_period > 0 and (current_epoch + 1) % save_period == 0:
-                epoch_checkpoint_path = Path(self.weight_dir / f"epoch_{current_epoch + 1}.pt")
-                torch.save(checkpoint, epoch_checkpoint_path.as_posix())
+                # 按周期保存模型（仅主进程）
+                save_period = self.config_manager.core["save_period"]
+                if save_period > 0 and (current_epoch + 1) % save_period == 0:
+                    epoch_checkpoint_path = Path(self.weight_dir / f"epoch_{current_epoch + 1}.pt")
+                    torch.save(checkpoint, epoch_checkpoint_path.as_posix())
 
         except Exception as e:
             LOGGER.error(f"Error occurred while saving model: {e}")

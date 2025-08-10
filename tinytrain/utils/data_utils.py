@@ -29,7 +29,7 @@ def remove_prefix_from_path(img_file: Path, prefix: str = "") -> Path:
     if name.startswith(prefix_part):
         new_name = name[len(prefix_part):]      # 只去掉前缀以及紧随的下划线
     else:
-        raise ValueError
+        raise ValueError(f"{name}  don't have {prefix_part}")
     return img_file.parent / new_name
 
 # ------------------------------------------------------------------

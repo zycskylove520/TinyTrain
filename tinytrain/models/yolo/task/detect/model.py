@@ -42,8 +42,8 @@ class YOLODetectionModel(YOLOModel):
     def custom_parse_model(self, module_info):
         scale = self.config_manager.model["scale"]
 
-        width = YOLOModel.WIDTH_GAIN
-        depth = YOLOModel.DEPTH_GAIN
+        width = self.WIDTH_GAIN
+        depth = self.DEPTH_GAIN
 
         if module_info["module"] == "C3k2":
             n = max(round(module_info["args"]["n"] * depth), 1)
