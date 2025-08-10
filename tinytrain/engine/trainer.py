@@ -725,10 +725,10 @@ class BaseTrainer:
                 self.config_manager.core["device"] = true_device
                 if len(false_device) > 0:
                     if "LOCAL_RANK" not in os.environ:
-                        LOGGER.info(f"Device Type: CUDA, Device {",".join(map(str, false_device))} not found, only using {",".join(map(str, true_device))}")
+                        LOGGER.info(f"Device Type: CUDA, Device {','.join(map(str, false_device))} not found, only using {','.join(map(str, true_device))}")
                 else:
                     if "LOCAL_RANK" not in os.environ:
-                        LOGGER.info(f"Device Type: CUDA, using {",".join(map(str, true_device))}")
+                        LOGGER.info(f"Device Type: CUDA, using {','.join(map(str, true_device))}")
             else:
                 raise TypeError(f"device type: {type(device)} is not supported!")
 
@@ -1246,8 +1246,9 @@ class BaseTrainer:
         """
 
         self.scaler.unscale_(self.optimizer)  # unscale gradients
-        grad_clip = self.config_manager.core.get("grad_clip", 10)
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=grad_clip)  # clip gradients
+        grad_clip = self.config_manager.core.get("grad_clip", 0)
+        if grad_clip > 0:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=grad_clip)  # clip gradients
         self.scaler.step(self.optimizer)
         self.scaler.update()
         self.optimizer.zero_grad(set_to_none=True)

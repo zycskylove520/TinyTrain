@@ -29,7 +29,7 @@ class CoreConfig(BaseModel):
     ema: bool  # 是否启用指数移动平均（EMA）。EMA 可以生成参数更平滑的模型，但会增加训练时间。适用于中小型模型。
     shuffle_val_dataloader: bool  # 是否在验证集 DataLoader 中打乱数据。在分类任务中启用后，可以在验证阶段看到更多样的图片。
     launch_tb: bool  # 是否启动 TensorBoard 可视化训练过程。
-    grad_clip: float  # 梯度裁剪阈值。用于防止梯度爆炸。
+    grad_clip: float  # 梯度裁剪阈值。用于防止梯度爆炸。值为0表示不启用。
     bf16: bool  # 是否使用 bfloat16 精度进行训练。bfloat16 精度比 float16 精度更高，但可能不支持所有硬件。
     only_val: bool  # 是否仅执行验证而不进行训练。
 

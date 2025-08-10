@@ -57,7 +57,7 @@ class YOLODetectionValidator(BaseValidator):
 
         self.box_metrics.update(outputs, sample_list)
 
-        desc = f"{"val":^5}|{"classes":^15}|{"Precision":^15}|{"Recall":^15}|{"MAP50":^15}|{"MAP50_95":^15}|{"MAP_Small":^15}|{"MAP_Medium":^15}|{"MAP_Large":^15}|"
+        desc = f"{'val':^5}|{'classes':^15}|{'Precision':^15}|{'Recall':^15}|{'MAP50':^15}|{'MAP50_95':^15}|{'MAP_Small':^15}|{'MAP_Medium':^15}|{'MAP_Large':^15}|"
         pbar.set_description(desc)
 
     def end_metrics_on_training(self, pbar: TTProgressBar):
@@ -71,7 +71,7 @@ class YOLODetectionValidator(BaseValidator):
         map_large = self.box_metrics.map_large()
 
         # log
-        progress_str = f"{"val":^5}|{self.num_classes:^15}|{precision:^15.3f}|{recall:^15.3f}|{map50:^15.3f}|{map50_95:^15.3f}|{map_small:^15.3f}|{map_medium:^15.3f}|{map_large:^15.3f}|"
+        progress_str = f"{'val':^5}|{self.num_classes:^15}|{precision:^15.3f}|{recall:^15.3f}|{map50:^15.3f}|{map50_95:^15.3f}|{map_small:^15.3f}|{map_medium:^15.3f}|{map_large:^15.3f}|"
         if RANK in {-1, 0}:
             print(progress_str)
 
@@ -98,7 +98,7 @@ class YOLODetectionValidator(BaseValidator):
         self.confuse_matrix.update(outputs, sample_list)
 
         # log
-        desc = f"{"val":^5}|{"class_name":^15}|{"Precision":^15}|{"Recall":^15}|"
+        desc = f"{'val':^5}|{'class_name':^15}|{'Precision':^15}|{'Recall':^15}|"
         pbar.set_description(desc)
 
         # plot
@@ -120,7 +120,7 @@ class YOLODetectionValidator(BaseValidator):
             pr_table[classes, 1] = recall_per_class
 
             for i, pr in enumerate(pr_table):
-                progress_str = f"{"val":^5}|{self.class_names[i]:^15}|{max(pr[0].item(), 0):^15.3f}|{max(pr[1].item(), 0):^15.3f}|"
+                progress_str = f"{'val':^5}|{self.class_names[i]:^15}|{max(pr[0].item(), 0):^15.3f}|{max(pr[1].item(), 0):^15.3f}|"
                 lines.append(progress_str)
             print("\n".join(lines))
 

@@ -61,8 +61,8 @@ class YOLOClassificationValidator(BaseValidator):
 
         # log update
         topn_acc = f"Top{self.n}_Acc"
-        title = f"{"val":^5}|{"classes":^15}|{"Top1_Acc":^15}|{topn_acc:^15}|"
-        desc = f"{"val":^5}|{self.num_classes:^15}|{top1_accuracy:^15.3f}|{topn_accuracy:^15.3f}|"
+        title = f"{"val":^5}|{'classes':^15}|{'Top1_Acc':^15}|{topn_acc:^15}|"
+        desc = f"{'val':^5}|{self.num_classes:^15}|{top1_accuracy:^15.3f}|{topn_accuracy:^15.3f}|"
         pbar.set_title(title)
         pbar.set_description(desc)
 
@@ -88,7 +88,7 @@ class YOLOClassificationValidator(BaseValidator):
         self.confuse_matrix.update(pred, true_labels)
 
         # log
-        desc = f"{"val":^5}|{"class_name":^15}|{"Accuracy":^15}|"
+        desc = f"{'val':^5}|{'class_name':^15}|{'Accuracy':^15}|"
         pbar.set_description(desc)
 
         # plot
@@ -99,7 +99,7 @@ class YOLOClassificationValidator(BaseValidator):
         # log
         acc_results = self.single_classes_acc.result()
         for i in range(self.num_classes):
-            progress_str = f"{"val":^5}|{self.class_names[i]:^15}|{acc_results[i]:^15.3f}|"
+            progress_str = f"{'val':^5}|{self.class_names[i]:^15}|{acc_results[i]:^15.3f}|"
             print(progress_str)
 
         # plot

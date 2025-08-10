@@ -265,11 +265,12 @@ class Core:
                 raise KeyError("Error: Detected resume=True, but no valid .pt or .pth file was provided.")
 
             scales = self.config_manager.model["scales"].keys()  # 添加model的scale
+            print(f"scales: {scales}")
             if model_scale:
                 self.config_manager.model["scale"] = model_scale
 
             if self.config_manager.model["scale"] not in scales:
-                raise KeyError(f"{self.config_manager.link["model"]} not support scale:{self.config_manager.model["scale"]}")
+                raise KeyError(f"{self.config_manager.link['model']} not support scale:{self.config_manager.model['scale']}")
 
             self.model = TTEngineRegistry.get(self.config_manager, "model")(self.config_manager)
 

@@ -379,26 +379,26 @@ class BaseModel(nn.Module):
         depth = scale_info["depth"]
         width = scale_info.get("width", None)
         LOGGER.info(f"start parse model...")
-        _struct_info = f"model scale:{scale}," + f" depth:{scale_info["depth"]}" + f"." if width is None else f", width:{width}"
+        _struct_info = f"model scale:{scale}," + f" depth:{scale_info['depth']}" + "." if width is None else f", width:{width}"
         print(_struct_info)
         print(f"{self.__class__.__name__} struct:")
         print(
-            f'|{'layer':^{align_len["layer"]}}'
-            f'|{'type':^{align_len["type"]}}'
-            f'|{'repeat':^{align_len["repeat"]}}'
-            f'|{'from':^{align_len["from"]}}'
-            f'|{'module':^{align_len["module"]}}'
-            f'|{'args':^{align_len["args"]}}|'
+            f"|{'layer':^{align_len['layer']}}"
+            f"|{'type':^{align_len['type']}}"
+            f"|{'repeat':^{align_len['repeat']}}"
+            f"|{'from':^{align_len['from']}}"
+            f"|{'module':^{align_len['module']}}"
+            f"|{'args':^{align_len['args']}}|"
         )
         for layer, info in enumerate(self.log_info):
             _repeat = max(round(info["repeat"] * depth), 1) if info["repeat"] > 1 else info["repeat"]
             print(
-                f'|{layer: ^{align_len["layer"]}}'
-                f'|{info["type"]:^{align_len["type"]}}'
-                f'|{_repeat:^{align_len["repeat"]}}'
-                f'|{str(info["from"]):^{align_len["from"]}}'
-                f'|{info["module"]:^{align_len["module"]}}'
-                f'|{str(info.get("args", {})):<{align_len["args"]}}|'
+                f"|{layer: ^{align_len['layer']}}"
+                f"|{info['type']:^{align_len['type']}}"
+                f"|{_repeat:^{align_len['repeat']}}"
+                f"|{str(info['from']):^{align_len['from']}}"
+                f"|{info['module']:^{align_len['module']}}"
+                f"|{str(info.get('args', {})):<{align_len['args']}}|"
             )
         print(f"model summary: {scale_info['summary']}\n")
 
