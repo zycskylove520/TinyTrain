@@ -167,10 +167,10 @@ class ClassifyImgResult(BaseImgResult):
         pil_img = Image.fromarray(img.astype(np.uint8))
         # 若原通道顺序与需求相反，则翻转
         drawn = np.array(pil_img)
-        if not self.rgb and drawn.shape[-1] == 3:  # 需要 BGR
+        if not self.rgb and drawn.shape[-1] == 3:  # BGR->RGB
             drawn = drawn[..., ::-1]
-        elif self.rgb and drawn.shape[-1] == 3:  # 需要 RGB
-            drawn = drawn[..., ::-1] if img.shape[-1] == 3 and img.dtype == np.uint8 else drawn
+        elif self.rgb and drawn.shape[-1] == 3:  # RGB
+            drawn = drawn if img.shape[-1] == 3 and img.dtype == np.uint8 else drawn
         # 这里 img 是 uint8 RGB，如果网络给的是 BGR 会经过 _prepare_imgs 的 ::-1 处理
         # 上面判断条件可再按实际 pipeline 微调
         self.title = (f"true:{self.class_names.get(true_label, true_label)}\n"
