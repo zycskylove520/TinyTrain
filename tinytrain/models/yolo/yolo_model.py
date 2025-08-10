@@ -52,9 +52,11 @@ from tinytrain.utils.any_utils import make_divisible
 
 class YOLOModel(BaseModel):
     # YOLO模型专属类变量
-    WIDTH_GAIN = None  # 宽度增益
+    def __init__(self, config_manager: ConfigManager, *args, **kwargs):
+        self.WIDTH_GAIN = None  # 宽度增益
+        super().__init__(config_manager, *args, **kwargs)
 
-    def parse_model(self, config_manager: ConfigManager):
+    def parse_model(self):
         """
         根据配置描述文件，构建 YOLO 网络。
 
@@ -82,20 +84,20 @@ class YOLOModel(BaseModel):
             解析后用于打印或序列化的最终配置。
         """
 
-        scale_info = config_manager.model["scales"][config_manager.model["scale"]]
+        scale_info = self.config_manager.model["scales"][self.config_manager.model["scale"]]
 
         # 计算一次并写入类变量（所有实例共享）
-        YOLOModel.WIDTH_GAIN = scale_info["width"]
-        YOLOModel.DEPTH_GAIN = scale_info["depth"]
+        self.WIDTH_GAIN = scale_info["width"]
+        self.DEPTH_GAIN = scale_info["depth"]
 
         layers, record_list, log_info = nn.ModuleList(), [], []
         ask_set = set()
 
         # 直接读取类变量
-        width = YOLOModel.WIDTH_GAIN
-        depth = YOLOModel.DEPTH_GAIN
+        width = self.WIDTH_GAIN
+        depth = self.DEPTH_GAIN
 
-        for level, info in enumerate(config_manager.model["network"]):
+        for level, info in enumerate(self.config_manager.model["network"]):
             # deepcopy防止修改原始配置文件导致加载模型异常
             _info = deepcopy(info)
             _type: str = _info["type"]  # 当前模块的位置类型，目前三种:"entry"、"flow"、"head"
@@ -121,7 +123,7 @@ class YOLOModel(BaseModel):
                 # set model entry channels
                 if _args.get("in_channels", None) is not None:
                     if _args["in_channels"] == -1:
-                        entry_channels = config_manager.model["entry_channels"]
+                        entry_channels = self.config_manager.model["entry_channels"]
                         assert entry_channels is not None, "entry level: if {_module} 'in_channels' == -1, must set model config key:entry_channels!"
                         _args["in_channels"] = entry_channels
             elif _type == "flow":  # flow层
@@ -131,7 +133,7 @@ class YOLOModel(BaseModel):
             elif _type == "head":  # head层
                 # assert "in_channels" in _args, f"level_{level}: {_module} 'in_channels' must exist!"
                 if _args.get("nc", None) is not None:
-                    _args["nc"] = config_manager.dataset["nc"]
+                    _args["nc"] = self.config_manager.dataset["nc"]
 
             # depth gain
             if _type == "flow":

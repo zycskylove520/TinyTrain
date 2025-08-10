@@ -1,4 +1,5 @@
 import torch
+import cv2
 
 from typing import Any
 from PIL import Image
@@ -40,9 +41,10 @@ class YOLOClassificationPredictor(BasePredictor):
     def preprocess(self, data_info: ClassifyDataInfo) -> torch.Tensor:
         """
         sample: 由 SourceParser 给出的任意对象
-                这里约定为 np.ndarray [H,W,3] RGB
+                这里约定为 np.ndarray [H,W,3] BGR
         """
-        img = Image.fromarray(data_info.img)
+        rgb_img = cv2.cvtColor(data_info.img, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(rgb_img)
 
         tf_list = [transforms.ToTensor(), transforms.Normalize(mean=0, std=1)]
         if self.img_shape is not None:

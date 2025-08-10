@@ -486,9 +486,12 @@ class TTClassificationDataset(ImageFolder):
         """根据 ImageFolder 的 class_to_idx 同步类别名。"""
         # self.names = self.config_manager.dataset["names"]
         names = {value: key for key, value in self.class_to_idx.items()}
-        if self.config_manager.dataset.get("names", dict()) != names:
-            LOGGER.warning(f"The names in the dataset.toml do not match the current dataset names. You can find the updated dataset.toml in the 'args' directory of the trained save path.")
-            self.config_manager.dataset["names"] = names
+        cfg_names = self.config_manager.dataset.get("names", None)
+        if cfg_names is not None:
+            cfg_names = {int(key): value for key, value in cfg_names.items()}
+            if cfg_names != names:
+                LOGGER.warning(f"The names in the dataset.toml do not match the current dataset names. You can find the updated dataset.toml in the 'args' directory of the trained save path.")
+        self.config_manager.dataset["names"] = names
 
     def check_images(self):
         """多线程检查图片合法性，返回合法文件列表。"""

@@ -18,7 +18,6 @@ from tinytrain.utils import LOGGER
 
 IMG_FORMATS = {"bmp", "dng", "jpeg", "jpg", "mpo", "png", "tif", "tiff", "webp", "pfm", "heic"}  # image suffixes
 VID_FORMATS = {"asf", "avi", "gif", "m4v", "mkv", "mov", "mp4", "mpeg", "mpg", "ts", "wmv", "webm"}  # video suffixes
-PIN_MEMORY = str(os.getenv("PIN_MEMORY", True)).lower() == "true"  # global pin_memory for dataloaders
 FORMATS_HELP_MSG = f"Supported formats are:\nimages: {IMG_FORMATS}\nvideos: {VID_FORMATS}"
 
 
@@ -360,6 +359,144 @@ def check_detect_yolo_label(img_file, npy_file=None, label_file=None):
     return img_file, npy_file, message, cls, boxes
 
 
+def check_detect_voc_label(img_file: str, npy_file: str = None, label_file: str = None):
+    """
+    验证 PASCAL VOC 目标检测标签文件合法性：
+        每框包含：cls≥0，xyxy 有效且位于图像内。
+    返回的 boxes 为 [xmin, ymin, xmax, ymax]（绝对像素）。
+
+    Args / Returns 同 check_detect_yolo_label
+    """
+    import xml.etree.ElementTree as ET
+    message = None
+    labels_arr = np.zeros((0, 5), dtype=np.float32)
+
+    if label_file is None:
+        return img_file, npy_file, message, labels_arr[:, 0], labels_arr[:, 1:]
+
+    if not os.path.exists(label_file):
+        raise ValueError(f"VOC label file not found: {label_file}")
+
+    try:
+        tree = ET.parse(label_file)
+        root = tree.getroot()
+
+        # 拿图像宽高
+        size = root.find("size")
+        img_w = int(size.findtext("width", 0)) if size is not None else 0
+        img_h = int(size.findtext("height", 0)) if size is not None else 0
+        if img_w == 0 or img_h == 0:
+            with Image.open(img_file) as im:
+                img_w, img_h = im.size
+
+        objs = root.findall("object")
+        if not objs:
+            message = f"VOC label file: {label_file} has zero objects."
+        else:
+            records = []
+            for obj in objs:
+                name = obj.findtext("name")
+                if name is None:
+                    raise ValueError("Missing <name> in VOC object")
+                bndbox = obj.find("bndbox")
+                if bndbox is None:
+                    raise ValueError("Missing <bndbox> in VOC object")
+
+                xmin = float(bndbox.findtext("xmin", 0))
+                ymin = float(bndbox.findtext("ymin", 0))
+                xmax = float(bndbox.findtext("xmax", 0))
+                ymax = float(bndbox.findtext("ymax", 0))
+
+                if not (0 <= xmin <= xmax <= img_w and 0 <= ymin <= ymax <= img_h):
+                    raise ValueError(
+                        f"Invalid bbox in VOC label: ({xmin},{ymin},{xmax},{ymax}) "
+                        f"with image size ({img_w},{img_h})"
+                    )
+
+                cls_id = int(name)  # 若 name 是字符串请先做映射
+                if cls_id < 0:
+                    raise ValueError(f"Negative class id: {cls_id}")
+
+                records.append([cls_id, xmin, ymin, xmax, ymax])
+
+            labels_arr = np.array(records, dtype=np.float32)
+
+    except ET.ParseError as e:
+        raise ValueError(f"VOC label file: {label_file} XML parse error: {e}")
+
+    cls = labels_arr[:, 0]
+    boxes = labels_arr[:, 1:]  # (N,4) [xmin,ymin,xmax,ymax]
+    return img_file, npy_file, message, cls, boxes
+
+
+def check_detect_coco_label(img_file: str, npy_file: str = None, label_file: str = None):
+    """
+    验证 COCO 目标检测标签文件合法性：
+        每框包含：cls≥0，bbox[x,y,w,h] 绝对像素坐标。
+    返回的 boxes 为 [x, y, w, h]（绝对像素）。
+
+    Args / Returns 同 check_detect_yolo_label
+    """
+    import json
+    message = None
+    labels_arr = np.zeros((0, 5), dtype=np.float32)
+
+    if label_file is None:
+        return img_file, npy_file, message, labels_arr[:, 0], labels_arr[:, 1:]
+
+    if not os.path.exists(label_file):
+        raise ValueError(f"COCO label file not found: {label_file}")
+
+    try:
+        with open(label_file, "r", encoding="utf-8") as f:
+            coco = json.load(f)
+
+        # 建立 img_id → (w,h) 映射
+        id2size = {img["id"]: (img["width"], img["height"])
+                   for img in coco.get("images", [])}
+
+        # 从图片路径反推文件名，再匹配 image_id
+        img_name = os.path.basename(img_file)
+        img_entry = next((img for img in coco.get("images", [])
+                          if img["file_name"] == img_name), None)
+        if img_entry is None:
+            raise ValueError(f"Image {img_name} not found in COCO json")
+        img_id = img_entry["id"]
+        img_w, img_h = img_entry["width"], img_entry["height"]
+
+        anns = [ann for ann in coco.get("annotations", []) if ann["image_id"] == img_id]
+        if not anns:
+            message = f"COCO label file: {label_file} has zero objects for image {img_name}."
+        else:
+            records = []
+            for ann in anns:
+                cls_id = int(ann["category_id"])
+                if cls_id < 0:
+                    raise ValueError(f"Negative class id: {cls_id}")
+
+                x, y, w, h = ann["bbox"]
+                x, y, w, h = float(x), float(y), float(w), float(h)
+                if w <= 0 or h <= 0:
+                    raise ValueError(f"Invalid bbox size (w,h)=({w},{h})")
+                if not (0 <= x <= img_w and 0 <= y <= img_h and
+                        0 <= x + w <= img_w and 0 <= y + h <= img_h):
+                    raise ValueError(
+                        f"Invalid bbox in COCO label: ({x},{y},{w},{h}) "
+                        f"with image size ({img_w},{img_h})"
+                    )
+
+                records.append([cls_id, x, y, w, h])
+
+            labels_arr = np.array(records, dtype=np.float32)
+
+    except json.JSONDecodeError as e:
+        raise ValueError(f"COCO label file: {label_file} JSON decode error: {e}")
+
+    cls = labels_arr[:, 0]
+    boxes = labels_arr[:, 1:]  # (N,4) [x,y,w,h] 绝对像素
+    return img_file, npy_file, message, cls, boxes
+
+
 def check_pose_yolo_label(img_file, keypoint_shape, npy_file=None, label_file=None):
     """
     验证 YOLO 姿态估计标签文件合法性：每行 5 个元素，cls ≥ 0，xywh ∈ [0,1]。
@@ -395,7 +532,7 @@ def check_pose_yolo_label(img_file, keypoint_shape, npy_file=None, label_file=No
 
                 # 将标签数据转换为 NumPy 数组
                 lb = np.array(lb, dtype=np.float32)
-                labels_arr = lb[:,:5]
+                labels_arr = lb[:, :5]
                 keypoints = lb[:, 5:].reshape(-1, keypoint_num, keypoint_dim)
                 if keypoint_dim == 2:
                     # 如果关键点是2维的，没有visibility值，就补上这个值

@@ -26,7 +26,6 @@ class BaseModel(nn.Module):
     - 支持自定义模块解析（custom_parse_model）。
     - 自动初始化权重（initialize_weights），支持 Kaiming / BN / ReLU 等。
     """
-    DEPTH_GAIN = None  # 深度增益
 
     def __init__(self, config_manager: ConfigManager, *args, **kwargs):
         """
@@ -37,9 +36,11 @@ class BaseModel(nn.Module):
             *args, **kwargs: 预留扩展参数，供子类使用。
         """
         super().__init__()
+        self.DEPTH_GAIN = None  # 深度增益
+
         self.criterion = None
         self.config_manager = config_manager
-        self.module_list, self.record_list, self.ask_set, self.log_info = self.parse_model(config_manager)
+        self.module_list, self.record_list, self.ask_set, self.log_info = self.parse_model()
         self.initialize_weights()
 
         # 只有第一次启动时打印模型信息
@@ -255,12 +256,9 @@ class BaseModel(nn.Module):
 
         self.load_state_dict(match_state_dict, strict=False)
 
-    def parse_model(self, config_manager: ConfigManager):
+    def parse_model(self):
         """
         解析配置文件，动态构建网络结构。
-
-        Args:
-            config_manager (ConfigManager): 配置管理器。
 
         Returns:
             tuple:
@@ -269,18 +267,18 @@ class BaseModel(nn.Module):
                 - set[int]: 需要缓存输出的层索引集合。
                 - list[dict]: 日志信息（用于打印结构）。
         """
-        scale_info = config_manager.model["scales"][config_manager.model["scale"]]
+        scale_info = self.config_manager.model["scales"][self.config_manager.model["scale"]]
 
-        # 计算一次并写入类变量（所有实例共享）
-        BaseModel.DEPTH_GAIN = scale_info["depth"]
+        # 获得深度增益
+        self.DEPTH_GAIN = scale_info["depth"]
 
         layers, record_list, log_info = nn.ModuleList(), [], []
         ask_set = set()
 
-        # 直接读取类变量
-        depth = BaseModel.DEPTH_GAIN
+        # 直接读取变量
+        depth = self.DEPTH_GAIN
 
-        for level, info in enumerate(config_manager.model["network"]):
+        for level, info in enumerate(self.config_manager.model["network"]):
             try:
                 # deepcopy防止修改原始配置文件导致加载模型异常
                 _info = deepcopy(info)
@@ -348,6 +346,7 @@ class BaseModel(nn.Module):
         打印模型结构摘要到日志与终端。
         """
 
+
         # 获取对齐长度，打印会更好看
         align_len = dict({"layer": 5, "type": 4, "repeat": 6, "from": 4, "module": 6, "args": 4})
         for layer, info in enumerate(self.log_info):
@@ -377,10 +376,11 @@ class BaseModel(nn.Module):
 
         scale = self.config_manager.model["scale"]
         scale_info = self.config_manager.model["scales"][scale]
+        depth = scale_info["depth"]
+        width = scale_info.get("width", None)
         LOGGER.info(f"start parse model...")
-        print(f'model scale:{scale},'
-              f' depth:{scale_info["depth"]},'
-              f' width:{scale_info.get("width", None)}.')
+        _struct_info = f"model scale:{scale}," + f" depth:{scale_info["depth"]}" + f"." if width is None else f", width:{width}"
+        print(_struct_info)
         print(f"{self.__class__.__name__} struct:")
         print(
             f'|{'layer':^{align_len["layer"]}}'
@@ -391,10 +391,11 @@ class BaseModel(nn.Module):
             f'|{'args':^{align_len["args"]}}|'
         )
         for layer, info in enumerate(self.log_info):
+            _repeat = max(round(info["repeat"] * depth), 1) if info["repeat"] > 1 else info["repeat"]
             print(
                 f'|{layer: ^{align_len["layer"]}}'
                 f'|{info["type"]:^{align_len["type"]}}'
-                f'|{info["repeat"]:^{align_len["repeat"]}}'
+                f'|{_repeat:^{align_len["repeat"]}}'
                 f'|{str(info["from"]):^{align_len["from"]}}'
                 f'|{info["module"]:^{align_len["module"]}}'
                 f'|{str(info.get("args", {})):<{align_len["args"]}}|'
