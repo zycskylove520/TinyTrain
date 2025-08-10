@@ -13,10 +13,10 @@ from typing import TYPE_CHECKING, List, Union
 from datetime import timedelta
 from pathlib import Path
 from torch import autocast, optim, nn
+from torch.utils.data import Dataset
 from torch.utils.data.dataloader import DataLoader
 
 from tinytrain.cfg.config_manager import ConfigManager
-from tinytrain.data import TTBaseDataset
 from tinytrain.data.data_format import BaseBatchDataInfo
 from tinytrain.global_var import RANK, NUM_THREADS, LOCAL_RANK, WORLD_SIZE
 from tinytrain.metrics.train_result import TrainResult
@@ -173,7 +173,7 @@ class BaseTrainer:
         """
         raise NotImplementedError("preprocess_data function not implemented in trainer")
 
-    def build_dataset(self, mode="train") -> TTBaseDataset:
+    def build_dataset(self, mode="train") -> Dataset:
         """
         构建数据集实例。
 
@@ -181,7 +181,7 @@ class BaseTrainer:
             mode (str): 数据集模式，可选值为 "train"、"val" 或 "test"。
 
         Returns:
-            TTBaseDataset: 数据集实例。
+            Dataset: 数据集实例。
 
         Raises:
             NotImplementedError: 子类必须实现此方法。
