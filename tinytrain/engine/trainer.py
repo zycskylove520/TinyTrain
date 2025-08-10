@@ -483,11 +483,11 @@ class BaseTrainer:
                     s_loss_values = f"|".join(f"{v:^15.3f}" for v in list(smooth_loss_items.values()))
                     if i == 0:
                         s_loss_names = f"|".join(f"{name:^15}" for name in list(smooth_loss_items.keys()))
-                        pbar.set_title(f"\n{"train":^5}|"
-                                       f"{"batch":^15}|"
-                                       f"{"epoch":^15}|"
-                                       f"{"GPU_Mem":^15}|"
-                                       f"{"lr":^15}|"
+                        pbar.set_title(f"\n{'train':^5}|"
+                                       f"{'batch':^15}|"
+                                       f"{'epoch':^15}|"
+                                       f"{'GPU_Mem':^15}|"
+                                       f"{'lr':^15}|"
                                        f"{s_loss_names}|"
                                        )
 
@@ -496,7 +496,7 @@ class BaseTrainer:
                     s_memory = f"{self._get_memory():.3g}G"
                     s_lr = self.optimizer.param_groups[0]["lr"]
                     pbar.set_description(
-                        f"{"train":^5}|"
+                        f"{'train':^5}|"
                         f"{s_batch:^15}|"
                         f"{s_epoch:^15}|"
                         f"{s_memory:^15}|"
