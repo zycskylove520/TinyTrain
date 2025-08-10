@@ -143,6 +143,7 @@ class ByteTrackServer(BaseTrackServer):
 
         for i in range(len(track_results["track_ids"])):
             track_id = int(track_results["track_ids"][i])  # 取 track_id
+            conf = track_results["scores"][i]
             l, t, r, b = map(int, track_results["bboxes"][i])  # lx, ly, rx, ry
 
             # 画框
@@ -151,6 +152,11 @@ class ByteTrackServer(BaseTrackServer):
             # 在框内部左上角写 track_id
             id_txt = str(track_id)
             cv2.putText(img, id_txt, (l + 2, t + 25),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 1, cv2.LINE_AA)
+
+            # 在框内部左下角写 confidence
+            id_txt = f"conf:{conf:.2f}"
+            cv2.putText(img, id_txt, (l + 2, b - 25),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 1, cv2.LINE_AA)
 
     def runtime_show(self, detect_info: DetectDataInfo):
