@@ -492,6 +492,7 @@ class TTClassificationDataset(ImageFolder):
             if cfg_names != names:
                 LOGGER.warning(f"The names in the dataset.toml do not match the current dataset names. You can find the updated dataset.toml in the 'args' directory of the trained save path.")
         self.config_manager.dataset["names"] = names
+        self.config_manager.dataset["nc"] = len(self.class_to_idx)
 
     def check_images(self):
         """多线程检查图片合法性，返回合法文件列表。"""
