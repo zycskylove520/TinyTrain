@@ -61,7 +61,7 @@ class YOLOClassificationValidator(BaseValidator):
 
         # log update
         topn_acc = f"Top{self.n}_Acc"
-        title = f"{"val":^5}|{'classes':^15}|{'Top1_Acc':^15}|{topn_acc:^15}|"
+        title = f"{'val':^5}|{'classes':^15}|{'Top1_Acc':^15}|{topn_acc:^15}|"
         desc = f"{'val':^5}|{self.num_classes:^15}|{top1_accuracy:^15.3f}|{topn_accuracy:^15.3f}|"
         pbar.set_title(title)
         pbar.set_description(desc)

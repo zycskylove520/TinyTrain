@@ -619,7 +619,8 @@ class BaseTrainer:
             backend="nccl" if dist.is_nccl_available() else "gloo",
             timeout=timedelta(seconds=10800),  # 3 hours
             rank=RANK,
-            world_size=world_size
+            world_size=world_size,
+            device_id=self.device,
         )
 
     @staticmethod
