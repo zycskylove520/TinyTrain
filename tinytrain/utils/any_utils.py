@@ -6,6 +6,7 @@
 import math
 import os
 import random
+import shutil
 import uuid
 import torch
 import numpy as np
@@ -14,6 +15,8 @@ import torch.distributed as dist
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Tuple, Union, Sequence, TypeVar
+
+from tinytrain.utils import LOGGER
 
 T = TypeVar('T')
 
@@ -170,3 +173,28 @@ def make_divisible(x, divisor=8):
     if isinstance(divisor, torch.Tensor):
         divisor = int(divisor.max())  # to int
     return math.ceil(x / divisor) * divisor
+
+def _get_free_shm_mb() -> float:
+    """返回 /dev/shm 剩余空间（单位 MB）。"""
+    shm_path = "/dev/shm"
+    if not os.path.exists(shm_path):
+        return float("inf")          # Windows / 特殊环境
+    return shutil.disk_usage(shm_path).free / 1024 / 1024
+
+
+def maybe_limit_num_workers(requested_workers: int,
+                            safe_threshold_mb: int = 2048) -> int:
+    """
+    根据 /dev/shm 剩余空间决定是否要降低 num_workers。
+    如果可用共享内存 < safe_threshold_mb，就把 num_workers 降到 0。
+    返回最终 num_workers。
+    """
+    free_mb = _get_free_shm_mb()
+    if free_mb < safe_threshold_mb and requested_workers > 0:
+        LOGGER.warning(
+            f"Available shared memory ({free_mb:.0f} MB) < "
+            f"{safe_threshold_mb} MB. "
+            f"Forcing num_workers=0 to avoid Bus Error."
+        )
+        return 0
+    return requested_workers

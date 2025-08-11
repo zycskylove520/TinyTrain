@@ -22,7 +22,7 @@ from tinytrain.global_var import RANK, NUM_THREADS, LOCAL_RANK, WORLD_SIZE
 from tinytrain.metrics.train_result import TrainResult
 from tinytrain.utils import LOGGER
 from tinytrain.utils.TT_progress_bar import TTProgressBar
-from tinytrain.utils.any_utils import set_random_seed, create_iter_directory
+from tinytrain.utils.any_utils import set_random_seed, create_iter_directory, maybe_limit_num_workers
 from tinytrain.utils.callback import Callback
 from tinytrain.utils.checks import check_amp
 from tinytrain.utils.dist import generate_ddp_command
@@ -1185,6 +1185,9 @@ class BaseTrainer:
         num_devices = torch.cuda.device_count()
         num_workers = self.config_manager.core["workers"] = min(8, os.cpu_count() // max(num_devices, 1), self.config_manager.core["workers"])
 
+        # linux环境根据共享内存决定最终 num_workers
+        num_workers = maybe_limit_num_workers(num_workers, safe_threshold_mb=2048)
+
         # 生成器（用于可复现性）
         generator = torch.Generator()
         generator.manual_seed(self.config_manager.core["seed"] + RANK)
@@ -1192,7 +1195,11 @@ class BaseTrainer:
         # 调整 val/test 的 batch_size和 num_workers
         if mode != "train":
             batch_size = max(2, batch_size // 2)
-            num_workers = min(0, num_workers // 2)
+            num_workers = max(0, num_workers // 2)
+
+        # DDP均摊 num_workers
+        if world_size > 1:
+            num_workers = max(0, num_workers//world_size)
 
         # 创建 DataLoader
         dataloader = DataLoader(
