@@ -260,7 +260,6 @@ class Core:
                 raise KeyError("Error: Detected resume=True, but no valid .pt or .pth file was provided.")
 
             scales = self.config_manager.model["scales"].keys()  # 添加model的scale
-            print(f"scales: {scales}")
             if model_scale:
                 self.config_manager.model["scale"] = model_scale
 

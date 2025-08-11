@@ -310,9 +310,6 @@ class BaseTrainer:
             raise
         finally:
             self._graceful_shutdown(world_size)
-            if world_size > 1 and dist.is_initialized():
-                LOGGER.info("Destroying DDP...")
-                self.destroy_ddp()
             LOGGER.info("Releasing memory...")
             self._clear_memory()
 
@@ -324,15 +321,20 @@ class BaseTrainer:
             world_size (int): 分布式训练中的进程数量。
         """
         try:
-            # 1.触发 DataLoaderIter.__del__()，从而安全地关闭 worker 和线程
+            # 1.摧毁DDP
+            if world_size > 1 and dist.is_initialized():
+                LOGGER.info("Destroying DDP...")
+                self.destroy_ddp()
+
+            # 2.触发 DataLoaderIter.__del__()，从而安全地关闭 worker 和线程
             self.train_dataloader = None
             self.val_dataloader = None
 
-            # 2.绘制train result
+            # 3.绘制train result
             if RANK in {-1, 0} and self.train_result:
-                LOGGER.info(f"Training process will terminate on rank {RANK}.")
                 self.train_result.plot(start=self.start_epoch + 1)
                 self.train_result.close()  # 可以选择不close，那么tensorboard训练完不会关闭
+
         except Exception as e:
             LOGGER.error(f"Error during graceful shutdown: {e}")
 
