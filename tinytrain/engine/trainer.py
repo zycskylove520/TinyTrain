@@ -435,7 +435,7 @@ class BaseTrainer:
 
             # 开启epoch循环
             smooth_loss_items = None
-            for i, batch_samples in enumerate(pbar):  # 45.382
+            for i, batch_samples in enumerate(pbar):
                 self.callbacks.run_callback(self, "on_train_batch_start")
 
                 # 当前是第几个batch
@@ -451,10 +451,10 @@ class BaseTrainer:
                     dist.broadcast_object_list(dtype_list, src=0)
                     dtype = dtype_list[0]
 
-                # move data to device  3.518
+                # move data to device
                 batch_samples = self.preprocess_data(batch_samples)  # type: ignore[arg-type]
 
-                # Forward  15.59
+                # Forward
                 with autocast(device_type=self.device.type, dtype=dtype, enabled=self.amp):
                     self.loss, self.loss_items = self.model(batch_samples)
 
@@ -465,10 +465,10 @@ class BaseTrainer:
                 # loss 缩放为了在 accumulate 次平均后等价
                 self.loss = self.loss / self.accumulate
 
-                # Backward  23
+                # Backward
                 self.scaler.scale(self.loss).backward()
 
-                # 梯度累积够了，就更新参数  18.51
+                # 梯度累积够了，就更新参数
                 if is_last_accum_step:
                     self.optimizer_step()
                     last_opt_step = current_batch
@@ -493,7 +493,7 @@ class BaseTrainer:
                                        f"{s_loss_names}|"
                                        )
 
-                    s_batch = f"{self.train_dataloader.batch_size}"
+                    s_batch = f"{self.batch_size}"
                     s_epoch = f"{current_epoch + 1}/{self.epochs}"
                     s_memory = f"{self._get_memory():.3g}G"
                     s_lr = self.optimizer.param_groups[0]["lr"]
@@ -516,8 +516,8 @@ class BaseTrainer:
 
             # validation
             self.fitness = self.do_validate()  # 不可设置RANK in {-1, 0}，存在多卡验证情况
-            if RANK in {-1, 0}:
-                self.train_result.add("fitness", self.fitness)
+
+            # DDP同步fitness
             if world_size > 1:
                 fitness_tensor = torch.tensor(self.fitness, dtype=torch.float32, device=self.device)
                 dist.broadcast(fitness_tensor, src=0)
@@ -526,6 +526,9 @@ class BaseTrainer:
             if self.best_fitness < self.fitness:
                 self.best_epoch = current_epoch + 1
                 self.best_fitness = self.fitness
+
+            if RANK in {-1, 0}:
+                self.train_result.add("fitness", self.fitness)
 
             if LOCAL_RANK in {-1, 0}:
                 # save model
@@ -803,14 +806,6 @@ class BaseTrainer:
         Args:
             world_size (int): 分布式训练中的进程数量。
         """
-
-        # 检查批量大小是否能被进程数量整除
-        if world_size > 1:
-            if self.batch_size % world_size != 0:
-                raise ValueError(f"Batch size {self.batch_size} cannot be evenly divided by the number of processes {world_size}.")
-            if self.batch_size // world_size == 1:
-                raise ValueError(f"Batch size {self.batch_size} evenly divided by the number of processes {world_size} cannot be 1.")
-
         # 检查批量大小是否为 1
         if self.batch_size == 1:
             raise ValueError(f"Batch size {self.batch_size} cannot be 1.")
@@ -822,7 +817,7 @@ class BaseTrainer:
 
         # 打印批量大小信息
         if world_size > 1:
-            LOGGER.info(f"{world_size} GPU(s) found. Each GPU has a batch size of {self.batch_size // world_size}.")
+            LOGGER.info(f"{world_size} GPU(s) found. Each GPU has a batch size of {self.batch_size}.")
         else:
             LOGGER.info(f"Training batch size: {self.batch_size}")
 
@@ -855,8 +850,7 @@ class BaseTrainer:
 
         # ---------------- 线性缩放 LR ----------------
         if WORLD_SIZE > 1:
-            total_batch = self.batch_size * max(WORLD_SIZE, 1) * self.accumulate
-            lr_scaled = lr0 * total_batch / 64.0
+            lr_scaled = self.config_manager.core["lr0"] * max(WORLD_SIZE, 1) * self.accumulate
         else:
             lr_scaled = lr0
 
@@ -1152,9 +1146,6 @@ class BaseTrainer:
             DataLoader: 构建好的数据加载器。
         """
 
-        # 计算每个进程的批量大小
-        batch_size = self.batch_size // max(world_size, 1)
-
         # 构建数据集
         dataset = self.build_dataset(mode=mode)
 
@@ -1171,10 +1162,10 @@ class BaseTrainer:
             effective_samples = len(sampler)
         else:
             sampler = None
-            effective_samples = len(dataset)
+            effective_samples = len(dataset)  # type: ignore[arg-type]
 
         # 确保 batch_size 不超过实际样本数
-        batch_size = min(batch_size, effective_samples)
+        batch_size = min(self.batch_size, effective_samples)
         if batch_size < 2:
             raise ValueError(
                 f"Dataset too small for DDP: rank {RANK} has {effective_samples} samples, "
@@ -1199,7 +1190,7 @@ class BaseTrainer:
 
         # DDP均摊 num_workers
         if world_size > 1:
-            num_workers = max(0, num_workers//world_size)
+            num_workers = max(0, num_workers // world_size)
 
         # 创建 DataLoader
         dataloader = DataLoader(

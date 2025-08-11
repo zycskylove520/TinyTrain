@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import torch
+import torch.distributed as dist
+
 from typing import TYPE_CHECKING
 
 from tinytrain.data.data_format import BaseBatchDataInfo
-
 from tinytrain.utils.TT_progress_bar import TTProgressBar
 from tinytrain.cfg.config_manager import ConfigManager
 
@@ -214,3 +215,17 @@ class BaseValidator:
             float: 越大表示模型越好；默认返回 0（子类必须重写以提供有效指标）。
         """
         return 0
+
+    # ====== 分布式辅助函数 ======
+    @classmethod
+    def _all_reduce_tensor(cls, tensor: torch.Tensor, op=dist.ReduceOp.SUM):
+        """把 tensor 在所有 rank 上做 all_reduce（原地）"""
+        if dist.is_available() and dist.is_initialized():
+            dist.all_reduce(tensor, op=op)
+
+    @classmethod
+    def _all_reduce_mean(cls, tensor: torch.Tensor):
+        """把 tensor 在所有 rank 上做 all_reduce 并求平均"""
+        cls._all_reduce_tensor(tensor)
+        if dist.is_available() and dist.is_initialized():
+            tensor /= dist.get_world_size()

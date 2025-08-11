@@ -62,25 +62,33 @@ class YOLODetectionValidator(BaseValidator):
 
     def end_metrics_on_training(self, pbar: TTProgressBar):
         self.box_metrics.compute()
-        precision = self.box_metrics.precision()
-        recall = self.box_metrics.recall()
-        map50 = self.box_metrics.map50()
-        map50_95 = self.box_metrics.map50_95()
-        map_small = self.box_metrics.map_small()
-        map_medium = self.box_metrics.map_medium()
-        map_large = self.box_metrics.map_large()
 
-        # log
-        progress_str = f"{'val':^5}|{self.num_classes:^15}|{precision:^15.3f}|{recall:^15.3f}|{map50:^15.3f}|{map50_95:^15.3f}|{map_small:^15.3f}|{map_medium:^15.3f}|{map_large:^15.3f}|"
+        # 把需要聚合的指标做成 tensor
+        metrics_tensor = torch.tensor([
+            self.box_metrics.precision(),
+            self.box_metrics.recall(),
+            self.box_metrics.map50(),
+            self.box_metrics.map50_95(),
+            self.box_metrics.map_small(),
+            self.box_metrics.map_medium(),
+            self.box_metrics.map_large()
+        ], device=self.device)
+
+        # 跨 rank 求平均
+        self._all_reduce_mean(metrics_tensor)
+        (precision, recall, map50, map50_95,
+         map_small, map_medium, map_large) = metrics_tensor.tolist()
+
+        # rank0 打印 / 写结果
         if RANK in {-1, 0}:
+            progress_str = f"{'val':^5}|{self.num_classes:^15}|{precision:^15.3f}|{recall:^15.3f}|{map50:^15.3f}|{map50_95:^15.3f}|{map_small:^15.3f}|{map_medium:^15.3f}|{map_large:^15.3f}|"
             print(progress_str)
 
-        # metrics result
-        if self.trainer.train_result is not None:
-            self.trainer.train_result.add("precision", precision)
-            self.trainer.train_result.add("recall", recall)
-            self.trainer.train_result.add("map50", map50)
-            self.trainer.train_result.add("map50_95", map50_95)
+            if self.trainer.train_result is not None:
+                self.trainer.train_result.add("precision", precision)
+                self.trainer.train_result.add("recall", recall)
+                self.trainer.train_result.add("map50", map50)
+                self.trainer.train_result.add("map50_95", map50_95)
 
     def start_metrics_on_train_completed(self, pbar: TTProgressBar):
         self.confuse_matrix.reset()
@@ -102,41 +110,60 @@ class YOLODetectionValidator(BaseValidator):
         pbar.set_description(desc)
 
         # plot
-        # if RANK in {-1, 0}:
-        self.img_result.plot(batch_samples=batch_samples, preds=outputs)
+        if RANK in {-1, 0}:
+            self.img_result.plot(batch_samples=batch_samples, preds=outputs)
 
     def end_metrics_on_train_completed(self, pbar: TTProgressBar):
         self.box_metrics.compute()
 
-        # log
-        precision_per_class = self.box_metrics.per_class_precision(self.config_manager.core["conf_threshold"]).float()  # 每个类别的precision
-        recall_per_class = self.box_metrics.per_class_recall().float()  # 每个类别的recall
-        classes = self.box_metrics.classes().int()  # 类别列表
+        # 1) 单类 PR
+        precision_per_class = self.box_metrics.per_class_precision(
+            self.config_manager.core["conf_threshold"]).float().to(self.device)  # [num_classes]
+        recall_per_class = self.box_metrics.per_class_recall().float().to(self.device)
+        classes = self.box_metrics.classes().int().to(self.device)  # 长度 <= num_classes
 
+        pr_tensor = torch.full((self.num_classes, 2), -1.0,
+                               dtype=torch.float32, device=self.device)
+        pr_tensor[classes, 0] = precision_per_class
+        pr_tensor[classes, 1] = recall_per_class
+        self._all_reduce_mean(pr_tensor)  # 跨 rank 平均
+        pr_global = pr_tensor.cpu()
+
+        # 2) 混淆矩阵
+        cm_tensor = self.confuse_matrix.confusion_matrix.clone().detach().to(dtype=torch.int64, device=self.device)
+        self._all_reduce_tensor(cm_tensor)  # 跨 rank 求和
+        cm_global = cm_tensor.cpu()
+
+        # 3) rank0 打印 / 绘图
         if RANK in {-1, 0}:
             lines = []
-            pr_table = torch.full((self.num_classes, 2), -1.0, dtype=torch.float32)
-            pr_table[classes, 0] = precision_per_class
-            pr_table[classes, 1] = recall_per_class
-
-            for i, pr in enumerate(pr_table):
-                progress_str = f"{'val':^5}|{self.class_names[i]:^15}|{max(pr[0].item(), 0):^15.3f}|{max(pr[1].item(), 0):^15.3f}|"
+            for i, (p, r) in enumerate(pr_global):
+                progress_str = (
+                    f"{'val':^5}|{self.class_names[i]:^15}|"
+                    f"{max(p.item(), 0):^15.3f}|{max(r.item(), 0):^15.3f}|")
                 lines.append(progress_str)
             print("\n".join(lines))
 
-        # plot
-        # if RANK in {-1, 0}:
-        self.box_metrics.plot(self.save_dir)
-        self.confuse_matrix.plot(self.save_dir)
+            # 更新混淆矩阵实例并绘制
+            self.confuse_matrix.confusion_matrix = cm_global
+            self.box_metrics.plot(self.save_dir)
+            self.confuse_matrix.plot(self.save_dir)
 
     def get_fitness(self) -> float:
         weights = [0.05, 0.15, 0.3, 0.5]
-        return (
-                self.box_metrics.precision() * weights[0] +
-                self.box_metrics.recall() * weights[1] +
-                self.box_metrics.map50() * weights[2] +
-                self.box_metrics.map50_95() * weights[3]
-        )
+        # 本地先算一次
+        fitness_tensor = torch.tensor([
+            self.box_metrics.precision(),
+            self.box_metrics.recall(),
+            self.box_metrics.map50(),
+            self.box_metrics.map50_95()
+        ], device=self.device)
+        fitness_tensor *= torch.tensor(weights, device=self.device)
+        fitness_scalar = fitness_tensor.sum()
+
+        # 跨 rank 平均
+        self._all_reduce_mean(fitness_scalar)
+        return fitness_scalar.item()
 
     def decode_boxes(self, batch_samples: DetectBatchDataInfo):
         batch_boxes = batch_samples.bboxes
