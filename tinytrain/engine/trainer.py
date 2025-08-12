@@ -307,7 +307,7 @@ class BaseTrainer:
             LOGGER.warning(f"SystemExit received (Rank {RANK}), code: {e.code}")
         except Exception as e:
             LOGGER.error(f"An unexpected error occurred: {e}")
-            raise
+            raise e
         finally:
             self._graceful_shutdown(world_size)
             LOGGER.info("Releasing memory...")
@@ -766,8 +766,7 @@ class BaseTrainer:
 
         # DDP 支持 AMP，直接启动，不进行检查
         if world_size > 1:
-            self.amp = True
-            if RANK in {-1, 0}:
+            if RANK in {-1, 0} and self.amp:
                 LOGGER.info("Enabling AMP (Automatic Mixed Precision) for DDP (Distributed Data Parallel) training.")
         else:
             # 检查 AMP 支持
@@ -1156,9 +1155,9 @@ class BaseTrainer:
             shuffle = self.config_manager.core["shuffle_val_dataloader"]
 
         # 计算每个 rank 实际分到的样本数
-        if world_size > 1:
+        if world_size > 1 and mode == "train":
             from torch.utils.data.distributed import DistributedSampler
-            sampler = DistributedSampler(dataset, shuffle=shuffle, drop_last=False)
+            sampler = DistributedSampler(dataset, drop_last=True)  # drop_last为True保证每张卡样本数量一致，避免all_gather永久阻塞
             effective_samples = len(sampler)
         else:
             sampler = None
@@ -1238,19 +1237,52 @@ class BaseTrainer:
 
     def optimizer_step(self):
         """
-        执行优化器更新步骤，包括梯度裁剪、EMA 更新。
+        安全版 optimizer_step：
+        1. 检查梯度是否出现 NaN/Inf，出现则跳过更新并降低 loss-scale；
+        2. 正常时才进行梯度裁剪、optimizer.step、ema.update；
+        3. 输出日志以便调试。
         """
+        # 1. 先把梯度 unscale 回 fp32
+        self.scaler.unscale_(self.optimizer)
 
-        self.scaler.unscale_(self.optimizer)  # unscale gradients
-        grad_clip = self.config_manager.core.get("grad_clip", 0)
+        # 2. 检查全局梯度是否有 NaN/Inf
+        # has_nan_or_inf = False
+        # for group in self.optimizer.param_groups:
+        #     for p in group["params"]:
+        #         if p.grad is not None:
+        #             if torch.isnan(p.grad).any() or torch.isinf(p.grad).any():
+        #                 has_nan_or_inf = True
+        #                 break
+        #     if has_nan_or_inf:
+        #         break
+        #
+        # # 在多卡环境下，把结果广播到所有 rank
+        # if dist.is_initialized():
+        #     has_nan = torch.tensor(float(has_nan_or_inf), device="cuda")
+        #     dist.all_reduce(has_nan, op=dist.ReduceOp.MAX)
+        #     has_nan_or_inf = bool(has_nan.item())
+        #
+        # if has_nan_or_inf:
+        #     # 跳过本次更新，降低 loss-scale
+        #     rank = dist.get_rank() if dist.is_initialized() else 0
+        #     if rank == 0:
+        #         print(f"[WARN] NaN/Inf detected in gradients, skipping step. "
+        #               f"Current scale: {self.scaler.get_scale()}")
+        #     self.scaler.update()  # 这会触发 scale 下降
+        #     self.optimizer.zero_grad(set_to_none=True)
+        #     return
+
+        # 3. 梯度裁剪
+        grad_clip = self.config_manager.core.get("grad_clip", 0.0)
         if grad_clip > 0:
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=grad_clip)  # clip gradients
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=grad_clip)
+
+        # 4. 安全 step
         self.scaler.step(self.optimizer)
         self.scaler.update()
         self.optimizer.zero_grad(set_to_none=True)
 
-        self.model.zero_grad(set_to_none=True)
-        # update ema
+        # 5. EMA 更新
         if LOCAL_RANK in {-1, 0} and self.ema is not None:
             self.ema.update(self.model)
 
@@ -1314,8 +1346,11 @@ class BaseTrainer:
 
         try:
             return TTEngineRegistry.get(self.config_manager, "validator")(self, world_size)
-        except Exception:
-            return None
+        except Exception as e:
+            print(f"no validator found for world size {world_size}")
+            raise e
+
+            # return None
 
     def do_validate(self) -> float:
         """

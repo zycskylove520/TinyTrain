@@ -67,22 +67,15 @@ class YOLOClassificationValidator(BaseValidator):
         pbar.set_description(desc)
 
     def end_metrics_on_training(self, pbar: TTProgressBar):
-        # 把本地结果做成 tensor
-        top1_tensor = torch.tensor(self.top1.result(), device=self.device)
-        topn_tensor = torch.tensor(self.topn.result(), device=self.device)
+        # metrics result
+        top1_accuracy = self.top1.result()
+        topn_accuracy = self.topn.result()
 
-        # 跨 rank 求平均
-        self._all_reduce_mean(top1_tensor)
-        self._all_reduce_mean(topn_tensor)
+        topn_acc = f"top{self.n}_accuracy"
 
-        # cpu 回取
-        top1_accuracy = top1_tensor.item()
-        topn_accuracy = topn_tensor.item()
-
-        # 记录训练结果
         if self.trainer.train_result is not None:
             self.trainer.train_result.add("top1_accuracy", top1_accuracy)
-            self.trainer.train_result.add(f"top{self.n}_accuracy", topn_accuracy)
+            self.trainer.train_result.add(topn_acc, topn_accuracy)
 
     def start_metrics_on_train_completed(self, pbar: TTProgressBar):
         self.single_classes_acc.reset()
@@ -103,33 +96,14 @@ class YOLOClassificationValidator(BaseValidator):
             self.img_result.plot(batch_samples, pred)
 
     def end_metrics_on_train_completed(self, pbar: TTProgressBar):
-        # 单类准确率 -> tensor
-        acc_tensor = torch.tensor(
-            self.single_classes_acc.result(), device=self.device)  # shape [num_classes]
+        # log
+        acc_results = self.single_classes_acc.result()
+        for i in range(self.num_classes):
+            progress_str = f"{'val':^5}|{self.class_names[i]:^15}|{acc_results[i]:^15.3f}|"
+            print(progress_str)
 
-        # 跨 rank 求平均
-        self._all_reduce_mean(acc_tensor)
-        acc_results = acc_tensor.cpu().tolist()
-
-        # 混淆矩阵 -> tensor 后累加
-        cm_tensor = torch.tensor(
-            self.confuse_matrix.confusion_matrix, dtype=torch.int64, device=self.device)  # shape [C,C]
-        self._all_reduce_tensor(cm_tensor)  # SUM
-        cm_result = cm_tensor.cpu()
-
-        # 仅 rank0 打印 & 绘图
-        if RANK in {-1, 0}:
-            for i in range(self.num_classes):
-                progress_str = f"{'val':^5}|{self.class_names[i]:^15}|{acc_results[i]:^15.3f}|"
-                print(progress_str)
-
-            # 更新混淆矩阵实例（用全局 cm）
-            self.confuse_matrix.confusion_matrix = cm_result
-            self.confuse_matrix.plot(self.save_dir)
+        # plot
+        self.confuse_matrix.plot(self.save_dir)
 
     def get_fitness(self) -> float:
-        top1_tensor = torch.tensor(self.top1.result(), device=self.device)
-        topn_tensor = torch.tensor(self.topn.result(), device=self.device)
-        self._all_reduce_mean(top1_tensor)
-        self._all_reduce_mean(topn_tensor)
-        return (top1_tensor.item() + topn_tensor.item()) / 2
+        return (self.top1.result() + self.topn.result()) / 2

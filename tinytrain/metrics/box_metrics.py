@@ -4,8 +4,11 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import torch.distributed as dist
 
 from pathlib import Path
+
+from tinytrain.global_var import WORLD_SIZE, RANK
 
 
 class BoxMetrics:
@@ -20,6 +23,7 @@ class BoxMetrics:
     4. 支持类别级指标输出、可视化；
     5. 支持缓存与重置，方便训练/验证循环。
     """
+
     def __init__(self,
                  iou_thresholds: list = None,
                  rec_thresholds: list = None,
@@ -62,7 +66,9 @@ class BoxMetrics:
                                                                    rec_thresholds=self.rec_thresholds,
                                                                    class_metrics=self.class_metrics,
                                                                    extended_summary=self.extended_summary,
-                                                                   max_detection_thresholds=self.max_detection_thresholds
+                                                                   max_detection_thresholds=self.max_detection_thresholds,
+                                                                   backend="faster_coco_eval",
+                                                                   sync_on_compute=False  # 必须取消同步，使用单卡验证
                                                                    )
         self.results = None
 
@@ -73,8 +79,9 @@ class BoxMetrics:
 
     def reset(self):
         """重置内部状态，开始新一轮评估。"""
+        self.results = None
         self.recall_curve = torch.zeros((1, 1), dtype=torch.float32)
-        self.precision_curve = torch.zeros((1, 1), dtype=torch.float32)
+        self.precision_curve = torch.zeros((1, 1, 1), dtype=torch.float32)
         self.metrics.reset()
 
     def update(self, pred: list[torch.Tensor], target: list[torch.Tensor]):
@@ -89,26 +96,56 @@ class BoxMetrics:
         """
         pred_list = []
         target_list = []
+
         for p, t in zip(pred, target):
-            # 准备预测结果和目标数据
-            pred_list.append(dict(
-                boxes=p[:, :4],  # 预测的边界框
-                scores=p[:, 4],  # 预测的置信度
-                labels=p[:, 5:].squeeze(-1).int(),  # 预测的类别
-            ))
-            target_list.append(
-                dict(
-                    boxes=t[:, :4],  # 真实的边界框
-                    labels=t[:, 4:].squeeze(-1).int(),  # 真实的类别
-                )
-            )
+            # 空预测时构造空张量
+            if p.shape[0] == 0:
+                pred_list.append({
+                    "boxes": torch.empty((0, 4), device=p.device, dtype=torch.float32),
+                    "scores": torch.empty(0, device=p.device, dtype=torch.float32),
+                    "labels": torch.empty(0, device=p.device, dtype=torch.int64),
+                })
+            else:
+                pred_list.append({
+                    "boxes": p[:, :4],
+                    "scores": p[:, 4],
+                    "labels": p[:, 5].long(),
+                })
+
+            if t.shape[0] == 0:
+                print("t is empty")
+                target_list.append({
+                    "boxes": torch.empty((0, 4), device=p.device, dtype=torch.float32),
+                    "labels": torch.empty(0, device=p.device, dtype=torch.int64),
+                })
+            else:
+                target_list.append({
+                    "boxes": t[:, :4],
+                    "labels": t[:, 4].long(),
+                })
+
         self.metrics.update(pred_list, target_list)
 
     def compute(self):
         """计算最终指标，并缓存曲线数据。"""
+        # --------------------------------------------------------
+        # 1. 只在 rank0 上真正计算
+        # --------------------------------------------------------
+        if RANK in {-1, 0}:
+            self.results = self.metrics.compute()
+            results_to_send = self.results
+        else:
+            results_to_send = None
 
-        # 更新完计算统计指标
-        self.results = self.metrics.compute()
+        # --------------------------------------------------------
+        # 2. 把 results（dict）同步给所有 rank
+        #    由于 dict 里都是 tensor，可以直接 broadcast_object_list
+        # --------------------------------------------------------
+        if WORLD_SIZE > 1:
+            # list 长度必须为 1
+            obj_list = [results_to_send]
+            dist.broadcast_object_list(obj_list, src=0)
+            self.results = obj_list[0]
 
         # curve
         # all_recall_matrix的维度为：(TxKxAxM)

@@ -5,6 +5,7 @@ from torch import memory_format
 
 from tinytrain.data import DetectBatchDataInfo
 from tinytrain.data.data_format import DetectDataInfo
+from tinytrain.global_var import RANK
 from tinytrain.models.yolo.yolo_dataset import YOLODetectionDataset
 from tinytrain.engine.trainer import BaseTrainer
 from tinytrain.metrics.label_info import LabelInfo
@@ -83,16 +84,17 @@ class YOLODetectionTrainer(BaseTrainer):
         """
         绘制标签统计信息图
         """
-        LOGGER.info(f"Start plotting label Statistics information before training...")
-        train_samples: list[DetectDataInfo] = self.train_dataloader.dataset.samples
-        labels = []
-        bboxes = []
-        for sample in train_samples:
-            labels.append(sample.label)
-            bboxes.append(sample.bboxes)
-        labels = np.concatenate(labels, axis=0)
-        bboxes = np.concatenate(bboxes, axis=0)
-        class_names = list(self.config_manager.dataset["names"].values())
+        if RANK in {-1,0}:
+            LOGGER.info(f"Start plotting label Statistics information before training...")
+            train_samples: list[DetectDataInfo] = self.train_dataloader.dataset.samples
+            labels = []
+            bboxes = []
+            for sample in train_samples:
+                labels.append(sample.label)
+                bboxes.append(sample.bboxes)
+            labels = np.concatenate(labels, axis=0)
+            bboxes = np.concatenate(bboxes, axis=0)
+            class_names = list(self.config_manager.dataset["names"].values())
 
-        label_info = LabelInfo(num_classes=self.config_manager.dataset["nc"], class_names=class_names, labels=labels, bboxes=bboxes)
-        label_info.plot(self.save_dir)
+            label_info = LabelInfo(num_classes=self.config_manager.dataset["nc"], class_names=class_names, labels=labels, bboxes=bboxes)
+            label_info.plot(self.save_dir)

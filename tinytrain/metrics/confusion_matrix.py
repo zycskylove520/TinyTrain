@@ -115,7 +115,7 @@ class DetectConfusionMatrix:
             iou_threshold (float): IoU 阈值，大于该值视为匹配成功。
         """
         self.num_classes = num_classes
-        self.class_names = class_names
+        self.class_names = class_names.copy()
         self.class_names.append("background")
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
@@ -149,10 +149,11 @@ class DetectConfusionMatrix:
                         self.confusion_matrix[self.num_classes, dc] += 1  # false positives FP
                 continue
 
+            # 图片有真实标签
+            gt_classes = t[:, 4].int()
+
             # 判断p是否为空tensor，即通过nms过滤后没有框
             if p.shape[0] == 0:
-                # 图片有真实标签
-                gt_classes = t[:, 4].int()
                 for gc in gt_classes:
                     self.confusion_matrix[gc, self.num_classes] += 1  # background FN
                 continue
@@ -161,9 +162,11 @@ class DetectConfusionMatrix:
             # 置信度过滤
             p = p[p[:, 4] > self.conf_threshold]
             if p.shape[0] == 0:
+                # 把当前图片所有 GT 记为 FN
+                for gc in gt_classes:
+                    self.confusion_matrix[gc, self.num_classes] += 1
                 continue
 
-            gt_classes = t[:, 4].int()
             detection_classes = p[:, 5].int()
 
             # 将box从cxcywh转为lxlyrxry格式
@@ -223,8 +226,8 @@ class DetectConfusionMatrix:
         plt.close()  # 关闭图像窗口，释放资源
 
         # 绘制归一化后的混淆矩阵
-        # 归一化处理：每一行除以该行的和
-        cm_normalized = confusion_matrix.astype('float') / (confusion_matrix.sum(axis=0, keepdims=True) + 1e-5)
+        # 按行归一化（真实类别为行）
+        cm_normalized = confusion_matrix.astype('float') / (confusion_matrix.sum(axis=1, keepdims=True) + 1e-5)
 
         plt.figure(figsize=(width * 2, height * 2))  # 设置图表大小
         sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',

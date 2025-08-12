@@ -33,6 +33,7 @@ class BaseValidator:
     - 所有耗时运算应放在 @torch.inference_mode() 下执行，以关闭梯度计算。
     - 支持 DDP；若需跨进程聚合指标，请在子类中自行实现。
     """
+
     def __init__(self, trainer: BaseTrainer, world_size: int):
         """
         初始化验证器。
@@ -102,6 +103,9 @@ class BaseValidator:
                 self.update_metrics_on_train_completed(outputs, batch_samples, pbar)
             else:
                 self.update_metrics_on_training(outputs, batch_samples, pbar)
+
+            if self.world_size > 1:
+                dist.barrier()
 
             self.callbacks.run_callback(self, "on_val_batch_end")
 
