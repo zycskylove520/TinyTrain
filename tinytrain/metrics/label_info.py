@@ -1,3 +1,5 @@
+from typing import Optional
+
 import cv2
 import numpy as np
 import pandas as pd
@@ -19,7 +21,7 @@ class LabelInfo:
     4. 一键保存所有图表 (`plot`)
     """
 
-    def __init__(self, num_classes: int, class_names: list[str], labels: np.ndarray, bboxes: np.ndarray):
+    def __init__(self, num_classes: int, class_names: list[str], labels: np.ndarray, bboxes: np.ndarray,max_samples: Optional[int] = None):
         """
         Args:
             num_classes (int): 类别总数。
@@ -29,6 +31,18 @@ class LabelInfo:
         """
         self.num_classes = num_classes
         self.class_names = class_names
+
+        # 抽样逻辑
+        if max_samples is not None and len(labels) > max_samples:
+            rng = np.random.default_rng(42)  # 固定随机种子，结果可复现
+            idx = rng.choice(len(labels), size=max_samples, replace=False)
+            self.labels = labels[idx]
+            self.bboxes = bboxes[idx]
+        else:
+            self.labels = labels
+            self.bboxes = bboxes
+
+        self.max_samples = max_samples
         self.labels = labels
         self.bboxes = bboxes
 

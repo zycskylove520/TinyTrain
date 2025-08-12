@@ -15,6 +15,7 @@ authors = [
 dependencies = [
     "albumentations",
     "chardet",
+    "faster-coco-eval",
     "lap",
     "loguru",
     "matplotlib",
