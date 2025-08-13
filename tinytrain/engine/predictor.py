@@ -94,8 +94,8 @@ class BasePredictor:
         # save dir
         save_dir = Path(config_manager.core["save_dir"]).resolve()
         project_name = config_manager.core["project_name"] or "default_project"
-        save_dir = save_dir / project_name
-        self.output_dir = create_iter_directory(save_dir, start_string="predict_")
+        self.save_dir = save_dir / project_name
+        self.output_dir = None
 
     # ------------------------------------------------------------------
     # 以下子类可重写的方法
@@ -158,6 +158,8 @@ class BasePredictor:
             Generator[Any, None, None] | list[Any]: 推理结果生成器或列表。
         """
         from tinytrain.utils.source_loader import SourceParserHub
+
+        self.output_dir= create_iter_directory(self.save_dir, start_string="predict_")
 
         self.callback.run_callback(self, "on_predict_start")
         try:

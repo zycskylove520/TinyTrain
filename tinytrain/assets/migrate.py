@@ -2,7 +2,7 @@ import torch
 
 
 def Migrate(old_model_pt, new_model_pt):
-    ckpt = torch.load(old_model_pt)
+    ckpt = torch.load(old_model_pt, weights_only=False)
     model_args = ckpt['model_args']
     for i, module in enumerate(model_args["network"]):
         if module["module"] == "nn.Upsample":

@@ -114,7 +114,6 @@ class BaseTrainer:
         # dataset dir
         self.train_dir: Path | list[Path] | None = None
         self.val_dir: Path | list[Path] | None = None
-        self.test_dir: Path | list[Path] | None = None
 
         # dataloader
         self.train_dataloader = None
@@ -178,7 +177,7 @@ class BaseTrainer:
         构建数据集实例。
 
         Args:
-            mode (str): 数据集模式，可选值为 "train"、"val" 或 "test"。
+            mode (str): 数据集模式，可选值为 "train"、"val"。
 
         Returns:
             Dataset: 数据集实例。
@@ -748,13 +747,15 @@ class BaseTrainer:
                 (Path(root) / self.config_manager.dataset[split_key]).resolve()
                 for root in root_dirs
             ]
-            return [d for d in dirs if d.exists()]
+            for d in dirs:
+                if not d.exists():
+                    raise FileNotFoundError(f"Dataset root: {d} not found.")
+            return dirs
 
         dataset_root_dirs = self.config_manager.dataset["path"]
 
         self.train_dir = _get_dirs(dataset_root_dirs, "train")
         self.val_dir = _get_dirs(dataset_root_dirs, "val")
-        self.test_dir = _get_dirs(dataset_root_dirs, "test")
 
     def check_amp(self, world_size: int):
         """
@@ -1139,7 +1140,7 @@ class BaseTrainer:
 
         Args:
             world_size (int): 分布式训练中的进程数量。
-            mode (str): 模式，"train"、"val" 或 "test"。
+            mode (str): 模式，"train"、"val"。
 
         Returns:
             DataLoader: 构建好的数据加载器。

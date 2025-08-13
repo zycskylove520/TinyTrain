@@ -38,6 +38,9 @@ def localization(font):
         font_prop = FontProperties(fname=local_font)
     else:
         print(f"Localizing font Loading: {font}")
+        import importlib
+        importlib.reload(matplotlib)
+
         # 方法一：直接删除字体缓存目录
         # shutil.rmtree(matplotlib.get_cachedir())
         # 方法二：移除缓存json文件
