@@ -4,7 +4,7 @@ import torchvision
 from .box_utils import cxcywh_2_lxlyrxry, lxlyrxry_2_cxcywh
 
 
-def detect_nms(pred: torch.Tensor, conf_threshold=0.25, nms_threshold=0.45, max_detect_num=300, max_nms_num=30000):
+def detect_nms(pred: torch.Tensor, conf_threshold=0.25, nms_threshold=0.45, max_detect_num=100, max_nms_num=30000):
     """
     专用于目标检测的非极大值抑制（NMS）。
     使用每类别最大概率作为置信度进行筛选与去重。

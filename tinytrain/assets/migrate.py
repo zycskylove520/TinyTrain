@@ -10,6 +10,6 @@ def Migrate(old_model_pt, new_model_pt):
     torch.save(ckpt, new_model_pt)
 
 if __name__ == '__main__':
-    old_model = r"old_model.pt"
+    old_model = r"best.pt"
     new_model = r"new_model.pt"
     Migrate(old_model, new_model)

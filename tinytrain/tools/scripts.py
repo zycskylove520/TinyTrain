@@ -253,12 +253,12 @@ def split_dataset(image_folder, label_folder, output_folder, split_ratios=(0.70,
         ... )
     """
     # 确保输出目录存在
-    os.makedirs(os.path.join(output_folder, "img", "train"), exist_ok=True)
-    os.makedirs(os.path.join(output_folder, "img", "val"), exist_ok=True)
-    os.makedirs(os.path.join(output_folder, "img", "test"), exist_ok=True)
-    os.makedirs(os.path.join(output_folder, "label", "train"), exist_ok=True)
-    os.makedirs(os.path.join(output_folder, "label", "test"), exist_ok=True)
-    os.makedirs(os.path.join(output_folder, "label", "val"), exist_ok=True)
+    os.makedirs(os.path.join(output_folder, "images", "train"), exist_ok=True)
+    os.makedirs(os.path.join(output_folder, "images", "val"), exist_ok=True)
+    os.makedirs(os.path.join(output_folder, "images", "test"), exist_ok=True)
+    os.makedirs(os.path.join(output_folder, "labels", "train"), exist_ok=True)
+    os.makedirs(os.path.join(output_folder, "labels", "test"), exist_ok=True)
+    os.makedirs(os.path.join(output_folder, "labels", "val"), exist_ok=True)
 
     # 获取所有图片和标签文件
     image_files = sorted([f for f in os.listdir(image_folder) if f.endswith(('.jpg', '.png', '.jpeg'))])
@@ -311,16 +311,16 @@ def split_dataset(image_folder, label_folder, output_folder, split_ratios=(0.70,
 
     # 复制文件到对应的目录
     print("复制训练集...")
-    copy_files(train_images, image_folder, os.path.join(output_folder, "img", "train"))
-    copy_files(train_labels, label_folder, os.path.join(output_folder, "label", "train"))
+    copy_files(train_images, image_folder, os.path.join(output_folder, "images", "train"))
+    copy_files(train_labels, label_folder, os.path.join(output_folder, "labels", "train"))
 
     print("复制验证集...")
-    copy_files(val_images, image_folder, os.path.join(output_folder, "img", "val"))
-    copy_files(val_labels, label_folder, os.path.join(output_folder, "label", "val"))
+    copy_files(val_images, image_folder, os.path.join(output_folder, "images", "val"))
+    copy_files(val_labels, label_folder, os.path.join(output_folder, "labels", "val"))
 
     print("复制测试集...")
-    copy_files(test_images, image_folder, os.path.join(output_folder, "img", "test"))
-    copy_files(test_labels, label_folder, os.path.join(output_folder, "label", "test"))
+    copy_files(test_images, image_folder, os.path.join(output_folder, "images", "test"))
+    copy_files(test_labels, label_folder, os.path.join(output_folder, "labels", "test"))
 
     print("数据集切分完成！")
 

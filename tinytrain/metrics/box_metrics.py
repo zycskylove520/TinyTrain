@@ -9,6 +9,7 @@ import torch.distributed as dist
 from pathlib import Path
 
 from tinytrain.global_var import WORLD_SIZE, RANK
+from tinytrain.utils import LOGGER
 
 
 class BoxMetrics:
@@ -25,49 +26,23 @@ class BoxMetrics:
     """
 
     def __init__(self,
-                 iou_thresholds: list = None,
-                 rec_thresholds: list = None,
-                 max_detection_thresholds: list = None,
                  class_metrics: bool = False,
-                 extended_summary: bool = True,
                  class_names: list = None,
                  ):
         """
         Args:
-            iou_thresholds (list[float] | None):
-                评估时使用的 IoU 阈值列表，默认 [0.5, 0.55, ..., 0.95]。
-            rec_thresholds (list[float] | None):
-                召回率采样点列表，默认 [0.0, 0.01, ..., 1.0]。
-            max_detection_thresholds (list[int] | None):
-                每张图最大检测框数量列表，默认 [1, 100, 300]。
             class_metrics (bool):
                 是否计算类别级指标。
-            extended_summary (bool):
-                是否返回扩展摘要（曲线、矩阵等）。
             class_names (list[str] | None):
                 类别名称列表，用于可视化时替换索引。
         """
-        self.iou_thresholds = iou_thresholds
-        self.rec_thresholds = rec_thresholds
-        self.max_detection_thresholds = max_detection_thresholds
         self.class_metrics = class_metrics
-        self.extended_summary = extended_summary
         self.class_names = class_names
 
-        if self.iou_thresholds is None:
-            self.iou_thresholds = torch.linspace(0.5, 0.95, round((0.95 - 0.5) / 0.05) + 1).tolist()
-        if self.rec_thresholds is None:
-            self.rec_thresholds = torch.linspace(0.0, 1.00, round(1.00 / 0.01) + 1).tolist()
-        if self.max_detection_thresholds is None:
-            self.max_detection_thresholds = [1, 100, 300]
         self.metrics = torchmetrics.detection.MeanAveragePrecision(box_format='cxcywh',
                                                                    iou_type='bbox',
-                                                                   iou_thresholds=self.iou_thresholds,
-                                                                   rec_thresholds=self.rec_thresholds,
                                                                    class_metrics=self.class_metrics,
-                                                                   extended_summary=self.extended_summary,
-                                                                   max_detection_thresholds=self.max_detection_thresholds,
-                                                                   backend="faster_coco_eval",
+                                                                   extended_summary=True,
                                                                    sync_on_compute=False  # 必须取消同步，使用单卡验证
                                                                    )
         self.results = None
@@ -151,20 +126,18 @@ class BoxMetrics:
         # all_recall_matrix的维度为：(TxKxAxM)
         # 其中T是 IoU 阈值的数量，K是类别数量， A是区域数量，M是每幅图像的最大检测数量。
         # 区域数量：默认四个区域，area=all、area=small、area=medium和area=large
-        # 最大检测数量：默认三个检测数量：1，100，300
-        if self.extended_summary:
-            all_recall_matrix = self.results["recall"]
-            # 只取area=all，并将所有检测数量情况计算平均的情况
-            self.recall_curve = torch.mean(all_recall_matrix[:, :, 0, :], -1)
+        # 最大检测数量：默认三个检测数量：1，10，100
+        all_recall_matrix = self.results["recall"]
+        # 只取area=all，并取最大检测数量=100
+        self.recall_curve = all_recall_matrix[:, :, 0, 2]
 
         # all_precision_matrix的维度为：(TxRxKxAxM)
         # 其中T是 IoU 阈值的数量，R是置信度阈值的数量，K是类别数量, A是区域数量，M是每幅图像的最大检测数量。
         # 区域数量：默认四个区域，area=all、area=small、area=medium和area=large
-        # 最大检测数量：默认三个检测数量：1，100，300
-        if self.extended_summary:
-            all_precision_matrix = self.results["precision"]
-            # 只取area=all，并将所有检测数量情况计算平均的情况
-            self.precision_curve = torch.mean(all_precision_matrix[:, :, :, 0, :], -1)
+        # 最大检测数量：默认三个检测数量：1，10，100
+        all_precision_matrix = self.results["precision"]
+        # 只取area=all，并取最大检测数量=100
+        self.precision_curve = all_precision_matrix[:, :, :, 0, 2]
 
     def map50(self):
         """
@@ -214,44 +187,49 @@ class BoxMetrics:
         """大目标 mAP"""
         return self.results["map_large"].item() if self.results else 0.
 
-    def mar_a(self):
+    def mar_1(self):
         """mAR@1"""
-        return self.results[f"mar_{self.max_detection_thresholds[0]}"].item() if self.results else 0.
+        return self.results[f"mar_1"].item() if self.results else 0.
 
-    def mar_b(self):
-        """mAR@100"""
-        return self.results[f"mar_{self.max_detection_thresholds[1]}"].item() if self.results else 0.
+    def mar_10(self):
+        """mAR@10"""
+        return self.results[f"mar_10"].item() if self.results else 0.
 
-    def mar_c(self):
+    def mar_100(self):
         """
-        返回模型在最大检测数为 300 时的平均召回率（mAR@300）。
+        返回模型在最大检测数为 100 时的平均召回率（mAR@100）。
 
-        mAR@300 是目标检测中的一个评估指标，表示在每个图像中最多检测 300 个目标时的平均召回率。
+        mAR@100 是目标检测中的一个评估指标，表示在每个图像中最多检测 100 个目标时的平均召回率。
         该指标衡量模型在固定检测数下的召回能力。
 
         Returns:
-            float: mAR@300 的值。如果 self.results 为空，则返回 0.0。
+            float: mAR@100 的值。如果 self.results 为空，则返回 0.0。
         """
-        return self.results[f"mar_{self.max_detection_thresholds[2]}"].item() if self.results else 0.
+        return self.results[f"mar_100"].item() if self.results else 0.
 
     def per_class_recall(self):
         """类别级 Recall@0.5"""
         # 只计算每个类别在iou=0.5的情况下的recall
+        LOGGER.info(f"Calculate iou=0.5, per class recall.")
         return self.recall_curve[0, :]
 
     def recall(self):
-        """总体 Recall"""
-        return max(self.per_class_recall().mean().item(), 0)
+        """
+        在 iou=0.5 下的总体 Recall
+        """
+        return self.recall_curve[0, :].mean().item() if self.results else 0.
 
     def per_class_precision(self, conf_threshold=0.25):
         """类别级 Precision@conf"""
         # 只计算每个类别在iou=0.5,conf=conf_threshold的情况下的precision
+        LOGGER.info(f"Calculate conf={conf_threshold} & iou=0.5, per class precision.")
         conf = int(conf_threshold * 100)
         return self.precision_curve[0, conf, :]
 
-    def precision(self):
-        """总体 Precision"""
-        return max(self.per_class_precision().mean().item(), 0)
+    def precision(self, conf_threshold=0.25):
+        """在 iou=0.5,conf=conf_threshold 下的总体 Precision"""
+        conf = int(conf_threshold * 100)
+        return self.precision_curve[0, conf, :].mean().item() if self.results else 0.
 
     def classes(self):
         """
@@ -263,88 +241,112 @@ class BoxMetrics:
             raise ValueError("box metrics no classes!")
 
     def plot_recall_curve(self, save_dir: Path):
-        """绘制 IoU-Recall 曲线（每类别）"""
+        """
+        绘制 Recall vs IoU 曲线：
+        单个类别 → 只画 1 条线（不额外画 Mean）
+        多个类别 → 每类别一条细线 + 一条 Mean
+        """
+        import matplotlib.lines as mlines
 
-        # 检查 class_names 是否为 None
+        # 类别名
         if self.class_names is None:
-            # 如果 class_names 为 None，使用默认的类别索引作为列名
-            column_names = [f'Class {i}' for i in range(self.classes())]
+            class_labels = [f'Class {i}' for i in self.classes()]
         else:
-            # 如果 class_names 不为 None，使用传入的类别名称作为列名
-            column_names = [self.class_names[i] for i in self.classes()]
+            class_labels = [self.class_names[i] for i in self.classes()]
+        n_classes = len(class_labels)
 
-        # 将数据转换为 Pandas DataFrame
-        data = pd.DataFrame(self.recall_curve.numpy(), columns=column_names)
-        data['IoU'] = np.array(self.iou_thresholds)
+        # 组装 DataFrame
+        df = pd.DataFrame(
+            self.recall_curve.numpy(),
+            columns=class_labels
+        )
+        df['IoU'] = np.array(self.metrics.iou_thresholds)
+        df_long = pd.melt(df,
+                          id_vars=['IoU'],
+                          var_name='Class',
+                          value_name='Recall')
 
-        # 将数据从宽格式转换为长格式
-        data_long = pd.melt(data, id_vars=['IoU'], var_name='Class', value_name='Recall')
+        plt.figure(figsize=(10, 6))
 
-        # 动态调整图形大小
-        K = self.recall_curve.shape[1]  # 类别数量
-        figsize = (12, 6 + K // 10)  # 根据类别数量调整高度
+        # 如果只有一个类别，只画类别线，不再画 Mean
+        if n_classes == 1:
+            sns.lineplot(data=df_long,
+                         x='IoU',
+                         y='Recall',
+                         color='tab:blue',
+                         linewidth=2.5,
+                         label=class_labels[0])
+        else:
+            # 类别曲线（细线）
+            sns.lineplot(data=df_long,
+                         x='IoU',
+                         y='Recall',
+                         hue='Class',
+                         palette='tab20',
+                         linewidth=1.2,
+                         legend=False)
+            # 平均曲线（粗黑线）
+            mean_recall = self.recall_curve.mean(dim=1).numpy()
+            mean_df = pd.DataFrame({'IoU': np.array(self.metrics.iou_thresholds),
+                                    'Recall': mean_recall,
+                                    'Class': 'Mean'})
+            sns.lineplot(data=mean_df,
+                         x='IoU',
+                         y='Recall',
+                         color='black',
+                         linewidth=3,
+                         label='Mean')
 
-        # 使用 Seaborn 绘制曲线
-        plt.figure(figsize=figsize)
-        sns.lineplot(data=data_long, x='IoU', y='Recall', hue='Class', palette='tab20')
+            # 图例：类别 + Mean
+            handles, labels = plt.gca().get_legend_handles_labels()
+            handles = handles[-1:] + handles[:-1]
+            labels = labels[-1:] + labels[:-1]
+            plt.legend(handles, labels,
+                       title='Class',
+                       loc='upper left',
+                       bbox_to_anchor=(1.02, 1),
+                       fontsize=8)
 
-        # 添加图例并调整位置和字体大小
-        plt.legend(title='Class', loc='upper left', bbox_to_anchor=(1, 1), fontsize=8)
-
-        # 添加标题和坐标轴标签
-        plt.title('Recall Curve for Each Class')
+        plt.title('Recall vs IoU Curve')
         plt.xlabel('IoU Threshold')
         plt.ylabel('Recall')
-
-        # 显示图形
-        plt.tight_layout(rect=(0, 0, 0.85, 1))  # 调整布局，留出空间给图例
-        # plt.show()
-
-        plt.savefig(save_dir / 'R_Curve.png')  # 保存为 PNG 文件
-        plt.close()  # 关闭图像窗口，释放资源
+        plt.tight_layout()
+        plt.savefig(save_dir / 'R_Curve.png', dpi=150)
+        plt.close()
 
     def plot_pr_curve(self, save_dir: Path):
         """
-        绘制 PR 曲线（IoU=0.5 时）
+        绘制 PR 曲线（IoU = 0.5, 0.75, 0.95）
         """
-        precision_recall_curve = self.precision_curve[0]
-        # 检查 class_names 是否为 None
-        if self.class_names is None:
-            # 如果 class_names 为 None，使用默认的类别索引作为列名
-            column_names = [f'Class {i}' for i in range(self.classes())]
-        else:
-            # 如果 class_names 不为 None，使用传入的类别名称作为列名
-            column_names = [self.class_names[i] for i in self.classes()]
+        target_iou_vals = [0.5, 0.75, 0.95]
+        idx_list = [0, 5, 9]  # precision_curve 对应下标
 
-        # 将数据转换为 Pandas DataFrame
-        data = pd.DataFrame(precision_recall_curve.numpy(), columns=column_names)
-        data['Recall'] = np.array(self.rec_thresholds)
+        dfs = []
+        for iou, idx in zip(target_iou_vals, idx_list):
+            # 在类别维度上取平均
+            prec = self.precision_curve[idx].mean(dim=1).numpy()  # shape [R]
+            df = pd.DataFrame({'Recall': np.array(self.metrics.rec_thresholds),
+                               'Precision': prec,
+                               'IoU': iou})
+            dfs.append(df)
 
-        # 将数据从宽格式转换为长格式
-        data_long = pd.melt(data, id_vars=['Recall'], var_name='Class', value_name='Precision')
+        data_long = pd.concat(dfs, ignore_index=True)
 
-        # 动态调整图形大小
-        K = precision_recall_curve.shape[1]  # 类别数量
-        figsize = (10, 6 + K // 10)  # 根据类别数量调整高度
+        plt.figure(figsize=(8, 6))
+        sns.lineplot(data=data_long,
+                     x='Recall',
+                     y='Precision',
+                     hue='IoU',
+                     palette='tab10',
+                     linewidth=2.5)
 
-        # 使用 Seaborn 绘制曲线
-        plt.figure(figsize=figsize)
-        sns.lineplot(data=data_long, x='Recall', y='Precision', hue='Class', palette='tab20')
-
-        # 添加图例并调整位置
-        plt.legend(title='Class', loc='upper left', bbox_to_anchor=(1, 1), fontsize='small')
-
-        # 添加标题和坐标轴标签
-        plt.title('Precision-Recall Curve for Each Class:iou=0.5')
+        plt.title('Precision-Recall Curve (IoU=0.5/0.75/0.95)')
         plt.xlabel('Recall')
         plt.ylabel('Precision')
-
-        # 显示图形
+        plt.legend(title='IoU')
         plt.tight_layout()
-        # plt.show()
-
-        plt.savefig(save_dir / 'PR_Curve.png')  # 保存为 PNG 文件
-        plt.close()  # 关闭图像窗口，释放资源
+        plt.savefig(save_dir / 'PR_Curve.png', dpi=150)
+        plt.close()
 
     def plot(self, save_dir: Path):
         """一键绘制所有曲线。"""

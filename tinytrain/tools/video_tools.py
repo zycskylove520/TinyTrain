@@ -222,11 +222,3 @@ def extract_frames(video_path, output_folder, save_every_nth_frame=1):
     cap.release()
     print(f"完成！共保存了 {save_count} 张图片到 {output_folder}")
 
-
-if __name__ == '__main__':
-    video_file = r""
-    image_folder = r""
-    start_time = ""
-    end_time = ""
-    fps = 1
-    video_to_images(video_file, image_folder, start_time, end_time, fps)
