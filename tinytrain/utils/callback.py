@@ -2,12 +2,47 @@
 统一回调管理器
 将训练、验证、推理、导出四阶段的所有钩子集中管理，支持动态增删与覆盖。
 """
+from enum import Enum
+from typing import Callable, Any, List, Dict
+
+class Events(str, Enum):
+    """训练阶段"""
+    ON_PREPARE_TRAIN_START = "on_prepare_train_start"
+    ON_PREPARE_TRAIN_END   = "on_prepare_train_end"
+    ON_TRAIN_START         = "on_train_start"
+    ON_TRAIN_EPOCH_START   = "on_train_epoch_start"
+    ON_TRAIN_BATCH_START   = "on_train_batch_start"
+    ON_BEFORE_ZERO_GRAD    = "on_before_zero_grad"
+    ON_TRAIN_BATCH_END     = "on_train_batch_end"
+    ON_TRAIN_EPOCH_END     = "on_train_epoch_end"
+    ON_MODEL_SAVE          = "on_model_save"
+    ON_TRAIN_END           = "on_train_end"
+
+    """验证阶段"""
+    ON_VAL_START       = "on_val_start"
+    ON_VAL_BATCH_START = "on_val_batch_start"
+    ON_VAL_BATCH_END   = "on_val_batch_end"
+    ON_VAL_END         = "on_val_end"
+
+    """推理阶段"""
+    ON_PREDICT_START            = "on_predict_start"
+    ON_PREDICT_BATCH_START      = "on_predict_batch_start"
+    ON_PREDICT_PREPROCESS_END   = "on_predict_preprocess_end"
+    ON_PREDICT_INFERENCE_END    = "on_predict_inference_end"
+    ON_PREDICT_BATCH_END        = "on_predict_batch_end"
+    ON_PREDICT_END              = "on_predict_end"
+
+    """导出阶段"""
+    ON_EXPORT_START = "on_export_start"
+    ON_EXPORT_END   = "on_export_end"
+
 
 class TrainerCallback:
     """
     训练阶段钩子
     生命周期：prepare → train → epoch → batch → save → end
     """
+
     def __init__(self):
         self.callbacks = {
             "on_prepare_train_start": [self.on_prepare_train_start],
@@ -112,6 +147,7 @@ class PredictorCallback:
     推理阶段钩子
     生命周期：predict → batch-start → preprocess → inference → batch-end → predict-end
     """
+
     def __init__(self):
         self.callbacks = {
             "on_predict_start": [self.on_predict_start],
@@ -176,37 +212,90 @@ class ExporterCallback:
         pass
 
 
+class CallbackWrapper:
+    def __init__(
+            self,
+            fn: Callable[[Any], None],
+            priority: int = 0,
+            once: bool = False,
+            swallow_exceptions: bool = True,
+    ):
+        self.fn = fn
+        self.priority = priority
+        self.once = once
+        self.swallow_exceptions = swallow_exceptions
+        self._called = False
+
+    def __call__(self, engine):
+        if self.once and self._called:
+            return
+        try:
+            self.fn(engine)
+        except Exception as e:
+            if not self.swallow_exceptions:
+                raise e
+            # 可以换成 logging
+            print(f"[Callback Error] {self.fn.__name__}: {e}")
+        finally:
+            self._called = True
+
+    def __lt__(self, other):  # 用于排序
+        return self.priority > other.priority  # 数字越大越优先
+
+
 class Callback:
     """
-    全局回调容器
-    整合 Trainer / Validator / Predictor / Exporter 的全部钩子，对外提供：
-    - add_callback:  追加自定义函数
-    - set_callback:  覆盖原有函数
-    - run_callback:  按事件名批量执行
+    全局回调管理器,支持优先级 / once / 覆盖
     """
+
     def __init__(self):
-        self._callbacks = {
-            **TrainerCallback().callbacks,
-            **ValidatorCallback().callbacks,
-            **PredictorCallback().callbacks,
-            **ExporterCallback().callbacks
+        self._callbacks: Dict[str, List[CallbackWrapper]] = {
+            event: [] for event in Events
         }
+        # 加载内置钩子
+        self._register_builtin()
 
-    def add_callback(self, event: str, callback):
-        """在指定事件后追加一个回调函数。"""
-        if event in self._callbacks:
-            self._callbacks[event].append(callback)
-        else:
-            raise KeyError(f"Callback event '{event}' does not exist.")
+    # --------------------------------------------------
+    # 内置钩子注册
+    def _register_builtin(self):
+        for cls in (TrainerCallback, ValidatorCallback,
+                    PredictorCallback, ExporterCallback):
+            instance = cls()
+            for event, funcs in instance.callbacks.items():
+                # 内置钩子优先级默认 -100，方便用户 override
+                for f in funcs:
+                    self.add_callback(event, f, priority=-100)
 
-    def set_callback(self, event: str, callback):
-        """用新回调函数覆盖指定事件的所有回调。"""
-        if event in self._callbacks:
-            self._callbacks[event] = [callback]
+    # --------------------------------------------------
+    # 统一增删改查
+    def add_callback(
+            self,
+            event: str | Events,
+            callback: Callable[[Any], None],
+            priority: int = 0,
+            once: bool = False,
+            override: bool = False,
+    ):
+        wrapper = CallbackWrapper(callback, priority, once)
+        if override:
+            self._callbacks[event] = [wrapper]
         else:
-            raise KeyError(f"Callback event '{event}' does not exist.")
+            self._callbacks[event].append(wrapper)
+            self._callbacks[event].sort()
+
+    def set_callback(self, event: str, callback: Callable[[Any], None]):
+        self.add_callback(event, callback, override=True)
+
+    def remove_callback(self, event: str, callback: Callable):
+        self._callbacks[event] = [
+            w for w in self._callbacks[event] if w.fn != callback
+        ]
 
     def run_callback(self, engine, event: str):
-        """执行与事件关联的所有回调函数。"""
-        for callback in self._callbacks.get(event, []):
-            callback(engine)
+        for wrapper in self._callbacks.get(event, []):
+            wrapper(engine)
+
+    # --------------------------------------------------
+    # 帮助调试：列出所有已注册事件和钩子数量
+    def summary(self):
+        return {e: len(cbs) for e, cbs in self._callbacks.items() if cbs}

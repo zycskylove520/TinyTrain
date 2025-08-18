@@ -19,7 +19,7 @@ from torch.utils.data.dataloader import DataLoader
 from tinytrain.cfg.config_manager import ConfigManager
 from tinytrain.data.data_format import BaseBatchDataInfo
 from tinytrain.global_var import RANK, NUM_THREADS, LOCAL_RANK, WORLD_SIZE
-from tinytrain.metrics.train_result import TrainResult
+from tinytrain.metrics.base.train_result import TrainResult
 from tinytrain.utils import LOGGER
 from tinytrain.utils.TT_progress_bar import TTProgressBar
 from tinytrain.utils.any_utils import set_random_seed, create_iter_directory, maybe_limit_num_workers

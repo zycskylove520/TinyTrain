@@ -56,8 +56,8 @@ class YOLOClassificationValidator(BaseValidator):
         self.topn.update(outputs[0], batch_samples.target)
 
         # metrics result
-        top1_accuracy = self.top1.result()
-        topn_accuracy = self.topn.result()
+        top1_accuracy = self.top1.compute()
+        topn_accuracy = self.topn.compute()
 
         # log update
         topn_acc = f"Top{self.n}_Acc"
@@ -68,8 +68,8 @@ class YOLOClassificationValidator(BaseValidator):
 
     def end_metrics_on_training(self, pbar: TTProgressBar):
         # metrics result
-        top1_accuracy = self.top1.result()
-        topn_accuracy = self.topn.result()
+        top1_accuracy = self.top1.compute()
+        topn_accuracy = self.topn.compute()
 
         topn_acc = f"top{self.n}_accuracy"
 
@@ -97,7 +97,7 @@ class YOLOClassificationValidator(BaseValidator):
 
     def end_metrics_on_train_completed(self, pbar: TTProgressBar):
         # log
-        acc_results = self.single_classes_acc.result()
+        acc_results = self.single_classes_acc.compute()
         for i in range(self.num_classes):
             progress_str = f"{'val':^5}|{self.class_names[i]:^15}|{acc_results[i]:^15.3f}|"
             print(progress_str)
@@ -106,4 +106,4 @@ class YOLOClassificationValidator(BaseValidator):
         self.confuse_matrix.plot(self.save_dir)
 
     def get_fitness(self) -> float:
-        return (self.top1.result() + self.topn.result()) / 2
+        return (self.top1.compute() + self.topn.compute()) / 2

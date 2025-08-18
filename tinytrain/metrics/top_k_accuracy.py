@@ -1,7 +1,9 @@
 import torch
 
+from tinytrain.metrics.base.base_metrics import BaseMetric
 
-class ClassifyTopKAccuracy:
+
+class ClassifyTopKAccuracy(BaseMetric):
     """
     分类任务 Top-k 准确率（Top-k Accuracy）指标。
 
@@ -23,6 +25,7 @@ class ClassifyTopKAccuracy:
         Args:
             k (int): 前 k 个预测中只要包含真实标签即算正确。
         """
+        super().__init__()
         self.k = k
         self.num_correct = 0
         self.num_total = 0
@@ -45,7 +48,7 @@ class ClassifyTopKAccuracy:
         self.num_total += label.shape[0]
         self.num_correct += (predicted == label.unsqueeze(1)).sum().item()
 
-    def result(self):
+    def compute(self):
         """
         返回百分比形式的 Top-k 准确率。
 
@@ -55,7 +58,7 @@ class ClassifyTopKAccuracy:
         return 100 * self.num_correct / self.num_total
 
 
-class ClassifySingleClassesAccuracy:
+class ClassifySingleClassesAccuracy(BaseMetric):
     """
     逐类别准确率计算器。
 
@@ -79,6 +82,7 @@ class ClassifySingleClassesAccuracy:
             classes_name (list[str] | None): 类别名称列表，长度需等于 num_classes。
             k (int): 当前固定为 1（Top-1 准确率）。
         """
+        super().__init__()
         self.num_classes = num_classes
         self.classes_name = classes_name
         self.k = k
@@ -106,7 +110,7 @@ class ClassifySingleClassesAccuracy:
             self.class_correct[label_] += bool_classes[i].item()
             self.class_total[label_] += 1
 
-    def result(self):
+    def compute(self):
         """
         返回每个类别的准确率列表。
 

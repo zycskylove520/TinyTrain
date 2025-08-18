@@ -379,7 +379,7 @@ class BaseModel(nn.Module):
         depth = scale_info["depth"]
         width = scale_info.get("width", None)
         LOGGER.info(f"start parse model...")
-        _struct_info = f"model scale:{scale}," + f" depth:{scale_info['depth']}" + "." if width is None else f", width:{width}"
+        _struct_info = f"model scale:{scale}," + f" depth:{scale_info['depth']}" + ("." if width is None else f", width:{width}")
         print(_struct_info)
         print(f"{self.__class__.__name__} struct:")
         print(

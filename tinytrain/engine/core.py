@@ -31,7 +31,7 @@ class Core:
     4. 支持进程名修改、回调钩子、DDP 启动路径保存等辅助特性。
     """
 
-    def __init__(self, link_file: str | Path):
+    def __init__(self, link_file: str | Path, callback: Callback = None):
         """
         初始化 Core，加载 link 配置并注册各 engine 的占位符。
 
@@ -40,13 +40,12 @@ class Core:
         """
         # register manager and components
         self.config_manager = ConfigManager(link_file=link_file)
-        # self.config_manager.register_name = self.__class__.__name__
         self.register_components()
 
         self.task: str | None = None
 
         # register callback
-        self.callbacks = Callback()
+        self.callback = callback if callback else Callback()
 
         # register engine
         self.model: BaseModel | None = None
@@ -275,7 +274,7 @@ class Core:
         self.trainer = TTEngineRegistry.get(self.config_manager, "trainer")(
             config_manager=self.config_manager,
             model=self.model,
-            callback=self.callbacks,
+            callback=self.callback,
             main_script_path=self.main_script_path
         )
 
@@ -292,7 +291,7 @@ class Core:
             self.predictor = TTEngineRegistry.get(self.config_manager, "predictor")(
                 config_manager=self.config_manager,
                 model=self.model,
-                callback=self.callbacks,
+                callback=self.callback,
                 **kwargs
             )
             return
@@ -311,7 +310,7 @@ class Core:
             self.predictor = TTEngineRegistry.get(self.config_manager, "predictor")(
                 config_manager=self.config_manager,
                 model=self.model,
-                callback=self.callbacks,
+                callback=self.callback,
                 **kwargs
             )
             return
@@ -321,7 +320,7 @@ class Core:
             self.predictor = TTEngineRegistry.get(self.config_manager, "predictor")(
                 config_manager=self.config_manager,
                 model=model_path,  # 直接把文件路径传进去
-                callback=self.callbacks,
+                callback=self.callback,
                 backend=backend,
                 **kwargs
             )
@@ -338,7 +337,7 @@ class Core:
             self.exporter = TTEngineRegistry.get(self.config_manager, "exporter")(
                 config_manager=self.config_manager,
                 model=self.model,
-                callback=self.callbacks,
+                callback=self.callback,
                 backend=backend,
                 **kwargs
             )
@@ -361,7 +360,7 @@ class Core:
         self.exporter = TTEngineRegistry.get(self.config_manager, "exporter")(
             config_manager=self.config_manager,
             model=self.model,
-            callback=self.callbacks,
+            callback=self.callback,
             backend=backend,
             **kwargs
         )

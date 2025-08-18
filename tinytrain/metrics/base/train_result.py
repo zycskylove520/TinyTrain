@@ -1,11 +1,9 @@
 import math
 import subprocess
-
 import numpy as np
+import torch
 
 from pathlib import Path
-
-import torch
 from matplotlib import pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 

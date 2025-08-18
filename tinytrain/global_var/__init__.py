@@ -38,30 +38,29 @@ def localization(font):
         font_prop = FontProperties(fname=local_font)
     else:
         print(f"Localizing font Loading: {font}")
-        import importlib
-        importlib.reload(matplotlib)
-
-        # 方法一：直接删除字体缓存目录
-        # shutil.rmtree(matplotlib.get_cachedir())
-        # 方法二：移除缓存json文件
-        cache_dir = matplotlib.get_cachedir()
-        cache_files = os.listdir(cache_dir)
-        for cache_file in cache_files:
-            if cache_file.split(".")[-1] == "json":
-                os.remove(os.path.join(cache_dir, cache_file))
 
         # 拷贝新字体
         remote_font = ASSETS_PATH / f"fonts/{font}"
         shutil.copy(remote_font, font_dir)
+
+        # 方法一：直接删除字体缓存目录
+        # shutil.rmtree(matplotlib.get_cachedir())
+        # 方法二：移除缓存json文件
+        cache_dir = Path(matplotlib.get_cachedir())
+        for json_file in cache_dir.glob("*.json"):
+            json_file.unlink()
+
+        # 立即加入字体并扫描
         fm.fontManager.addfont(remote_font)
         font_prop = FontProperties(fname=remote_font)
 
-        # 重新导入 matplotlib，刷新缓存加载新字体
-        import importlib
-        importlib.reload(matplotlib)
-
     plt.rcParams['font.family'] = font_prop.get_name()
     plt.rcParams['axes.unicode_minus'] = False  # 正确显示负号
+
+    # 强制生成缓存
+    plt.figure().text(0.5, 0.5, "中文测试", ha='center')
+    plt.savefig(os.devnull)  # /dev/null，立即丢弃
+    plt.close()
 
 
 localization("SourceHanSansSC-Normal.otf")  # 在这里修改自己喜欢的字体

@@ -95,7 +95,6 @@ class ClassifyConfusionMatrix:
         plt.close()  # 关闭图像窗口，释放资源
 
 
-
 class DetectConfusionMatrix:
     """
     检测任务专用混淆矩阵工具。
@@ -106,6 +105,7 @@ class DetectConfusionMatrix:
     2. 额外引入“背景”类别，用于表示漏检（FN）与误检（FP）。
     3. 支持重置、增量更新、绘制原始/归一化矩阵。
     """
+
     def __init__(self, num_classes: int, class_names: list[str], conf_threshold=0.25, iou_threshold=0.45):
         """
         Args:

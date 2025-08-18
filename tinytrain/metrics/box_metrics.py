@@ -9,10 +9,11 @@ import torch.distributed as dist
 from pathlib import Path
 
 from tinytrain.global_var import WORLD_SIZE, RANK
+from tinytrain.metrics.base.base_metrics import BaseMetric
 from tinytrain.utils import LOGGER
 
 
-class BoxMetrics:
+class BoxMetrics(BaseMetric):
     """
     检测任务统一评估指标封装类，基于 torchmetrics.detection.MeanAveragePrecision。
 
@@ -36,6 +37,7 @@ class BoxMetrics:
             class_names (list[str] | None):
                 类别名称列表，用于可视化时替换索引。
         """
+        super(BoxMetrics, self).__init__()
         self.class_metrics = class_metrics
         self.class_names = class_names
 
