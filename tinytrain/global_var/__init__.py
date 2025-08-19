@@ -1,3 +1,4 @@
+import io
 import os
 import shutil
 import warnings
@@ -30,6 +31,7 @@ warnings.filterwarnings("ignore", module="albumentations.*")
 # opencv
 cv2.setNumThreads(NUM_THREADS)  # 在模块初始化时设置一次
 
+
 # font
 def localization(font):
     font_dir = Path(matplotlib.matplotlib_fname()).parent / "fonts/ttf/"
@@ -58,9 +60,11 @@ def localization(font):
     plt.rcParams['axes.unicode_minus'] = False  # 正确显示负号
 
     # 强制生成缓存
+    buf = io.BytesIO()
     plt.figure().text(0.5, 0.5, "中文测试", ha='center')
-    plt.savefig(os.devnull)  # /dev/null，立即丢弃
+    plt.savefig(buf, format='png')  # 直接写内存
     plt.close()
+    buf.close()  # 立即释放内存
 
 
 localization("SourceHanSansSC-Normal.otf")  # 在这里修改自己喜欢的字体

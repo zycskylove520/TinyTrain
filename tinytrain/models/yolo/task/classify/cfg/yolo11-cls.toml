@@ -1,6 +1,5 @@
 # YOLO11-cls image classification model_config.
 
-# number of classes
 scale = "n"
 
 # model_config compound scaling constants

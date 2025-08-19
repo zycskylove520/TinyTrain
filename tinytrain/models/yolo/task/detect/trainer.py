@@ -96,5 +96,5 @@ class YOLODetectionTrainer(BaseTrainer):
             bboxes = np.concatenate(bboxes, axis=0)
             class_names = list(self.config_manager.dataset["names"].values())
 
-            label_info = LabelInfo(num_classes=self.config_manager.dataset["nc"], class_names=class_names, labels=labels, bboxes=bboxes, max_samples=10000)
+            label_info = LabelInfo(num_classes=self.config_manager.dataset["nc"], class_names=class_names, labels=labels, bboxes=bboxes, max_samples=1000)
             label_info.plot(self.save_dir)

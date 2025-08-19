@@ -186,3 +186,64 @@ class YOLOModel(BaseModel):
             log_info.append(_info)
 
         return layers, record_list, ask_set, log_info
+
+    def _model_log(self):
+        """
+        打印模型结构摘要到日志与终端。
+        """
+
+
+        # 获取对齐长度，打印会更好看
+        align_len = dict({"layer": 5, "type": 4, "repeat": 6, "from": 4, "module": 6, "args": 4})
+        for layer, info in enumerate(self.log_info):
+            layer_len = len(str(layer))
+            if align_len["layer"] < layer_len:
+                align_len["layer"] = layer_len
+
+            type_len = len(str(info["type"]))
+            if align_len["type"] < type_len:
+                align_len["type"] = type_len
+
+            repeat_len = len(str(info["repeat"]))
+            if align_len["repeat"] < repeat_len:
+                align_len["repeat"] = repeat_len
+
+            from_len = len(str(info["from"]))
+            if align_len["from"] < from_len:
+                align_len["from"] = from_len
+
+            module_len = len(str(info["module"]))
+            if align_len["module"] < module_len:
+                align_len["module"] = module_len
+
+            args_len = len(str(info.get("args", 0)))
+            if align_len["args"] < args_len:
+                align_len["args"] = args_len
+
+        scale = self.config_manager.model["scale"]
+        scale_info = self.config_manager.model["scales"][scale]
+        depth = scale_info["depth"]
+        width = scale_info["width"]
+        LOGGER.info(f"start parse model...")
+        _struct_info = f"current model scale:{scale}," + f" depth:{depth}" + ("." if width else f", width:{width}")
+        print(_struct_info)
+        print(f"{self.__class__.__name__} struct:")
+        print(
+            f"|{'layer':^{align_len['layer']}}"
+            f"|{'type':^{align_len['type']}}"
+            f"|{'repeat':^{align_len['repeat']}}"
+            f"|{'from':^{align_len['from']}}"
+            f"|{'module':^{align_len['module']}}"
+            f"|{'args':^{align_len['args']}}|"
+        )
+        for layer, info in enumerate(self.log_info):
+            _repeat = max(round(info["repeat"] * depth), 1) if info["repeat"] > 1 else info["repeat"]
+            print(
+                f"|{layer: ^{align_len['layer']}}"
+                f"|{info['type']:^{align_len['type']}}"
+                f"|{_repeat:^{align_len['repeat']}}"
+                f"|{str(info['from']):^{align_len['from']}}"
+                f"|{info['module']:^{align_len['module']}}"
+                f"|{str(info.get('args', {})):<{align_len['args']}}|"
+            )
+        print(f"model summary: {scale_info['summary']}\n")

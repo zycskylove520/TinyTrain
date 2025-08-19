@@ -151,7 +151,7 @@ class BoxMetrics(BaseMetric):
         Returns:
             float: mAP@0.5 的值。如果 self.results 为空，则返回 0.0。
         """
-        return self.results["map_50"].item() if self.results else 0.
+        return max(self.results["map_50"].item(), 0.) if self.results else 0.
 
     def map75(self):
         """
@@ -163,7 +163,7 @@ class BoxMetrics(BaseMetric):
         Returns:
             float: mAP@0.75 的值。如果 self.results 为空，则返回 0.0。
         """
-        return self.results["map_75"].item() if self.results else 0.
+        return max(self.results["map_75"].item(), 0.) if self.results else 0.
 
     def map50_95(self):
         """
@@ -175,27 +175,27 @@ class BoxMetrics(BaseMetric):
         Returns:
             float: mAP@[0.5:0.95] 的值。如果 self.results 为空，则返回 0.0。
         """
-        return self.results["map"].item() if self.results else 0.
+        return max(self.results["map"].item(), 0.) if self.results else 0.
 
     def map_small(self):
         """小目标 mAP"""
-        return self.results["map_small"].item() if self.results else 0.
+        return max(self.results["map_small"].item(), 0.) if self.results else 0.
 
     def map_medium(self):
         """中目标 mAP"""
-        return self.results["map_medium"].item() if self.results else 0.
+        return max(self.results["map_medium"].item(), 0.) if self.results else 0.
 
     def map_large(self):
         """大目标 mAP"""
-        return self.results["map_large"].item() if self.results else 0.
+        return max(self.results["map_large"].item(), 0.) if self.results else 0.
 
     def mar_1(self):
         """mAR@1"""
-        return self.results[f"mar_1"].item() if self.results else 0.
+        return max(self.results[f"mar_1"].item(), 0.) if self.results else 0.
 
     def mar_10(self):
         """mAR@10"""
-        return self.results[f"mar_10"].item() if self.results else 0.
+        return max(self.results[f"mar_10"].item(), 0.) if self.results else 0.
 
     def mar_100(self):
         """
@@ -207,7 +207,7 @@ class BoxMetrics(BaseMetric):
         Returns:
             float: mAR@100 的值。如果 self.results 为空，则返回 0.0。
         """
-        return self.results[f"mar_100"].item() if self.results else 0.
+        return max(self.results[f"mar_100"].item(), 0.) if self.results else 0.
 
     def per_class_recall(self):
         """类别级 Recall@0.5"""
@@ -219,7 +219,7 @@ class BoxMetrics(BaseMetric):
         """
         在 iou=0.5 下的总体 Recall
         """
-        return self.recall_curve[0, :].mean().item() if self.results else 0.
+        return max(self.recall_curve[0, :].mean().item(), 0.) if self.results else 0.
 
     def per_class_precision(self, conf_threshold=0.25):
         """类别级 Precision@conf"""
@@ -231,7 +231,7 @@ class BoxMetrics(BaseMetric):
     def precision(self, conf_threshold=0.25):
         """在 iou=0.5,conf=conf_threshold 下的总体 Precision"""
         conf = int(conf_threshold * 100)
-        return self.precision_curve[0, conf, :].mean().item() if self.results else 0.
+        return max(self.precision_curve[0, conf, :].mean().item(), 0.) if self.results else 0.
 
     def classes(self):
         """
@@ -248,7 +248,6 @@ class BoxMetrics(BaseMetric):
         单个类别 → 只画 1 条线（不额外画 Mean）
         多个类别 → 每类别一条细线 + 一条 Mean
         """
-        import matplotlib.lines as mlines
 
         # 类别名
         if self.class_names is None:

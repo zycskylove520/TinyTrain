@@ -1,35 +1,34 @@
-# YOLO11-det model_config.
+# YOLOv8-det model_config.
 
-# number of classes
 scale = "n"
 
 # model_config compound scaling constants
 [scales.n]
-depth = 0.50
+depth = 0.33
 width = 0.25
-summary = "319 layers, 2624080 parameters, 2624064 gradients, 6.6 GFLOPs"
+summary = "225 layers, 3157200 parameters, 3157184 gradients, 8.9 GFLOPs"
 
 [scales.s]
-depth = 0.50
+depth = 0.33
 width = 0.50
-summary = "319 layers, 9458752 parameters, 9458736 gradients, 21.7 GFLOPs"
+summary = "225 layers, 11166560 parameters, 11166544 gradients, 28.8 GFLOPs"
 
 [scales.m]
-depth = 0.50
-width = 1.00
-summary = "409 layers, 20114688 parameters, 20114672 gradients, 68.5 GFLOPs"
+depth = 0.67
+width = 0.75
+summary = "295 layers, 25902640 parameters, 25902624 gradients, 79.3 GFLOPs"
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "631 layers, 25372160 parameters, 25372144 gradients, 87.6 GFLOPs"
+summary = "365 layers, 43691520 parameters, 43691504 gradients, 165.7 GFLOPs"
 
 [scales.x]
 depth = 1.00
-width = 1.50
-summary = "631 layers, 56966176 parameters, 56966160 gradients, 196.0 GFLOPs"
+width = 1.25
+summary = "365 layers, 68229648 parameters, 68229632 gradients, 258.5 GFLOPs"
 
-# YOLO11n-det backbone
+# ----------------------------backbone---------------------------------
 [[network]]
 # 0-P1/2
 type = "entry"
@@ -53,63 +52,60 @@ args.kernel_size = 3
 args.stride = 2
 
 [[network]]
+# 2
 type = "flow"
-module = "C3k2"
-repeat = 1
+module = "C2f"
+repeat = 3
 from = [-1]
 args.in_channels = 128
-args.out_channels = 256
-args.n = 2
-args.c3k = false
-args.hidden_channels = 0.25
+args.out_channels = 128
+args.shortcut = true
 
-# ----------------------------backbone---------------------------------
 [[network]]
 # 3-P3/8
 type = "flow"
 module = "Conv"
 repeat = 1
 from = [-1]
-args.in_channels = 256
+args.in_channels = 128
 args.out_channels = 256
 args.kernel_size = 3
 args.stride = 2
 
 [[network]]
+# 4
 type = "flow"
-module = "C3k2"
+module = "C2f"
+repeat = 6
+from = [-1]
+args.in_channels = 256
+args.out_channels = 256
+args.shortcut = true
+
+[[network]]
+# 5-P4/16
+type = "flow"
+module = "Conv"
 repeat = 1
 from = [-1]
 args.in_channels = 256
 args.out_channels = 512
-args.n = 2
-args.c3k = false
-args.hidden_channels = 0.25
-
-[[network]]
-type = "flow"
-# 5-P4/16
-module = "Conv"
-repeat = 1
-from = [-1]
-args.in_channels = 512
-args.out_channels = 512
 args.kernel_size = 3
 args.stride = 2
 
 [[network]]
+# 6
 type = "flow"
-module = "C3k2"
-repeat = 1
+module = "C2f"
+repeat = 6
 from = [-1]
 args.in_channels = 512
 args.out_channels = 512
-args.n = 2
-args.c3k = true
+args.shortcut = true
 
 [[network]]
-type = "flow"
 # 7-P5/32
+type = "flow"
 module = "Conv"
 repeat = 1
 from = [-1]
@@ -119,14 +115,14 @@ args.kernel_size = 3
 args.stride = 2
 
 [[network]]
+# 8
 type = "flow"
-module = "C3k2"
-repeat = 1
+module = "C2f"
+repeat = 3
 from = [-1]
 args.in_channels = 1024
 args.out_channels = 1024
-args.n = 2
-args.c3k = true
+args.shortcut = true
 
 [[network]]
 # 9
@@ -138,18 +134,9 @@ args.in_channels = 1024
 args.out_channels = 1024
 args.kernel_size = 5
 
-[[network]]
-# 10
-type = "flow"
-module = "C2PSA"
-repeat = 1
-from = [-1]
-args.in_channels = 1024
-args.out_channels = 1024
-args.n = 2
-
 # ----------------------------------head--------------------------------------
 [[network]]
+# 10
 type = "flow"
 module = "torch.nn.Upsample"
 repeat = 1
@@ -158,23 +145,32 @@ args.scale_factor = 2
 args.mode = "nearest"
 
 [[network]]
+# 11 cat backbone P4
 type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 6]
-args.dimension = 1
 
 [[network]]
+# 12
 type = "flow"
-module = "C3k2"
+module = "C2f"
 repeat = 1
 from = [-1]
 args.in_channels = 1536
 args.out_channels = 512
-args.n = 2
-args.c3k = false
 
 [[network]]
+# 13
+type = "flow"
+module = "C2f"
+repeat = 2
+from = [-1]
+args.in_channels = 512
+args.out_channels = 512
+
+[[network]]
+# 14
 type = "flow"
 module = "torch.nn.Upsample"
 repeat = 1
@@ -183,23 +179,32 @@ args.scale_factor = 2
 args.mode = "nearest"
 
 [[network]]
+# 15 cat backbone P3
 type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 4]
-args.dimension = 1
 
 [[network]]
+# 16
 type = "flow"
-module = "C3k2"
+module = "C2f"
 repeat = 1
 from = [-1]
-args.in_channels = 1024
+args.in_channels = 768
 args.out_channels = 256
-args.n = 2
-args.c3k = false
 
 [[network]]
+# 17 (P3/8-small)
+type = "flow"
+module = "C2f"
+repeat = 2
+from = [-1]
+args.in_channels = 256
+args.out_channels = 256
+
+[[network]]
+# 18
 type = "flow"
 module = "Conv"
 repeat = 1
@@ -210,23 +215,32 @@ args.kernel_size = 3
 args.stride = 2
 
 [[network]]
+# 19 cat head P4
 type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 13]
-args.dimension = 1
 
 [[network]]
+# 20
 type = "flow"
-module = "C3k2"
+module = "C2f"
 repeat = 1
 from = [-1]
 args.in_channels = 768
 args.out_channels = 512
-args.n = 2
-args.c3k = false
 
 [[network]]
+# 21 (P4/16-medium)
+type = "flow"
+module = "C2f"
+repeat = 2
+from = [-1]
+args.in_channels = 512
+args.out_channels = 512
+
+[[network]]
+# 22
 type = "flow"
 module = "Conv"
 repeat = 1
@@ -237,29 +251,39 @@ args.kernel_size = 3
 args.stride = 2
 
 [[network]]
+# 23 cat head P5
 type = "flow"
 module = "Concat"
 repeat = 1
-from = [-1, 10]
-args.dimension = 1
+from = [-1, 9]
 
 [[network]]
+# 24
 type = "flow"
-module = "C3k2"
+module = "C2f"
 repeat = 1
 from = [-1]
 args.in_channels = 1536
 args.out_channels = 1024
-args.n = 2
-args.c3k = false
 
 [[network]]
+# 25 (P5/32-large)
+type = "flow"
+module = "C2f"
+repeat = 2
+from = [-1]
+args.in_channels = 1024
+args.out_channels = 1024
+
+[[network]]
+# 26
 type = "flow"
 module = "Combine"
 repeat = 1
-from = [16, 19, 22]
+from = [17, 21, 25]
 
 [[network]]
+# 27 Detect(P3, P4, P5)
 type = "head"
 module = "YOLODetect"
 repeat = 1

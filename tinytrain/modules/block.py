@@ -4,10 +4,27 @@
 import torch
 import torch.nn as nn
 
-from .conv import Conv
+from .conv import Conv, DWConv, GhostConv
 
 from tinytrain.cfg.TT_register import TTModuleRegistry
 
+@TTModuleRegistry.register
+class C2(nn.Module):
+    """CSP Bottleneck with 2 convolutions."""
+
+    def __init__(self, in_channels, out_channels, n=1, shortcut=True, groups=1, e=0.5):
+        """Initializes a CSP Bottleneck with 2 convolutions and optional shortcut connection."""
+        super().__init__()
+        self.c = int(out_channels * e)  # hidden channels
+        self.cv1 = Conv(in_channels, 2 * self.c, 1, 1)
+        self.cv2 = Conv(2 * self.c, out_channels, 1)  # optional act=FReLU(out_channels)
+        # self.attention = ChannelAttention(2 * self.c)  # or SpatialAttention()
+        self.m = nn.Sequential(*(Bottleneck(self.c, self.c, shortcut, groups, kernel_size=((3, 3), (3, 3)), hidden_channels=1.0) for _ in range(n)))
+
+    def forward(self, x):
+        """Forward pass through the CSP bottleneck with 2 convolutions."""
+        a, b = self.cv1(x).chunk(2, 1)
+        return self.cv2(torch.cat((self.m(a), b), 1))
 
 @TTModuleRegistry.register
 class C2f(nn.Module):
@@ -44,6 +61,39 @@ class C3(nn.Module):
     def forward(self, x):
         """Forward pass through the CSP bottleneck with 2 convolutions."""
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
+
+
+@TTModuleRegistry.register
+class C3Ghost(C3):
+    """C3 module with GhostBottleneck()."""
+
+    def __init__(self, in_channels, out_channels, n=1, shortcut=True, g=1, e=0.5):
+        """Initialize 'SPP' module with various pooling sizes for spatial pyramid pooling."""
+        super().__init__(in_channels, out_channels, n, shortcut, g, e)
+        c_ = int(out_channels * e)  # hidden channels
+        self.m = nn.Sequential(*(GhostBottleneck(c_, c_) for _ in range(n)))
+
+
+@TTModuleRegistry.register
+class GhostBottleneck(nn.Module):
+    """Ghost Bottleneck https://github.com/huawei-noah/ghostnet."""
+
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1):
+        """Initializes GhostBottleneck module with arguments ch_in, ch_out, kernel, stride."""
+        super().__init__()
+        c_ = out_channels // 2
+        self.conv = nn.Sequential(
+            GhostConv(in_channels, c_, 1, 1),  # pw
+            DWConv(c_, c_, kernel_size, stride, act=False) if stride == 2 else nn.Identity(),  # dw
+            GhostConv(c_, out_channels, 1, 1, act=False),  # pw-linear
+        )
+        self.shortcut = (
+            nn.Sequential(DWConv(in_channels, in_channels, kernel_size, stride, act=False), Conv(in_channels, out_channels, 1, 1, act=False)) if stride == 2 else nn.Identity()
+        )
+
+    def forward(self, x):
+        """Applies skip connection and concatenation to input tensor."""
+        return self.conv(x) + self.shortcut(x)
 
 
 @TTModuleRegistry.register
@@ -218,6 +268,24 @@ class Attention(nn.Module):
         x = (v @ attn.transpose(-2, -1)).view(B, C, H, W) + self.pe(v.reshape(B, C, H, W))
         x = self.proj(x)
         return x
+
+
+@TTModuleRegistry.register
+class SPP(nn.Module):
+    """Spatial Pyramid Pooling (SPP) layer https://arxiv.org/abs/1406.4729."""
+
+    def __init__(self, in_channels, out_channels, kernel_size=(5, 9, 13)):
+        """Initialize the SPP layer with input/output channels and pooling kernel sizes."""
+        super().__init__()
+        c_ = in_channels // 2  # hidden channels
+        self.cv1 = Conv(in_channels, c_, 1, 1)
+        self.cv2 = Conv(c_ * (len(kernel_size) + 1), out_channels, 1, 1)
+        self.m = nn.ModuleList([nn.MaxPool2d(kernel_size=x, stride=1, padding=x // 2) for x in kernel_size])
+
+    def forward(self, x):
+        """Forward pass of the SPP layer, performing spatial pyramid pooling."""
+        x = self.cv1(x)
+        return self.cv2(torch.cat([x] + [m(x) for m in self.m], 1))
 
 
 @TTModuleRegistry.register

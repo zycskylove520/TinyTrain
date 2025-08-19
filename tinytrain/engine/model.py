@@ -377,9 +377,8 @@ class BaseModel(nn.Module):
         scale = self.config_manager.model["scale"]
         scale_info = self.config_manager.model["scales"][scale]
         depth = scale_info["depth"]
-        width = scale_info.get("width", None)
         LOGGER.info(f"start parse model...")
-        _struct_info = f"model scale:{scale}," + f" depth:{scale_info['depth']}" + ("." if width is None else f", width:{width}")
+        _struct_info = f"current model scale:{scale}," + f" depth:{depth}"
         print(_struct_info)
         print(f"{self.__class__.__name__} struct:")
         print(
