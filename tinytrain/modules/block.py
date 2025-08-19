@@ -3,10 +3,12 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .conv import Conv, DWConv, GhostConv
 
 from tinytrain.cfg.TT_register import TTModuleRegistry
+
 
 @TTModuleRegistry.register
 class C2(nn.Module):
@@ -25,6 +27,7 @@ class C2(nn.Module):
         """Forward pass through the CSP bottleneck with 2 convolutions."""
         a, b = self.cv1(x).chunk(2, 1)
         return self.cv2(torch.cat((self.m(a), b), 1))
+
 
 @TTModuleRegistry.register
 class C2f(nn.Module):
@@ -111,6 +114,47 @@ class Bottleneck(nn.Module):
     def forward(self, x):
         """Applies the YOLO FPN to input data."""
         return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
+
+
+@TTModuleRegistry.register
+class ResNetBlock(nn.Module):
+    """ResNet block with standard convolution layers."""
+
+    def __init__(self, in_channels, out_channels, stride=1, e=4):
+        """Initialize convolution with given parameters."""
+        super().__init__()
+        c3 = e * out_channels
+        self.cv1 = Conv(in_channels, out_channels, kernel_size=1, stride=1, act=True)
+        self.cv2 = Conv(out_channels, out_channels, kernel_size=3, stride=stride, padding=1, act=True)
+        self.cv3 = Conv(out_channels, c3, kernel_size=1, act=False)
+        self.shortcut = nn.Sequential(Conv(in_channels, c3, kernel_size=1, stride=stride, act=False)) if stride != 1 or in_channels != c3 else nn.Identity()
+
+    def forward(self, x):
+        """Forward pass through the ResNet block."""
+        return F.relu(self.cv3(self.cv2(self.cv1(x))) + self.shortcut(x))
+
+
+@TTModuleRegistry.register
+class ResNetLayer(nn.Module):
+    """ResNet layer with multiple ResNet blocks."""
+
+    def __init__(self, in_channels, out_channels, stride=1, is_first=False, n=1, e=4):
+        """Initializes the ResNetLayer given arguments."""
+        super().__init__()
+        self.is_first = is_first
+
+        if self.is_first:
+            self.layer = nn.Sequential(
+                Conv(in_channels, out_channels, kernel_size=7, stride=2, padding=3, act=True), nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+            )
+        else:
+            blocks = [ResNetBlock(in_channels, out_channels, stride, e=e)]
+            blocks.extend([ResNetBlock(e * out_channels, out_channels, 1, e=e) for _ in range(n - 1)])
+            self.layer = nn.Sequential(*blocks)
+
+    def forward(self, x):
+        """Forward pass through the ResNet layer."""
+        return self.layer(x)
 
 
 @TTModuleRegistry.register
