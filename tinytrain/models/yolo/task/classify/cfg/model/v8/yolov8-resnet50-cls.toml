@@ -6,27 +6,27 @@ scale = "n"
 [scales.n]
 depth = 0.33
 width = 0.25
-summary = "YOLOv8n-resnet50-cls model"
+summary = "232 layers, 2151706 parameters, 2151706 gradients, 0.64 GFLOPs"
 
 [scales.s]
 depth = 0.33
 width = 0.50
-summary = "YOLOv8s-resnet50-cls model"
+summary = "232 layers, 7218730 parameters, 7218730 gradients, 2.27 GFLOPs"
 
 [scales.m]
 depth = 0.67
 width = 0.75
-summary = "YOLOv8m-resnet50-cls model"
+summary = "232 layers, 15216442 parameters, 15216442 gradients, 4.89 GFLOPs"
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "YOLOv8l-resnet50-cls model"
+summary = "232 layers, 26144842 parameters, 26144842 gradients, 8.5 GFLOPs"
 
 [scales.x]
 depth = 1.00
 width = 1.25
-summary = "YOLOv8x-resnet50-cls model"
+summary = "232 layers, 40003930 parameters, 40003930 gradients, 13.1 GFLOPs"
 
 # ----------------------------backbone---------------------------------
 [[network]]

@@ -6,27 +6,27 @@ scale = "n"
 [scales.n]
 depth = 0.50
 width = 0.25
-summary = "151 layers, 1633584 parameters, 1633584 gradients, 3.3 GFLOPs"
+summary = "151 layers, 1543914 parameters, 1543914 gradients, 0.4 GFLOPs"
 
 [scales.s]
 depth = 0.50
 width = 0.50
-summary = "151 layers, 5545488 parameters, 5545488 gradients, 12.2 GFLOPs"
+summary = "151 layers, 5455818 parameters, 5455818 gradients, 1.48 GFLOPs"
 
 [scales.m]
 depth = 0.50
 width = 1.00
-summary = "187 layers, 10455696 parameters, 10455696 gradients, 39.7 GFLOPs"
+summary = "187 layers, 20471626 parameters, 20471626 gradients, 5.83 GFLOPs"
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "309 layers, 12937104 parameters, 12937104 gradients, 49.9 GFLOPs"
+summary = "287 layers, 25046346 parameters, 25046346 gradients, 7.28 GFLOPs"
 
 [scales.x]
 depth = 1.00
 width = 1.50
-summary = "309 layers, 28458544 parameters, 28458544 gradients, 111.1 GFLOPs"
+summary = "287 layers, 55317994 parameters, 55317994 gradients, 16.22 GFLOPs"
 
 # ----------------------------backbone---------------------------------
 [[network]]

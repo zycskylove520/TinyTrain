@@ -6,27 +6,27 @@ scale = "l"
 [scales.n]
 depth = 0.33
 width = 0.25
-summary = "yolov5n-p6-det model"
+summary = "500 layers, 4485112 parameters, 4485112 gradients, 7.14 GFLOPs"
 
 [scales.s]
 depth = 0.33
 width = 0.50
-summary = "yolov5s-p6-det model"
+summary = "500 layers, 16638680 parameters, 16638680 gradients, 23.8 GFLOPs"
 
 [scales.m]
 depth = 0.67
 width = 0.75
-summary = "yolov5m-p6-det models"
+summary = "685 layers, 43987704 parameters, 43987704 gradients, 69.55 GFLOPs"
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "yolov5l-p6-det model"
+summary = "941 layers, 101828248 parameters, 101828248 gradients, 163.73 GFLOPs"
 
 [scales.x]
 depth = 1.33
 width = 1.25
-summary = "yolov5x-p6-det model"
+summary = "1193 layers, 196993720 parameters, 196993720 gradients, 321.34 GFLOPs"
 
 # ----------------------------backbone---------------------------------
 [[network]]

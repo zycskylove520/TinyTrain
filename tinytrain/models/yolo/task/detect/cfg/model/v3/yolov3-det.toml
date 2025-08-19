@@ -5,7 +5,7 @@ scale = "l"
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "yolov3-det model"
+summary = "333 layers, 98482354 parameters, 98482354 gradients, 262.38 GFLOPs"
 
 # ----------------------------backbone---------------------------------
 [[network]]

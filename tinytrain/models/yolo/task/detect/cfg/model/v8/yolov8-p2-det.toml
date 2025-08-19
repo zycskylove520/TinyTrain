@@ -6,27 +6,27 @@ scale = "n"
 [scales.n]
 depth = 0.33
 width = 0.25
-summary = "YOLOv8n-p2-det model"
+summary = "416 layers, 3576776 parameters, 3576776 gradients, 13.51 GFLOPs"
 
 [scales.s]
 depth = 0.33
 width = 0.50
-summary = "YOLOv8s-p2-det model"
+summary = "416 layers, 13213304 parameters, 13213304 gradients, 41.4 GFLOPs"
 
 [scales.m]
 depth = 0.67
 width = 0.75
-summary = "YOLOv8m-p2-det model"
+summary = "508 layers, 35860584 parameters, 35860584 gradients, 106.41 GFLOPs"
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "YOLOv8l-p2-det model"
+summary = "694 layers, 87336152 parameters, 87336152 gradients, 254.9 GFLOPs"
 
 [scales.x]
 depth = 1.00
 width = 1.25
-summary = "YOLOv8x-p2-det model"
+summary = "694 layers, 135980744 parameters, 135980744 gradients, 393.94 GFLOPs"
 
 # ----------------------------backbone---------------------------------
 [[network]]

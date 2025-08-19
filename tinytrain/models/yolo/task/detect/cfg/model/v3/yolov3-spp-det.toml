@@ -5,7 +5,7 @@ scale = "l"
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "yolov3-spp-det model"
+summary = "341 layers, 99531954 parameters, 99531954 gradients, 263.22 GFLOPs"
 
 # ----------------------------darknet53 backbone---------------------------------
 [[network]]
