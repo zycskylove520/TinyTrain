@@ -114,10 +114,12 @@ class BaseTrainer:
         # dataset dir
         self.train_dir: Path | list[Path] | None = None
         self.val_dir: Path | list[Path] | None = None
+        self.test_dir: Path | list[Path] | None = None
 
         # dataloader
         self.train_dataloader = None
         self.val_dataloader = None
+        self.test_dataloader = None
 
         # model
         self.model: BaseModel = model
@@ -360,9 +362,6 @@ class BaseTrainer:
 
         # set model
         self.set_model(world_size)
-
-        # freeze layers
-        self.freeze_layers(world_size)
 
         # check AMP
         self.check_amp(world_size)
@@ -754,8 +753,14 @@ class BaseTrainer:
 
         dataset_root_dirs = self.config_manager.dataset["path"]
 
-        self.train_dir = _get_dirs(dataset_root_dirs, "train")
-        self.val_dir = _get_dirs(dataset_root_dirs, "val")
+        if self.config_manager.dataset["train"]:
+            self.train_dir = _get_dirs(dataset_root_dirs, "train")
+
+        if self.config_manager.dataset["val"]:
+            self.val_dir = _get_dirs(dataset_root_dirs, "val")
+
+        if self.config_manager.dataset["test"]:
+            self.test_dir = _get_dirs(dataset_root_dirs, "test")
 
     def check_amp(self, world_size: int):
         """
@@ -829,11 +834,17 @@ class BaseTrainer:
             world_size (int): 分布式训练中的进程数量。
         """
         # train dataloader
-        self.train_dataloader = self.build_dataloader(world_size, mode="train")
+        if self.train_dir:
+            self.train_dataloader = self.build_dataloader(world_size, mode="train")
 
-        # validation dataloader
-        self.val_dataloader = self.build_dataloader(world_size, mode="val")
-        self.validator = self.get_validator(world_size)
+        # validate dataloader
+        if self.val_dir:
+            self.val_dataloader = self.build_dataloader(world_size, mode="val")
+            self.validator = self.get_validator(world_size)
+
+        # test dataloader
+        if self.test_dir:
+            self.test_dataloader = self.build_dataloader(world_size, mode="test")
 
     def set_optimizer(self, model):
         """
@@ -1120,11 +1131,14 @@ class BaseTrainer:
         for param in self.model.parameters():
             param.requires_grad = True
 
+        # freeze layers
+        self.freeze_layers(world_size)
+
         # 多卡情况下：先转 SyncBN，再封装 DDP
         if world_size > 1:
             from torch.nn.parallel import DistributedDataParallel as DDP
 
-            # 关键：把普通 BN → SyncBatchNorm
+            # 把普通 BN → SyncBatchNorm
             self.model = nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
 
             self.model = DDP(self.model, device_ids=[LOCAL_RANK], gradient_as_bucket_view=True)
@@ -1160,6 +1174,12 @@ class BaseTrainer:
             from torch.utils.data.distributed import DistributedSampler
             sampler = DistributedSampler(dataset, drop_last=True)  # drop_last为True保证每张卡样本数量一致，避免all_gather永久阻塞
             effective_samples = len(sampler)
+
+            if self.batch_size > effective_samples:
+                raise ValueError(
+                    f"Dataset too small for DDP: rank {RANK} has {effective_samples} samples, "
+                    f"but batch_size is {self.batch_size}. Reduce batch_size or increase dataset samples."
+                )
         else:
             sampler = None
             effective_samples = len(dataset)  # type: ignore[arg-type]
@@ -1168,8 +1188,8 @@ class BaseTrainer:
         batch_size = min(self.batch_size, effective_samples)
         if batch_size < 2:
             raise ValueError(
-                f"Dataset too small for DDP: rank {RANK} has {effective_samples} samples, "
-                f"but batch_size is {batch_size}. Reduce world_size or increase dataset."
+                f"current batch_size={batch_size}, but BatchNorm requires 2 samples to compute statistics. "
+                f"Please make sure the batch_size>=2."
             )
 
         # 计算 num_workers
