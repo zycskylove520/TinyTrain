@@ -129,18 +129,22 @@ class YOLOPose(YOLODetect):
         """Perform forward pass through YOLO model and return predictions."""
         batch_size = x[0].shape[0]  # batch size
         kpt = torch.cat([self.cv4[i](x[i]).view(batch_size, self.nk, -1) for i in range(len(self.from_channels))], -1)  # (batch_size, 17*3, h*w)
-        x = YOLODetect.forward(self, x)
         if self.training:
+            x = super().forward(x)
             return x, kpt
-        pred_kpt = self.kpts_decode(batch_size, kpt)
+
+        # 解码锚框,self.stride是在构建模型时添加的属性，详见TinyTrain\models\yolo\detect\model中的__init__函数
+        anchors, strides = make_anchors(x, self.stride)
+        x = super().forward(x)
+        pred_kpt = self.kpts_decode(kpt, anchors, strides)
         return torch.cat([x, pred_kpt], 1) if self.export else (torch.cat([x[0], pred_kpt], 1), (x[1], kpt))
 
-    def kpts_decode(self, batch_size, kpts):
+    def kpts_decode(self, kpts, anchors, strides):
         """Decodes keypoints."""
         ndim = self.kpt_shape[1]
         y = kpts.clone()
         if ndim == 3:
             y[:, 2::3] = y[:, 2::3].sigmoid()  # sigmoid (WARNING: inplace .sigmoid_() Apple MPS bug)
-        y[:, 0::ndim] = (y[:, 0::ndim] * 2.0 + (self.anchors[0] - 0.5)) * self.strides
-        y[:, 1::ndim] = (y[:, 1::ndim] * 2.0 + (self.anchors[1] - 0.5)) * self.strides
+        y[:, 0::ndim] = (y[:, 0::ndim] * 2.0 + (anchors[:, 0] - 0.5)) * strides
+        y[:, 1::ndim] = (y[:, 1::ndim] * 2.0 + (anchors[:, 1] - 0.5)) * strides
         return y

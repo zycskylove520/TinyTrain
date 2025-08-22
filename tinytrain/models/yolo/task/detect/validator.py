@@ -70,17 +70,18 @@ class YOLODetectionValidator(BaseValidator):
         map_medium = self.box_metrics.map_medium()
         map_large = self.box_metrics.map_large()
 
-        # log
-        progress_str = f"{'val':^5}|{self.num_classes:^15}|{precision:^15.3f}|{mar_100:^15.3f}|{map50:^15.3f}|{map50_95:^15.3f}|{map_small:^15.3f}|{map_medium:^15.3f}|{map_large:^15.3f}|"
+
         if RANK in {-1, 0}:
+            # log
+            progress_str = f"{'val':^5}|{self.num_classes:^15}|{precision:^15.3f}|{mar_100:^15.3f}|{map50:^15.3f}|{map50_95:^15.3f}|{map_small:^15.3f}|{map_medium:^15.3f}|{map_large:^15.3f}|"
             print(progress_str)
 
-        # metrics result
-        if self.trainer.train_result is not None:
-            self.trainer.train_result.add("precision", precision)
-            self.trainer.train_result.add("mar", mar_100)
-            self.trainer.train_result.add("map50", map50)
-            self.trainer.train_result.add("map50_95", map50_95)
+            # metrics result
+            if self.trainer.train_result is not None:
+                self.trainer.train_result.add("precision", precision)
+                self.trainer.train_result.add("mar", mar_100)
+                self.trainer.train_result.add("map50", map50)
+                self.trainer.train_result.add("map50_95", map50_95)
 
     def start_metrics_on_train_completed(self, pbar: TTProgressBar):
         self.confuse_matrix.reset()
@@ -100,8 +101,8 @@ class YOLODetectionValidator(BaseValidator):
         pbar.set_description(desc)
 
         # plot
-        # if RANK in {-1, 0}:
-        self.img_result.plot(batch_samples=batch_samples, preds=outputs)
+        if RANK in {-1, 0}:
+            self.img_result.plot(batch_samples=batch_samples, preds=outputs)
 
     def end_metrics_on_train_completed(self, pbar: TTProgressBar):
         self.box_metrics.compute()
@@ -111,8 +112,8 @@ class YOLODetectionValidator(BaseValidator):
         recall_per_class = self.box_metrics.per_class_recall().float()  # 每个类别的recall
         classes = self.box_metrics.classes().int()  # 类别列表
 
-        print(f"{'val':^5}|{'class_name':^15}|{'Precision':^15}|{'Recall':^15}|")
         if RANK in {-1, 0}:
+            print(f"{'val':^5}|{'class_name':^15}|{'Precision':^15}|{'Recall':^15}|")
             lines = []
             pr_table = torch.full((self.num_classes, 2), -1.0, dtype=torch.float32)
             pr_table[classes, 0] = precision_per_class
@@ -124,15 +125,15 @@ class YOLODetectionValidator(BaseValidator):
             print("\n".join(lines))
 
         # plot
-        # if RANK in {-1, 0}:
-        self.box_metrics.plot(self.save_dir)
-        self.confuse_matrix.plot(self.save_dir)
+        if RANK in {-1, 0}:
+            self.box_metrics.plot(self.save_dir)
+            self.confuse_matrix.plot(self.save_dir)
 
     def get_fitness(self) -> float:
-        weights = [0.05, 0.15, 0.3, 0.5]
+        weights = [0.1, 0.2, 0.2, 0.5]
         return (
                 self.box_metrics.precision() * weights[0] +
-                self.box_metrics.recall() * weights[1] +
+                self.box_metrics.mar_100() * weights[1] +
                 self.box_metrics.map50() * weights[2] +
                 self.box_metrics.map50_95() * weights[3]
         )

@@ -56,6 +56,7 @@ class Concat(nn.Module):
 
         return torch.cat(x, dim=self.d)
 
+
 @TTModuleRegistry.register
 class Add(nn.Module):
     """
@@ -67,6 +68,7 @@ class Add(nn.Module):
 
     def forward(self, x: list[Tensor]) -> Tensor:
         return torch.sum(torch.stack(x, dim=0), dim=0)
+
 
 @TTModuleRegistry.register
 class Combine(nn.Module):
