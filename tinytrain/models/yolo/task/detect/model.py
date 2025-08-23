@@ -53,5 +53,14 @@ class YOLODetectionModel(YOLOModel):
             if scale in {"m", "l", "x"}:
                 module_info["args"]["c3k"] = True
 
+        if module_info["module"] == "A2C2f":
+            n = max(round(module_info["args"]["n"] * depth), 1)
+            module_info["args"]["n"] = n
+
+            # 只有lx型号新增参数
+            if scale in {"l", "x"}:
+                module_info["args"]["residual"] = True
+                module_info["args"]["mlp_ratio"] = 1.2
+
         if module_info["module"] == "YOLODetect":
             module_info["args"]["from_channels"] = [int(i * width) for i in module_info["args"]["from_channels"]]

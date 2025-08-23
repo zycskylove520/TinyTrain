@@ -1,0 +1,268 @@
+# YOLO11-det model_config.
+
+# number of classes
+scale = "n"
+
+# model_config compound scaling constants
+[scales.n]
+depth = 0.50
+width = 0.25
+summary = "319 layers, 2624080 parameters, 2624064 gradients, 6.6 GFLOPs"
+
+[scales.s]
+depth = 0.50
+width = 0.50
+summary = "319 layers, 9458752 parameters, 9458736 gradients, 21.7 GFLOPs"
+
+[scales.m]
+depth = 0.50
+width = 1.00
+summary = "409 layers, 20114688 parameters, 20114672 gradients, 68.5 GFLOPs"
+
+[scales.l]
+depth = 1.00
+width = 1.00
+summary = "631 layers, 25372160 parameters, 25372144 gradients, 87.6 GFLOPs"
+
+[scales.x]
+depth = 1.00
+width = 1.50
+summary = "631 layers, 56966176 parameters, 56966160 gradients, 196.0 GFLOPs"
+
+# YOLO11n-det backbone
+[[network]]
+# 0-P1/2
+type = "entry"
+module = "Conv"
+repeat = 1
+from = [-1]
+args.in_channels = 3
+args.out_channels = 64
+args.kernel_size = 3
+args.stride = 2
+
+[[network]]
+# 1-P2/4
+type = "flow"
+module = "Conv"
+repeat = 1
+from = [-1]
+args.in_channels = 64
+args.out_channels = 128
+args.kernel_size = 3
+args.stride = 2
+
+[[network]]
+type = "flow"
+module = "C3k2"
+repeat = 1
+from = [-1]
+args.in_channels = 128
+args.out_channels = 256
+args.n = 2
+args.c3k = false
+args.hidden_channels = 0.25
+
+# ----------------------------backbone---------------------------------
+[[network]]
+# 3-P3/8
+type = "flow"
+module = "Conv"
+repeat = 1
+from = [-1]
+args.in_channels = 256
+args.out_channels = 256
+args.kernel_size = 3
+args.stride = 2
+
+[[network]]
+type = "flow"
+module = "C3k2"
+repeat = 1
+from = [-1]
+args.in_channels = 256
+args.out_channels = 512
+args.n = 2
+args.c3k = false
+args.hidden_channels = 0.25
+
+[[network]]
+type = "flow"
+# 5-P4/16
+module = "Conv"
+repeat = 1
+from = [-1]
+args.in_channels = 512
+args.out_channels = 512
+args.kernel_size = 3
+args.stride = 2
+
+[[network]]
+type = "flow"
+module = "C3k2"
+repeat = 1
+from = [-1]
+args.in_channels = 512
+args.out_channels = 512
+args.n = 2
+args.c3k = true
+
+[[network]]
+type = "flow"
+# 7-P5/32
+module = "Conv"
+repeat = 1
+from = [-1]
+args.in_channels = 512
+args.out_channels = 1024
+args.kernel_size = 3
+args.stride = 2
+
+[[network]]
+type = "flow"
+module = "C3k2"
+repeat = 1
+from = [-1]
+args.in_channels = 1024
+args.out_channels = 1024
+args.n = 2
+args.c3k = true
+
+[[network]]
+# 9
+type = "flow"
+module = "SPPF"
+repeat = 1
+from = [-1]
+args.in_channels = 1024
+args.out_channels = 1024
+args.kernel_size = 5
+
+[[network]]
+# 10
+type = "flow"
+module = "C2PSA"
+repeat = 1
+from = [-1]
+args.in_channels = 1024
+args.out_channels = 1024
+args.n = 2
+
+# ----------------------------------head--------------------------------------
+[[network]]
+type = "flow"
+module = "torch.nn.Upsample"
+repeat = 1
+from = [-1]
+args.scale_factor = 2
+args.mode = "nearest"
+
+[[network]]
+type = "flow"
+module = "Concat"
+repeat = 1
+from = [-1, 6]
+args.dimension = 1
+
+[[network]]
+type = "flow"
+module = "C3k2"
+repeat = 1
+from = [-1]
+args.in_channels = 1536
+args.out_channels = 512
+args.n = 2
+args.c3k = false
+
+[[network]]
+type = "flow"
+module = "torch.nn.Upsample"
+repeat = 1
+from = [-1]
+args.scale_factor = 2
+args.mode = "nearest"
+
+[[network]]
+type = "flow"
+module = "Concat"
+repeat = 1
+from = [-1, 4]
+args.dimension = 1
+
+[[network]]
+type = "flow"
+module = "C3k2"
+repeat = 1
+from = [-1]
+args.in_channels = 1024
+args.out_channels = 256
+args.n = 2
+args.c3k = false
+
+[[network]]
+type = "flow"
+module = "Conv"
+repeat = 1
+from = [-1]
+args.in_channels = 256
+args.out_channels = 256
+args.kernel_size = 3
+args.stride = 2
+
+[[network]]
+type = "flow"
+module = "Concat"
+repeat = 1
+from = [-1, 13]
+args.dimension = 1
+
+[[network]]
+type = "flow"
+module = "C3k2"
+repeat = 1
+from = [-1]
+args.in_channels = 768
+args.out_channels = 512
+args.n = 2
+args.c3k = false
+
+[[network]]
+type = "flow"
+module = "Conv"
+repeat = 1
+from = [-1]
+args.in_channels = 512
+args.out_channels = 512
+args.kernel_size = 3
+args.stride = 2
+
+[[network]]
+type = "flow"
+module = "Concat"
+repeat = 1
+from = [-1, 10]
+args.dimension = 1
+
+[[network]]
+type = "flow"
+module = "C3k2"
+repeat = 1
+from = [-1]
+args.in_channels = 1536
+args.out_channels = 1024
+args.n = 2
+args.c3k = false
+
+[[network]]
+type = "flow"
+module = "Combine"
+repeat = 1
+from = [16, 19, 22]
+
+[[network]]
+type = "head"
+module = "YOLODetect"
+repeat = 1
+from = [-1]
+args.nc = -1
+args.from_channels = [256, 512, 1024]

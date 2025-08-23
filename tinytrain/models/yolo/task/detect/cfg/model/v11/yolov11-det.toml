@@ -1,4 +1,4 @@
-# YOLO11-det model_config.
+# YOLOv11-det model_config.
 
 scale = "n"
 
@@ -98,6 +98,7 @@ args.kernel_size = 3
 args.stride = 2
 
 [[network]]
+# 6
 type = "flow"
 module = "C3k2"
 repeat = 1

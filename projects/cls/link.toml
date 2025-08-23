@@ -1,6 +1,5 @@
 core = "cfg\\core.toml"
 model = "cfg\\yolo11-cls.toml"
 loss = "cfg\\loss-cls.toml"
-dataset = "cfg\\my_dataset-cls.toml"
+dataset = "cfg\\dataset-cls.toml"
 augment = "cfg\\augment-cls.toml"
-export = "cfg\\export.toml"

@@ -1,4 +1,4 @@
-# YOLO11-cls image classification model_config.
+# YOLOv11-cls image classification model_config.
 
 scale = "n"
 

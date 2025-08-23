@@ -759,7 +759,7 @@ class BaseTrainer:
         if self.config_manager.dataset["val"]:
             self.val_dir = _get_dirs(dataset_root_dirs, "val")
 
-        if self.config_manager.dataset["test"]:
+        if self.config_manager.dataset.get("test"):
             self.test_dir = _get_dirs(dataset_root_dirs, "test")
 
     def check_amp(self, world_size: int):
@@ -1455,7 +1455,7 @@ class BaseTrainer:
         # 将模型设置为评估模式
         model.eval()
 
-        fp16_pt = self.config_manager.export["FP16_pt"]
+        fp16_pt = self.config_manager.core["fp16_pt"]
         if fp16_pt:
             model = model.half()
             LOGGER.info("Simplified model converted to float16 (fp16) format.")

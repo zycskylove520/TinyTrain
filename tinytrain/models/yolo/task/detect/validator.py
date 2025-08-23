@@ -26,7 +26,7 @@ class YOLODetectionValidator(BaseValidator):
         self.confuse_matrix = DetectConfusionMatrix(num_classes=self.num_classes,
                                                     class_names=self.class_names)
 
-        self.img_result = YOLODetectImgResult(self.save_dir, mode="val", rgb=self.config_manager.augment["rgb"])
+        self.img_result = YOLODetectImgResult(self.save_dir, mode="val", rgb=self.config_manager.augment["rgb"], draw_conf_threshold=0.25)
 
     def preprocess(self, batch_samples: DetectBatchDataInfo) -> DetectBatchDataInfo:
         # 在这里做归一化速度提升
@@ -41,8 +41,8 @@ class YOLODetectionValidator(BaseValidator):
     def postprocess(self, preds: list[torch.Tensor]) -> list[torch.Tensor]:
         # 进行nms
         outputs: list[torch.Tensor] = detect_nms(pred=preds[0],
-                                                 conf_threshold=self.config_manager.core["conf_threshold"],
-                                                 nms_threshold=self.config_manager.core["nms_threshold"],
+                                                 conf_threshold=self.config_manager.inference["val_conf_threshold"],
+                                                 nms_threshold=self.config_manager.inference["val_nms_threshold"],
                                                  max_detect_num=100)
         return outputs
 

@@ -77,7 +77,7 @@ class YOLODetectionPredictor(BasePredictor):
         import numpy as np
 
         # detect_nms 输出: List[Tensor] 每张图的 [N,6] (x,y,w,h,conf,cls)
-        dets = detect_nms(inference_result[0], conf_threshold=0.25, nms_threshold=0.5)[0]  # [N,6]
+        dets = detect_nms(inference_result[0], conf_threshold=self.config_manager.inference["predict_conf_threshold"], nms_threshold=self.config_manager.inference["predict_nms_threshold"])[0]  # [N,6]
 
         # bboxes恢复原图尺寸，并转为lxlyrxry
         bboxes = dets[:, :4].cpu().numpy()

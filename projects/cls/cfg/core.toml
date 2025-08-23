@@ -1,55 +1,44 @@
-# 查看每个参数的使用限制，请查看cfg/config_checker.py
-
 #------------------------------------------base-------------------------------------------
-project_name = ""
-task = "classify" # (str)  detect, segment, classify, pose, obb
-save_dir = "runs"
+project_name = "" # [str]: 项目名称。如果为空字符串，则训练结果保存在默认目录 `default_project` 下。
+task = "classify" # [str]: 训练任务类型。用于加载对应任务的模型。比如："classify", "detect"等
+save_dir = "runs" # [str]: 训练结果保存路径。
 
 #------------------------------------------Train settings----------------------------------
-epochs = 10
-batch_size = 32
-device = 0
-workers = 2
-resume = false
-amp = true
-accumulate = 1
-patience = 0
-save_period = 0
-time = 0
-seed = 0
-deterministic = false
-ema = true  # 是否保存ema模型，true将启用ema模型，并在训练结束后保存ema模型
-shuffle_val_dataloader = true  # 是否打乱验证数据集，这在绘制验证图片结果时有效
-launch_tb = true  # 是否启动tensorboard可视化训练过程
-grad_clip = 10   # 梯度裁剪阈值
-bf16 = true  # 是否使用bfloat16精度进行训练
-only_val=false   # 不训练只做验证
-
-#------------------------------------------validation settings----------------------------------
-conf_threshold = 0.25
-nms_threshold = 0.5
+epochs = 10 # [int]: 训练总轮数。必须大于等于 1。
+batch_size = 32 # [int]: 每个批次的样本数量。必须大于等于 2。
+device = 0 # [list[int] | int | "mps" | "cpu" | "cuda"]: 训练设备。可以是 GPU 设备编号（整数或整数列表）、"mps"（苹果 Metal）、"cpu" 或 "cuda"。
+workers = 2 # [int]: 数据加载器的多线程数量。值为 0 表示不使用多线程。必须大于等于 0。
+resume = false # [bool]: 是否从上次中断的训练进度继续训练。
+amp = true # [bool]: 是否启用自动混合精度（AMP）。用于节省内存并加速训练，但可能影响精度。
+accumulate = 1 # [int]: 梯度累积步数。每累积 `accumulate` 步后更新一次参数。必须大于等于 1。
+patience = 50 # [int]: 早停机制的耐心值。如果训练结果在 `patience` 个 epoch 内没有改善，则提前终止训练。值为 0 表示不启用。
+save_period = 0 # [int]: 每隔多少个 epoch 保存一次模型权重文件。值为 0 表示不保存中间权重。
+time = 0 # [int]: 训练时间限制（秒）。训练超过该时间后自动终止。值为 0 表示不限制时间。
+seed = 0 # [int]: 随机种子，用于复现训练结果。
+deterministic = false # [bool]: 是否启用确定性模式。启用后，确保在相同的输入、硬件和软件环境下，每次运行的结果完全一致。
+ema = true # [bool]: 是否启用指数移动平均（EMA）。EMA 可以生成参数更平滑的模型，但会增加训练时间。适用于中小型模型。true将启用ema模型，并在训练结束后保存ema模型。
+shuffle_val_dataloader = true # [bool]: 是否在验证集 DataLoader 中打乱数据。在分类任务中启用后，可以在验证阶段看到更多样的图片。
+launch_tb = true # [bool]: 是否启动 TensorBoard 可视化训练过程，训练结束后会自动关闭。
+grad_clip = 10 # [int]: 梯度裁剪阈值。用于防止梯度爆炸。值为0表示不启用。
+bf16 = true # [bool]: 是否使用 bfloat16 精度进行训练。bfloat16 精度比 float16 精度更高，但可能不支持所有硬件。
+only_val = false # [bool]: 是否仅执行验证而不进行训练。
+fp16_pt = true # 是否导出float16精度模型
 
 #------------------------------------------Hyperparameters------------------------------------------
-optimizer = "SGD"
-scheduler = "LinearLR"
-lr0 = 0.01  # 初始学习率
+lr0 = 0.01 # 初始学习率
 lr1 = 0.01 # 最终学习率=lr1*lr0
-warmup_scheduler="LinearLR"
-warmup_lr = 0.0001
-warmup_epochs = 3
-l1_norm = 0  # L1正则化
-momentum = 0.937
-weight_decay = 0.0005
+optimizer = "SGD" # ["Adam" | "AdamW" | "Adamax" | "NAdam" | "RAdam" | "RMSProp" | "SGD" | "Adadelta" | "Adagrad" | ...]:优化器类型，支持第三方优化器。
+momentum = 0.97 # [float]: 优化器的动量值。
+weight_decay = 0.0005 # [float]: 权重衰减（L2 正则化）值。用于防止过拟合。
+scheduler = "LinearLR" # ["LinearLR" | "CosineLR" | "ExponentialLR" | "StepLR" | "MultiStepLR" | "auto"]: 学习率调度器类型。`auto` 模式下，模型会根据训练效果自动调整学习率。如果衰减器不存在，则默认使用LinearLR。
+warmup_scheduler = "LinearWarmupLR" # ["LinearWarmupLR" | "CosineWarmUpLR" | "ExponentialWarmUpLR" | "ConstantWarmupLR"]: 预热阶段的学习率调度器类型。如果衰减器不存在，则默认使用LinearWarmupLR。
+warmup_lr = 0.0001 # [float]: 预热阶段的学习率。
+warmup_epochs = 3 # [int]: 预热阶段的 epoch 数量。
+l1_norm = 0 # [float]: L1 正则化值。用于防止过拟合。
+
 
 #------------------------------------------DDP settings----------------------------------
-master_addr = "127.0.0.1"
-master_port = 29500
-nodes = 1
-node_rank = 0
-
-
-
-
-
-
-
+master_addr = "127.0.0.1" # [str]: 分布式训练时的主机 IP 地址。
+master_port = 29500 # [int]: 分布式训练时的主机端口。
+nodes = 1 # [int]: 分布式训练的节点数量。
+node_rank = 0 # [int]: 当前节点的排名（RANK）。

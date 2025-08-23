@@ -1,0 +1,16 @@
+scale = "n" # [str]: 模型的尺寸，通过设置该值选择不同尺寸的模型。
+
+[scales.n] # 模型可选择的尺寸，由scale参数选择。
+depth = 1  # [float]: 控制模型的模块的深度，即重复次数，必须大于0
+summary = "" # [str]: 对该尺寸的文本说明。
+
+[[network]]
+type = "entry" # ["entry" | "flow" | "head"]: 模块的类型。
+module = "torch.nn.Conv2d" # [str]: 模块的类名。
+repeat = 1 # [int]: 模块的重复次数。
+from = [-1]  # [list[int]]: 指定该模块接受来自哪一层的输入，可接收来自多层的输入。如果该模块为entry模块，则from=-1表示接受来自外界的输入。如果该模块为flow或head模块，则from=-1表示接收来自上一层的输出。
+# args为模块类构造时传入的参数，必须以[args.]开头。
+args.in_channels = 3
+args.out_channels = 16
+args.kernel_size = 3
+args.stride = 2

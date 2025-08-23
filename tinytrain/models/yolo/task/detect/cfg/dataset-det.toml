@@ -1,0 +1,13 @@
+img_size = 640
+cache = true
+
+path = "datasets/xxx"
+train = "images/train"
+val = "images/val"
+test = ""
+
+nc = 3
+[names]
+0 = "x"
+1 = "y"
+2 = "z"

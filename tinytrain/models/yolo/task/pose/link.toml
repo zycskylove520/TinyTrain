@@ -3,5 +3,3 @@ model = "cfg\\11\\yolo11-pose.toml"
 loss = "cfg\\loss-pose.toml"
 dataset = "cfg\\my_dataset-pose.toml"
 augment = "cfg\\augment-pose.toml"
-export = "cfg\\export.toml"
-

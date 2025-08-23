@@ -227,8 +227,9 @@ class YOLODetectImgResult(BaseImgResult):
     在图片上画框、写类别与置信度。
     """
 
-    def __init__(self, save_dir: Path, plot_count: int = 4, mode: str = "val", max_sub_len: int = 3, rgb=True):
+    def __init__(self, save_dir: Path, plot_count: int = 4, mode: str = "val", max_sub_len: int = 3, rgb=True, draw_conf_threshold: float = 0.):
         super().__init__(save_dir, plot_count, mode, max_sub_len, rgb)
+        self.draw_conf_threshold = draw_conf_threshold
 
     def _prepare_imgs(self, batch_samples):
         """默认：返回 (imgs_np, None)，预测由外部赋值。"""
@@ -247,7 +248,8 @@ class YOLODetectImgResult(BaseImgResult):
         if pred.numel() == 0:
             return img
 
-        pred = pred.cpu().numpy()
+        mask = pred[:, 4] > self.draw_conf_threshold
+        pred = pred[mask].cpu().numpy()
         bboxes, confs, labels = pred[:, :4], pred[:, 4], pred[:, 5]
         bboxes = cxcywh_2_lxlyrxry(bboxes).astype(int)
 
@@ -256,18 +258,19 @@ class YOLODetectImgResult(BaseImgResult):
         draw = ImageDraw.Draw(pil_img)
 
         for (x1, y1, x2, y2), conf, cls in zip(bboxes, confs, labels):
-            draw.rectangle((x1, y1, x2, y2), outline=(0, 255, 0), width=2)
-            cls_txt = str(int(cls))
-            cls_w, cls_h = self._text_size(draw, cls_txt)
-            draw.rectangle((x2 - cls_w - 2, y1, x2, y1 + cls_h + 2),
-                           fill=(255, 255, 255))
-            draw.text((x2 - cls_w, y1), cls_txt, fill=(0, 0, 0), font=self.font)
+            if conf >= self.draw_conf_threshold:
+                draw.rectangle((x1, y1, x2, y2), outline=(0, 255, 0), width=2)
+                cls_txt = str(int(cls))
+                cls_w, cls_h = self._text_size(draw, cls_txt)
+                draw.rectangle((x2 - cls_w - 2, y1, x2, y1 + cls_h + 2),
+                               fill=(255, 255, 255))
+                draw.text((x2 - cls_w, y1), cls_txt, fill=(0, 0, 0), font=self.font)
 
-            conf_txt = f"{conf:.2f}"
-            conf_w, conf_h = self._text_size(draw, conf_txt)
-            draw.rectangle((x1, y2 - conf_h - 2, x1 + conf_w + 20, y2),
-                           fill=(255, 255, 255))
-            draw.text((x1, y2 - conf_h), conf_txt, fill=(0, 0, 0), font=self.font)
+                conf_txt = f"{conf:.2f}"
+                conf_w, conf_h = self._text_size(draw, conf_txt)
+                draw.rectangle((x1, y2 - conf_h - 2, x1 + conf_w + 20, y2),
+                               fill=(255, 255, 255))
+                draw.text((x1, y2 - conf_h), conf_txt, fill=(0, 0, 0), font=self.font)
 
         drawn = np.array(pil_img)  # RGB
         return drawn

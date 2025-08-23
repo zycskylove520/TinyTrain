@@ -1,7 +1,7 @@
 # track
 min_box_area = 100      # 跟踪的最小目标面积
 track_threshold = 0.25  # 跟踪置信度阈值
-track_buffer = 100    # 最大目标丢失帧数，超过该值则认为目标丢失
+track_buffer = 30    # 最大目标丢失帧数，超过该值则认为目标丢失
 match_threshold = 0.9  # 跟踪目标匹配阈值
 
 # save

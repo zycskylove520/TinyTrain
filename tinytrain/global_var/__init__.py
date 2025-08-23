@@ -33,7 +33,10 @@ cv2.setNumThreads(NUM_THREADS)  # 在模块初始化时设置一次
 
 
 # font
-def localization(font):
+def localization(font: str = None):
+    if font is None:
+        return
+
     font_dir = Path(matplotlib.matplotlib_fname()).parent / "fonts/ttf/"
     local_font = font_dir / font
     if local_font.exists():
@@ -67,4 +70,4 @@ def localization(font):
     buf.close()  # 立即释放内存
 
 
-localization("SourceHanSansSC-Normal.otf")  # 在这里修改自己喜欢的字体
+localization()  # 在这里修改自己喜欢的字体,比如xxx.otf,xxx.ttf
