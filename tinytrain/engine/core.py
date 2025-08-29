@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import inspect
+from copy import deepcopy
+
 import setproctitle
 
 from pathlib import Path
@@ -53,6 +55,7 @@ class Core:
         self.predictor = None
         self.exporter = None
         self.tuner = None
+        self.distiller = None
 
         # 保存当前主脚本路径（用于 DDP 启动）
         frame = inspect.stack()[-1]
@@ -219,6 +222,35 @@ class Core:
         self._bind_tuner(model_scale)
         return self.tuner.tune(pop_size=pop_size, generations=generations)
 
+    def distill(self, teacher_model: str | Path, student_model_scale: str, student_model: str | Path = None, process_name: str = None):
+        import torch
+
+        # 修改进程名，从而避免与其他脚本混淆
+        if process_name:
+            setproctitle.setproctitle(process_name)
+
+        # bind student model
+        self._bind_model(student_model_scale, student_model)
+
+        # load teacher model
+        assert Path(teacher_model).suffix in {".pt", ".pth"}, f"{Path(teacher_model).suffix} is not supported"
+        teacher_model = check_file(teacher_model)
+        checkpoint = torch.load(teacher_model.as_posix(), map_location="cpu", weights_only=False)
+        teacher_config_manager = deepcopy(self.config_manager)
+        teacher_config_manager.model = checkpoint["model_args"]
+        teacher_model = TTEngineRegistry.get(teacher_config_manager, "teacher_model")(teacher_config_manager)
+        teacher_model.load_model_state_dict(checkpoint["model"], True)
+
+        # bind distiller
+        self._bind_distiller(teacher_model)
+
+        # train
+        self.distiller.train()
+
+        import gc
+        LOGGER.info("Training completed. Waiting for garbage collection...")
+        gc.collect()
+
     # ------------------------------------------------------------------
     # 受保护函数
     # ------------------------------------------------------------------
@@ -259,11 +291,16 @@ class Core:
                 raise KeyError("Error: Detected resume=True, but no valid .pt or .pth file was provided.")
 
             scales = self.config_manager.model["scales"].keys()  # 添加model的scale
-            if model_scale:
-                self.config_manager.model["scale"] = model_scale
+            if not scales:
+                raise KeyError("Error: Model.toml no scales were provided.")
 
-            if self.config_manager.model["scale"] not in scales:
-                raise KeyError(f"{self.config_manager.link['model']} not support scale:{self.config_manager.model['scale']}")
+            if model_scale:
+                if model_scale not in scales:
+                    raise KeyError(f"{self.config_manager.link['model']} not support scale:{self.config_manager.model['scale']}")
+
+                self.config_manager.model["scale"] = model_scale
+            else:
+                self.config_manager.model["scale"] = scales[0]
 
             self.model = TTEngineRegistry.get(self.config_manager, "model")(self.config_manager)
 
@@ -344,18 +381,22 @@ class Core:
             return
 
         # 场景 2：外部权重文件导出
+
+        # 没有传递模型权重文件，此时导出将是未训练的模型
         if model is None:
-            raise ValueError("model path must be provided when no training model exists")
+            # 构建新模型，默认使用最小的scale
+            self._bind_model()
+            LOGGER.warning("No model weights file provided. Exporting an untrained model.")
+        else:
+            model_path = Path(check_file(model))
+            if not model_path.exists():
+                raise FileNotFoundError(f"{model_path} does not exist")
 
-        model_path = Path(check_file(model))
-        if not model_path.exists():
-            raise FileNotFoundError(f"{model_path} does not exist")
+            if model_path.suffix not in {".pt", ".pth"}:
+                raise TypeError(f"export only supports '.pt' or '.pth' model files, got {model_path.suffix}")
 
-        if model_path.suffix not in {".pt", ".pth"}:
-            raise TypeError(f"export only supports '.pt' or '.pth' model files, got {model_path.suffix}")
-
-        # 加载权重并绑定模型
-        self._bind_model(model=model_path, force_load=False)
+            # 加载权重并绑定模型
+            self._bind_model(model=model_path, force_load=False)
 
         self.exporter = TTEngineRegistry.get(self.config_manager, "exporter")(
             config_manager=self.config_manager,
@@ -370,6 +411,15 @@ class Core:
         实例化并绑定 tuner。
         """
         self.tuner = TTEngineRegistry.get(self.config_manager, "tuner")(core=self, model_scale=model_scale)
+
+    def _bind_distiller(self, teacher_model) -> None:
+        self.distiller = TTEngineRegistry.get(self.config_manager, "distiller")(
+            config_manager=self.config_manager,
+            student_model=self.model,
+            teacher_model=teacher_model,
+            callback=self.callback,
+            main_script_path=self.main_script_path
+        )
 
     def _find_last_pt_file(self):
         """

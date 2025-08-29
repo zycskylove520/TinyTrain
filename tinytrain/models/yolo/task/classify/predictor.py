@@ -27,6 +27,9 @@ class YOLOClassificationPredictor(BasePredictor):
         super().__init__(config_manager=config_manager, model=model, callback=callback, backend=backend, **kwargs)
         self.img_shape = kwargs.get("img_shape")
 
+        if self.img_shape is None:
+            raise ValueError("img_shape must be set")
+
     def register_parsers(self) -> None:
         # ---------- 注册专用解析器 ----------
         SourceParserHub.register("jpg", ImageParser)
@@ -55,7 +58,7 @@ class YOLOClassificationPredictor(BasePredictor):
         return tensor
 
     # ---------- 后处理 ----------
-    def postprocess(self, sample: Any, preds: list[torch.Tensor]) -> torch.Tensor:
+    def postprocess(self, data_info: ClassifyDataInfo, preds: list[torch.Tensor]) -> torch.Tensor:
         """
         preds: list[Tensor] 来自推理后端
         返回: [num_classes] 的 logits
@@ -64,7 +67,7 @@ class YOLOClassificationPredictor(BasePredictor):
         return logits
 
     # ---------- 可视化 ----------
-    def show(self, sample: Any, result: torch.Tensor):
+    def show(self, data_info: ClassifyDataInfo, result: torch.Tensor):
         prob = torch.softmax(result, dim=0)
         pred_cls = int(prob.argmax())
         return {"class_idx": pred_cls, "per_class_probability": prob.tolist()}

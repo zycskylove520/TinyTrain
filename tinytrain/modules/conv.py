@@ -33,6 +33,7 @@ class Conv(nn.Module):
         """Apply convolution, batch normalization and activation to input tensor."""
         return self.act(self.bn(self.conv(x)))
 
+
 @TTModuleRegistry.register
 class DWConv(Conv):
     """Depth-wise convolution."""
@@ -40,6 +41,7 @@ class DWConv(Conv):
     def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, dilation=1, act=True):  # ch_in, ch_out, kernel, stride, dilation, activation
         """Initialize Depth-wise convolution with given parameters."""
         super().__init__(in_channels, out_channels, kernel_size, stride, groups=math.gcd(in_channels, out_channels), dilation=dilation, act=act)
+
 
 @TTModuleRegistry.register
 class GhostConv(nn.Module):
@@ -53,7 +55,6 @@ class GhostConv(nn.Module):
         self.cv2 = Conv(c_, c_, 5, 1, None, c_, act=act)
 
     def forward(self, x):
-
         """Forward propagation through a Ghost Bottleneck layer with skip connection."""
         y = self.cv1(x)
         return torch.cat((y, self.cv2(y)), 1)

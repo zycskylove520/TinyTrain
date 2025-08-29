@@ -118,6 +118,9 @@ class BasePredictor:
         """
         return data_info
 
+    def inference(self, data: Any) -> Any:
+        return self.model.inference(data)
+
     def postprocess(self, data_info: BaseDataInfo, inference_result: list[torch.Tensor]):
         """
         对模型输出进行后处理，如 softmax、NMS、阈值过滤、解码等。
@@ -257,7 +260,7 @@ class BasePredictor:
 
             self.callback.run_callback(self, "on_predict_preprocess_end")
 
-            self.inference_result = self.model.inference(self.preprocess_result)
+            self.inference_result = self.inference(self.preprocess_result)
 
             self.callback.run_callback(self, "on_predict_inference_end")
 

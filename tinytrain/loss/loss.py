@@ -1,5 +1,8 @@
+import math
+
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from torch import nn
 
@@ -25,21 +28,367 @@ class ClassificationLoss(nn.Module):
         self.cls_loss_gain = cls_loss_gain
         self.criterion = nn.CrossEntropyLoss()
 
-    def forward(self, preds: list[torch.Tensor], batch: ClassifyBatchDataInfo):
+    def forward(self, pred: torch.Tensor, batch: ClassifyBatchDataInfo):
         """
         计算分类损失。
 
         Args:
-            preds (list[torch.Tensor]): 模型输出列表，通常只含一个 (B, C) 张量。
-            batch (ClassifyBatchDataInfo): 批数据，包含 `target` 标签。
+            pred (torch.Tensor): 模型输出，通常只含一个 (B, C) 张量。
+            batch (ClassifyBatchDataInfo): 批数据，包含 `target` 标签，形状为 (B,)，值为类别索引。
 
         Returns:
             tuple:
                 - loss (torch.Tensor): 标量损失值。
                 - loss_items (dict): 各分量损失，便于日志记录。
         """
-        loss = self.criterion(preds[0], batch.target) * self.cls_loss_gain
+        loss = self.criterion(pred, batch.target) * self.cls_loss_gain
         loss_items = {"cls_loss": loss.detach()}
+        return loss, loss_items
+
+
+class FocalLoss(nn.Module):
+    """
+    Focal Loss，一种改进的分类损失函数，用于解决类别不平衡问题。
+    Focal Loss 在 CrossEntropyLoss 的基础上，对易分类样本的损失进行加权降低，
+    从而让模型更关注难分类的样本，有助于提高模型在不平衡数据集上的性能。
+    支持通过 gamma 参数调整对易分类样本的惩罚程度，并通过 alpha 参数对不同类别进行加权。
+    """
+
+    def __init__(self, cls_loss_gain: float, alpha=None, gamma=0, eps=1e-7):
+        """
+        初始化 FocalLoss。
+
+        Args:
+            cls_loss_gain (float): 分类损失权重系数。
+            alpha (float or Tensor, optional): 类别权重。如果为标量，则所有类别共享相同的权重；
+                                               如果为 Tensor，则应与类别数量相同。默认为 None。
+            gamma (float, optional): 聚焦参数，控制对易分类样本的惩罚程度。gamma 越大，对易分类样本的损失惩罚越小。默认为 0。
+            eps (float, optional): 数值稳定性参数，避免 log(0) 等数值问题。默认为 1e-7。
+        """
+        super(FocalLoss, self).__init__()
+        self.cls_loss_gain = cls_loss_gain
+        self.alpha = alpha
+        self.gamma = gamma
+        self.eps = eps
+        self.criterion = nn.CrossEntropyLoss()
+
+    def forward(self, pred: torch.Tensor, batch: ClassifyBatchDataInfo):
+        """
+        计算 Focal Loss。
+
+        Args:
+            pred (torch.Tensor): 模型输出的 logits，形状为 (B, C)，其中 B 是批次大小，C 是类别数。
+            batch (ClassifyBatchDataInfo): 批数据，包含 `target` 标签，形状为 (B,)，值为类别索引。
+
+        Returns:
+            tuple:
+                - torch.Tensor: Focal Loss 的标量值。
+                - loss_items (dict): 各分量损失，便于日志记录。
+        """
+        target = batch.target
+
+        logp = self.criterion(pred, target)
+        p = torch.exp(-logp)
+        loss = (1 - p) ** self.gamma * logp
+        loss = loss * self.cls_loss_gain
+        loss_items = {"cls_loss": loss.detach()}
+        return loss, loss_items
+
+        # # 计算交叉熵损失
+        # ce_loss = self.criterion(pred, target)
+        #
+        # # 计算每个样本的预测概率
+        # probabilities = F.softmax(pred, dim=1)
+        # pt = probabilities.gather(1, target.unsqueeze(1)).squeeze(1)
+        #
+        # # 计算 Focal Loss
+        # focal_term = (1 - pt + self.eps) ** self.gamma
+        # if self.alpha is not None:
+        #     if isinstance(self.alpha, float):
+        #         alpha_t = self.alpha
+        #     elif isinstance(self.alpha, torch.Tensor):
+        #         alpha_t = self.alpha.gather(0, target)
+        #     else:
+        #         raise ValueError("alpha must be a float or a Tensor")
+        #     focal_loss = alpha_t * focal_term * ce_loss
+        # else:
+        #     focal_loss = focal_term * ce_loss
+        #
+        # focal_loss = focal_loss.mean() * self.cls_loss_gain
+        # loss_items = {"cls_loss": focal_loss.detach()}
+        # return focal_loss, loss_items
+
+
+class ArcFaceLoss(nn.Module):
+    """
+    ArcFace Loss，一种改进的分类损失函数，用于人脸识别等任务。
+    ArcFace 通过在余弦相似度上添加一个角度间隔（margin），使得不同类别的特征向量之间的夹角更大，
+    从而提高模型的分类能力，尤其在大规模人脸数据集上表现出色。
+
+    Args:
+        cls_loss_gain (float): 分类损失权重系数。
+        in_features (int): 输入特征的维度。
+        out_features (int): 输出类别数。
+        s (float, optional): 特征向量的范数。默认为 30.0。
+        m (float, optional): 角度间隔（margin）。默认为 0.50。
+        easy_margin (bool, optional): 是否使用简单模式。默认为 False。
+        use_focal_loss(bool, optional): 是否使用focal loss。
+
+    Attributes:
+        weight (torch.nn.Parameter): 可学习的权重矩阵。
+        cos_m (float): cos(m) 的值。
+        sin_m (float): sin(m) 的值。
+        th (float): cos(pi - m) 的值。
+        mm (float): sin(pi - m) * m 的值。
+
+    Returns:
+        torch.Tensor: ArcFace Loss 的输出。
+    """
+
+    def __init__(self, cls_loss_gain, in_features, out_features, s=30.0, m=0.50, easy_margin=False, use_focal_loss=True, device=torch.device('cpu')):
+        """
+        初始化。
+
+        Args:
+            cls_loss_gain (float): 分类损失权重系数。
+            in_features (int): 输入特征的维度。
+            out_features (int): 输出类别数。
+            s (float, optional): 特征向量的范数。默认为 30.0。
+            m (float, optional): 角度间隔（margin）。默认为 0.50。
+            easy_margin (bool, optional): 是否使用简单模式。默认为 False。
+            use_focal_loss(bool, optional): 是否使用focal loss。
+        """
+        super().__init__()
+        self.cls_loss_gain = cls_loss_gain
+        self.in_features = in_features
+        self.out_features = out_features
+        self.s = s
+        self.m = m
+        self.weight = nn.Parameter(torch.FloatTensor(out_features, in_features)).to(device)
+        nn.init.xavier_uniform_(self.weight)
+        self.device = device
+
+        self.easy_margin = easy_margin
+        self.cos_m = math.cos(m)
+        self.sin_m = math.sin(m)
+        self.th = math.cos(math.pi - m)
+        self.mm = math.sin(math.pi - m) * m
+
+        if use_focal_loss:
+            self.criterion = FocalLoss(cls_loss_gain=self.cls_loss_gain)
+        else:
+            self.criterion = ClassificationLoss(cls_loss_gain=self.cls_loss_gain)
+
+    def forward(self, pred: torch.Tensor, batch: ClassifyBatchDataInfo):
+        """
+        计算 ArcFace Loss。
+
+        Args:
+            pred (torch.Tensor): 模型输出，通常只含一个 (B, in_features) 张量。
+            batch (ClassifyBatchDataInfo): 批数据，包含 `target` 标签，形状为 (B,)，值为类别索引。
+
+        Returns:
+            torch.Tensor: ArcFace Loss 的输出。
+        """
+        # --------------------------- cos(theta) & phi(theta) ---------------------------
+        # resnet网络最后一层输出的是全连接层，把全连接层权重W归一化。
+        # 这里全连接层输出的是cosine的原因为，X和W都使用了l2范数变成了单位向量，因此计算出来的每一个值都是余弦值
+        cosine = F.linear(F.normalize(pred), F.normalize(self.weight))
+        sine = torch.sqrt((1.0 - torch.pow(cosine, 2)).clamp(0, 1))  # 这里使用clamp可能是担心精度溢出
+        phi = cosine * self.cos_m - sine * self.sin_m  # 计算：cos(theta + m)
+        if self.easy_margin:
+            # easy_margin可以理解为θ+m>pi，此时cos(θ+m)超过了0-pi的单调区间，那就不管了，直接用cos(θ)代替
+            # cosine>0表示theta<pi/2，因此m+theta不会超过pi，在该区间使用cos(theta+m)可以将同类之间收的更紧
+            # 如果cosine<0表示theta>pi/2，因此m+theta在最坏的情况下，比如theta=pi时，theta+m会超过pi，此时跳出了cos在0-pi的单调区间，
+            # 为了保持单调性，这种情况直接使用cos(theta)，因为cos(theta)在单调区间内。所以就是不将同类收紧了，无所谓了
+            phi = torch.where(cosine > 0, phi, cosine)
+        else:
+            # 非easy_margin可以理解为就算θ+m>pi，此时cos(θ+m)超过了0-pi的单调区间，也要坚持使用m收紧同类
+            # cos在0-pi的单调区间内，cos(θ) > cos(pi-m)表示θ<pi-m即：θ+m<pi时，使用cos(θ+m)
+            # 否则就使用类似cosface的损失函数来代替
+            phi = torch.where(cosine > self.th, phi, cosine - self.mm)
+        # --------------------------- convert label to one-hot ---------------------------
+        # one_hot = torch.zeros(cosine.size(), requires_grad=True, device='cuda')
+        one_hot = torch.zeros(cosine.size(), device=self.device)
+        one_hot.scatter_(1, batch.target.view(-1, 1).long(), 1)
+        # -------------torch.where(out_i = {x_i if condition_i else y_i) -------------
+        output = (one_hot * phi) + (
+                (1.0 - one_hot) * cosine)  # you can use torch.where if your torch.__version__ is 0.4
+        output *= self.s
+
+        loss, loss_items = self.criterion(output, batch)
+        return loss, loss_items
+
+
+class CosFaceLoss(nn.Module):
+    """
+    CosFace Loss，一种改进的分类损失函数，用于人脸识别等任务。
+    CosFace 通过在余弦相似度上减去一个 margin，使得不同类别的特征向量之间的夹角更大，
+    从而提高模型的分类能力，尤其在大规模人脸数据集上表现出色。
+
+    Args:
+        cls_loss_gain (float): 分类损失权重系数。
+        in_features (int): 输入特征的维度。
+        out_features (int): 输出类别数。
+        s (float, optional): 特征向量的范数。默认为 30.0。
+        m (float, optional): 余弦相似度的 margin。默认为 0.40。
+        use_focal_loss(bool, optional): 是否使用focal loss。
+
+    Attributes:
+        weight (torch.nn.Parameter): 可学习的权重矩阵。
+
+    Returns:
+        torch.Tensor: CosFace Loss 的输出。
+    """
+
+    def __init__(self, cls_loss_gain, in_features, out_features, s=30.0, m=0.40, use_focal_loss=True, device=torch.device('cpu')):
+        """
+        初始化。
+
+        Args:
+            cls_loss_gain (float): 分类损失权重系数。
+            in_features (int): 输入特征的维度。
+            out_features (int): 输出类别数。
+            s (float, optional): 特征向量的范数。默认为 30.0。
+            m (float, optional): 余弦相似度的 margin。默认为 0.40。
+            use_focal_loss(bool, optional): 是否使用focal loss。
+        """
+        super().__init__()
+        self.cls_loss_gain = cls_loss_gain
+        self.in_features = in_features
+        self.out_features = out_features
+        self.s = s
+        self.m = m
+        self.weight = nn.Parameter(torch.FloatTensor(out_features, in_features)).to(device)
+        nn.init.xavier_uniform_(self.weight)
+        self.device = device
+
+        if use_focal_loss:
+            self.criterion = FocalLoss(cls_loss_gain=self.cls_loss_gain)
+        else:
+            self.criterion = ClassificationLoss(cls_loss_gain=self.cls_loss_gain)
+
+    def forward(self, pred: torch.Tensor, batch: ClassifyBatchDataInfo):
+        """
+        计算 CosFace Loss。
+
+        Args:
+            pred (torch.Tensor): 模型输出，通常只含一个 (B, in_features) 张量。
+            batch (ClassifyBatchDataInfo): 批数据，包含 `target` 标签，形状为 (B,)，值为类别索引。
+
+        Returns:
+            torch.Tensor: CosFace Loss 的输出。
+        """
+        # --------------------------- cos(theta) & phi(theta) ---------------------------
+        cosine = F.linear(F.normalize(pred), F.normalize(self.weight))
+        phi = cosine - self.m
+        # --------------------------- convert label to one-hot ---------------------------
+        one_hot = torch.zeros(cosine.size(), device=self.device)
+        # one_hot = one_hot.cuda() if cosine.is_cuda else one_hot
+        one_hot.scatter_(1, batch.target.view(-1, 1).long(), 1)
+        # -------------torch.where(out_i = {x_i if condition_i else y_i) -------------
+        output = (one_hot * phi) + (
+                (1.0 - one_hot) * cosine)  # you can use torch.where if your torch.__version__ is 0.4
+        output *= self.s
+
+        loss, loss_items = self.criterion(output, batch)
+        return loss, loss_items
+
+
+class SphereFaceLoss(nn.Module):
+    """
+    SphereFace Loss，一种改进的分类损失函数，用于人脸识别等任务。
+    SphereFace 通过在余弦相似度上应用一个多项式函数，使得不同类别的特征向量之间的夹角更大，
+    从而提高模型的分类能力，尤其在大规模人脸数据集上表现出色。
+
+    Args:
+        cls_loss_gain (float): 分类损失权重系数。
+        in_features (int): 输入特征的维度。
+        out_features (int): 输出类别数。
+        m (int, optional): 多项式的阶数。默认为 4。
+        use_focal_loss(bool, optional): 是否使用focal loss。
+
+    Attributes:
+        weight (torch.nn.Parameter): 可学习的权重矩阵。
+        mlambda (list): 多项式函数的系数列表。
+
+    Returns:
+        torch.Tensor: SphereFace Loss 的输出。
+    """
+
+    def __init__(self, cls_loss_gain, in_features, out_features, m=4, use_focal_loss=True, device=torch.device('cpu')):
+        """
+        初始化。
+
+        Args:
+            cls_loss_gain (float): 分类损失权重系数。
+            in_features (int): 输入特征的维度。
+            out_features (int): 输出类别数。
+            m (int, optional): 多项式的阶数。默认为 4。
+            use_focal_loss(bool, optional): 是否使用focal loss。
+        """
+        super().__init__()
+        self.cls_loss_gain = cls_loss_gain
+        self.in_features = in_features
+        self.out_features = out_features
+        self.m = m
+        self.base = 1000.0
+        self.gamma = 0.12
+        self.power = 1
+        self.LambdaMin = 5.0
+        self.iter = 0
+        self.weight = nn.Parameter(torch.FloatTensor(out_features, in_features)).to(device)
+        nn.init.xavier_uniform_(self.weight)
+
+        # duplication formula
+        self.mlambda = [
+            lambda x: x ** 0,
+            lambda x: x ** 1,
+            lambda x: 2 * x ** 2 - 1,
+            lambda x: 4 * x ** 3 - 3 * x,
+            lambda x: 8 * x ** 4 - 8 * x ** 2 + 1,
+            lambda x: 16 * x ** 5 - 20 * x ** 3 + 5 * x
+        ]
+
+        if use_focal_loss:
+            self.criterion = FocalLoss(cls_loss_gain=self.cls_loss_gain)
+        else:
+            self.criterion = ClassificationLoss(cls_loss_gain=self.cls_loss_gain)
+
+    def forward(self, pred: torch.Tensor, batch: ClassifyBatchDataInfo):
+        """
+        计算 SphereFace Loss。
+
+        Args:
+            pred (torch.Tensor): 模型输出，通常只含一个 (B, in_features) 张量。
+            batch (ClassifyBatchDataInfo): 批数据，包含 `target` 标签，形状为 (B,)，值为类别索引。
+
+        Returns:
+            torch.Tensor: SphereFace Loss 的输出。
+        """
+        # lambda = max(lambda_min,base*(1+gamma*iteration)^(-power))
+        self.iter += 1
+        self.lamb = max(self.LambdaMin, self.base * (1 + self.gamma * self.iter) ** (-1 * self.power))
+
+        # --------------------------- cos(theta) & phi(theta) ---------------------------
+        cos_theta = F.linear(F.normalize(pred), F.normalize(self.weight))
+        cos_theta = cos_theta.clamp(-1, 1)
+        cos_m_theta = self.mlambda[self.m](cos_theta)
+        theta = cos_theta.data.acos()
+        k = (self.m * theta / 3.14159265).floor()
+        phi_theta = ((-1.0) ** k) * cos_m_theta - 2 * k
+        NormOfFeature = torch.norm(pred, 2, 1)
+
+        # --------------------------- convert label to one-hot ---------------------------
+        one_hot = torch.zeros(cos_theta.size())
+        one_hot = one_hot.cuda() if cos_theta.is_cuda else one_hot
+        one_hot.scatter_(1, batch.target.view(-1, 1), 1)
+
+        # --------------------------- Calculate output ---------------------------
+        output = (one_hot * (phi_theta - cos_theta) / (1 + self.lamb)) + cos_theta
+        output *= NormOfFeature.view(-1, 1)
+
+        loss, loss_items = self.criterion(output, batch)
         return loss, loss_items
 
 
@@ -131,12 +480,12 @@ class YOLOV8DetectionLoss(nn.Module):
             pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
         return dist2bbox(pred_dist, anchor_points, xywh=False)
 
-    def forward(self, preds: list[torch.Tensor], batch: DetectBatchDataInfo):
+    def forward(self, preds: torch.Tensor, batch: DetectBatchDataInfo):
         """
         计算检测三件套损失。
 
         Args:
-            preds (list[Tensor]): 单 head 输出 [B, C+4*reg_max, H*W]。
+            preds (torch.Tensor): 单 head 输出 [B, C+4*reg_max, H*W]。
             batch (DetectBatchDataInfo): 批数据，含 bboxes、labels、bboxes_idx。
 
         Returns:
@@ -144,7 +493,6 @@ class YOLOV8DetectionLoss(nn.Module):
                 - total_loss (Tensor): 标量。
                 - loss_items (dict): 各分量损失。
         """
-        preds = preds[0]  # 只有一个head module
         dtype = preds[0].dtype
         batch_size = preds[0].shape[0]
 
@@ -224,9 +572,8 @@ class YOLOV8PoseLoss(YOLOV8DetectionLoss):
         sigmas = torch.from_numpy(self.OKS_SIGMA).to(self.device) if is_pose else torch.ones(nkpt, device=self.device) / nkpt
         self.keypoint_loss = KeypointLoss(sigmas=sigmas)
 
-    def __call__(self, preds: list[torch.Tensor], batch: PoseBatchDataInfo):
+    def __call__(self, preds: torch.Tensor, batch: PoseBatchDataInfo):
         """Calculate the total loss and detach it."""
-        preds = preds[0]  # 只有一个head module
         dtype = preds[1].dtype
         batch_size = preds[1].shape[0]
 

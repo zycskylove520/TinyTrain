@@ -16,8 +16,9 @@ class YOLOPoseValidator(BaseValidator):
     def __init__(self, trainer: BaseTrainer, world_size: int):
         super().__init__(trainer, world_size)
         self.save_dir = trainer.save_dir
-        self.num_classes = self.config_manager.dataset["nc"]
+        self.num_classes: int = self.config_manager.dataset["nc"]
         self.class_names = list(self.config_manager.dataset["names"].values())
+        self.keypoint_shape:list[int] = self.config_manager.dataset["keypoint_shape"]
 
         # box metrics
         self.box_metrics = BoxMetrics(class_names=self.class_names)
@@ -39,13 +40,15 @@ class YOLOPoseValidator(BaseValidator):
         return batch_samples
 
     def postprocess(self, preds: list[torch.Tensor]) -> list[torch.Tensor]:
-
+        num_keypoints = self.keypoint_shape[0] * self.keypoint_shape[1]
+        detect_preds, keypoint_preds = preds[0].split((4 + self.num_classes, num_keypoints), dim=1)
         # 进行nms
-        outputs: list[torch.Tensor] = detect_nms(pred=preds[0],
+        detect_outputs: list[torch.Tensor] = detect_nms(pred=preds[0],
                                                  conf_threshold=self.config_manager.core["conf_threshold"],
                                                  nms_threshold=self.config_manager.core["nms_threshold"],
                                                  max_detect_num=300)
-        return outputs
+
+        return
 
     def start_metrics_on_training(self, pbar: TTProgressBar):
         self.box_metrics.reset()

@@ -110,6 +110,7 @@ class BboxLossWithDFL(nn.Module):
 
         return loss_iou, loss_dfl
 
+
 class KeypointLoss(nn.Module):
     """Criterion class for computing training losses."""
 

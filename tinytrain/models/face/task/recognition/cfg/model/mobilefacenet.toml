@@ -1,0 +1,132 @@
+# MobileFaceNet face recognition model_config.
+
+scale = "l"
+
+# model_config compound scaling constants
+[scales.l]
+depth = 1
+summary = "78 layers, 1233152 parameters, 1233152 gradients, 16.42 GFLOPs"
+
+# ----------------------------backbone---------------------------------
+[[network]]
+# 0-P1/2
+type = "entry"
+module = "Conv"
+repeat = 1
+from = [-1]
+args.in_channels = 3
+args.out_channels = 64
+args.kernel_size = 3
+args.stride = 2
+args.padding = 1
+
+[[network]]
+# 1
+type = "flow"
+module = "Conv"
+repeat = 1
+from = [-1]
+args.in_channels = 64
+args.out_channels = 64
+args.kernel_size = 3
+args.stride = 1
+args.padding = 1
+args.groups = 64
+
+[[network]]
+# 2
+type = "flow"
+module = "DWBlock"
+repeat = 1
+from = [-1]
+args.in_channels = 64
+args.out_channels = 64
+args.residual = true
+
+[[network]]
+# 3
+type = "flow"
+module = "DWBlock"
+repeat = 1
+from = [-1]
+args.in_channels = 64
+args.out_channels = 128
+args.residual = false
+
+[[network]]
+# 4
+type = "flow"
+module = "DWBlock"
+repeat = 1
+from = [-1]
+args.in_channels = 128
+args.out_channels = 128
+args.residual = true
+
+[[network]]
+# 5
+type = "flow"
+module = "DWBlock"
+repeat = 1
+from = [-1]
+args.in_channels = 128
+args.out_channels = 128
+args.residual = false
+
+[[network]]
+# 6
+type = "flow"
+module = "DWBlock"
+repeat = 1
+from = [-1]
+args.in_channels = 128
+args.out_channels = 128
+args.residual = true
+
+[[network]]
+# 7
+type = "flow"
+module = "DWBlock"
+repeat = 1
+from = [-1]
+args.in_channels = 128
+args.out_channels = 128
+args.residual = false
+
+[[network]]
+# 8
+type = "flow"
+module = "Conv"
+repeat = 1
+from = [-1]
+args.in_channels = 128
+args.out_channels = 512
+args.kernel_size = 1
+args.stride = 1
+args.padding = 0
+
+[[network]]
+# 9
+type = "flow"
+module = "Conv"
+repeat = 1
+from = [-1]
+args.in_channels = 512
+args.out_channels = 512
+args.kernel_size = 7
+args.stride = 1
+args.padding = 0
+args.groups = 512
+args.act = false
+
+
+# ----------------------------------head--------------------------------------
+[[network]]
+# 10
+type = "head"
+module = "ArcFace"
+repeat = 1
+from = [-1]
+args.in_channels = 512
+args.feature_dim = 1024
+args.nc = -1

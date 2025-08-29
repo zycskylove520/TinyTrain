@@ -42,8 +42,7 @@ class YOLODetectionValidator(BaseValidator):
         # 进行nms
         outputs: list[torch.Tensor] = detect_nms(pred=preds[0],
                                                  conf_threshold=self.config_manager.inference["val_conf_threshold"],
-                                                 nms_threshold=self.config_manager.inference["val_nms_threshold"],
-                                                 max_detect_num=100)
+                                                 nms_threshold=self.config_manager.inference["val_nms_threshold"])
         return outputs
 
     def start_metrics_on_training(self, pbar: TTProgressBar):
@@ -57,12 +56,13 @@ class YOLODetectionValidator(BaseValidator):
 
         self.box_metrics.update(outputs, sample_list)
 
-        desc = f"{'val':^5}|{'classes':^15}|{'Precision':^15}|{'MAR':^15}|{'MAP50':^15}|{'MAP50_95':^15}|{'MAP_Small':^15}|{'MAP_Medium':^15}|{'MAP_Large':^15}|"
+        desc = f"{'val':^5}|{'classes':^15}|{'Precision':^15}|{'Recall':^15}|{'MAR':^15}|{'MAP50':^15}|{'MAP50_95':^15}|{'MAP_Small':^15}|{'MAP_Medium':^15}|{'MAP_Large':^15}|"
         pbar.set_description(desc)
 
     def end_metrics_on_training(self, pbar: TTProgressBar):
         self.box_metrics.compute()
         precision = self.box_metrics.precision()
+        recall = self.box_metrics.recall()
         mar_100 = self.box_metrics.mar_100()
         map50 = self.box_metrics.map50()
         map50_95 = self.box_metrics.map50_95()
@@ -70,10 +70,9 @@ class YOLODetectionValidator(BaseValidator):
         map_medium = self.box_metrics.map_medium()
         map_large = self.box_metrics.map_large()
 
-
         if RANK in {-1, 0}:
             # log
-            progress_str = f"{'val':^5}|{self.num_classes:^15}|{precision:^15.3f}|{mar_100:^15.3f}|{map50:^15.3f}|{map50_95:^15.3f}|{map_small:^15.3f}|{map_medium:^15.3f}|{map_large:^15.3f}|"
+            progress_str = f"{'val':^5}|{self.num_classes:^15}|{precision:^15.3f}|{recall:^15.3f}|{mar_100:^15.3f}|{map50:^15.3f}|{map50_95:^15.3f}|{map_small:^15.3f}|{map_medium:^15.3f}|{map_large:^15.3f}|"
             print(progress_str)
 
             # metrics result

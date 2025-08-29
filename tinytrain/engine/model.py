@@ -38,10 +38,10 @@ class BaseModel(nn.Module):
         super().__init__()
         self.DEPTH_GAIN = None  # 深度增益
 
-        self.criterion = None
         self.config_manager = config_manager
         self.module_list, self.record_list, self.ask_set, self.log_info = self.parse_model()
         self.initialize_weights()
+        self.criterion = None
 
         # 只有第一次启动时打印模型信息
         if "LOCAL_RANK" not in os.environ:
@@ -95,32 +95,35 @@ class BaseModel(nn.Module):
     # ------------------------------------------------------------------
     # 以下不建议子类重写的方法
     # ------------------------------------------------------------------
-    def forward(self, data, **kwargs):
+    def forward(self, data: BaseBatchDataInfo | torch.Tensor | list[torch.Tensor]):
         """
         统一入口：根据输入类型自动选择推理或训练模式。
 
         Args:
-            data (BaseBatchDataInfo | torch.Tensor):
+            data:
                 - BaseBatchDataInfo：训练/验证模式，计算 loss。
-                - torch.Tensor：推理模式，执行 inference。
-            **kwargs: 透传参数。
+                - torch.Tensor | list[torch.Tensor]：推理模式，执行 inference。
 
         Returns:
             Union[list[torch.Tensor], tuple]: 推理输出或 (loss, loss_items)。
         """
 
         if isinstance(data, BaseBatchDataInfo):
-            return self.loss(data, **kwargs)
+            if self.criterion is None:
+                self.criterion = self.init_criterion()
+            outputs = self.inference(data.data)
+            return self.loss(outputs, data)
+        elif isinstance(data, (torch.Tensor, list[torch.Tensor])):
+            return self.inference(data)
         else:
-            return self.inference(data, **kwargs)
+            raise TypeError(f"type(data): {type(data)} is not supported")
 
-    def inference(self, data, **kwargs):
+    def inference(self, data: torch.Tensor | list[torch.Tensor]):
         """
         推理模式前向传播。
 
         Args:
             data (torch.Tensor | list[torch.Tensor]): 输入张量或多输入列表。
-            **kwargs: 透传参数。
 
         Returns:
             list[torch.Tensor]: 模型输出列表（每个 head 对应一个输出）。
@@ -210,23 +213,17 @@ class BaseModel(nn.Module):
             raise RuntimeError("No output.")
         return outputs
 
-    def loss(self, batch_samples: BaseBatchDataInfo, preds=None, **kwargs):
+    def loss(self, preds: list[torch.Tensor], batch_samples: BaseBatchDataInfo) -> tuple[float, dict]:
         """
         训练/验证模式：计算损失。
 
         Args:
+            preds (list[torch.Tensor] | None): 模型前向推理输出结果
             batch_samples (BaseBatchDataInfo): 包含输入与标签的数据对象。
-            preds (list[torch.Tensor] | None): 若提供则直接使用，否则内部前向获取。
-            **kwargs: 透传给损失函数。
 
         Returns:
-            tuple[float, dict]: (总损失, 各分量损失字典)。
+            tuple[float, dict]: (总损失, 各分量损失字典),各分量损失字典例如：{"cls_loss", value}
         """
-
-        if self.criterion is None:
-            self.criterion = self.init_criterion()
-
-        preds = self.forward(batch_samples.data) if preds is None else preds
         return self.criterion(preds, batch_samples)
 
     def load_model_state_dict(self, state_dict, force_load=True):
@@ -345,7 +342,6 @@ class BaseModel(nn.Module):
         """
         打印模型结构摘要到日志与终端。
         """
-
 
         # 获取对齐长度，打印会更好看
         align_len = dict({"layer": 5, "type": 4, "repeat": 6, "from": 4, "module": 6, "args": 4})

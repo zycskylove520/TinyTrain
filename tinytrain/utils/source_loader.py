@@ -255,6 +255,7 @@ class SourceParserHub:
         Raises:
             ValueError: 如果没有找到匹配的解析器。
         """
+        # 已封装的数据对象直接透传
         if isinstance(source, BaseDataInfo):
             return NullParser()
 
@@ -274,8 +275,8 @@ class SourceParserHub:
             if suffix in cls._parsers:
                 return cls._parsers[suffix]()
 
-        # 如果没有找到匹配的解析器，抛出异常
-        raise ValueError(f"Unsupported source type or format: {source}")
+        # 其它类型统一透传
+        return NullParser()
 
     @classmethod
     def auto(cls, source: Any) -> SourceParser:

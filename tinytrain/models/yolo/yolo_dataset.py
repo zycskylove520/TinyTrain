@@ -328,7 +328,7 @@ class YOLOPoseDataset(TTBaseVisionDataset):
                     label=cls,
                     bboxes=boxes,
                     bbox_format="cxcywh",
-                    key_points=keypoints,
+                    keypoints=keypoints,
                     kpt_shape=self.keypoint_shape,
                     normalized=True
                 )
@@ -350,7 +350,7 @@ class YOLOPoseDataset(TTBaseVisionDataset):
                     label=cls,
                     bboxes=boxes,
                     bbox_format="cxcywh",
-                    key_points=keypoints,
+                    keypoints=keypoints,
                     kpt_shape=self.keypoint_shape,
                     normalized=True
                 )

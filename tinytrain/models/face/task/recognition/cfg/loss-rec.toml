@@ -1,0 +1,3 @@
+cls_loss_gain = 0.5  # 分类损失权重：放大或缩小分类 loss 对总梯度的贡献，0.5 表示最终分类 loss ×0.5
+
+face_type = "ArcFace"  # ["ArcFace", "CosFace", "SphereFace"]: 计算人脸识别的损失函数类型，

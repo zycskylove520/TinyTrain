@@ -4,6 +4,8 @@ from __future__ import annotations
 import torch.nn as nn
 from typing import Dict, Iterable, Set, Type, List, Tuple, Any, Optional, ClassVar, Callable
 
+from tinytrain.utils import LOGGER
+
 
 class TTEngineRegistry:
     """
@@ -126,7 +128,7 @@ class TTEngineRegistry:
             config_manager,
             engine_type: str,
             backend: Optional[str] = None,
-    ) -> Type:
+    ) -> Type | None:
         """
         根据配置管理器与引擎类型，精确查询实现类。
 
@@ -159,10 +161,11 @@ class TTEngineRegistry:
         try:
             return bucket[key]
         except KeyError:
-            raise NotImplementedError(
+            LOGGER.warning(
                 f"No implementation for core={core_name}, task={task}, "
                 f"engine_type={engine_type}, backend={backend}"
             )
+            return None
 
 
 class TTModuleRegistry:

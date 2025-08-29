@@ -57,10 +57,10 @@ class BaseDataInfo:
 class AnyDataInfo(BaseDataInfo):
     """透传任意 BaseDataInfo 对象"""
 
-    def __init__(self, data: BaseDataInfo, **kwargs):
+    def __init__(self, data, **kwargs):
         """
         Args:
-            data (BaseDataInfo): 被包装的原始数据对象。
+            data: 被包装的原始数据对象。
             **kwargs: 透传给父类的额外字段。
         """
         super().__init__(**kwargs)
@@ -318,7 +318,7 @@ class PoseDataInfo(DetectDataInfo):
     """
 
     def __init__(self,
-                 key_points: torch.Tensor | None = None,
+                 keypoints: torch.Tensor | None = None,
                  kpt_shape: list | None = None,
                  **kwargs
                  ) -> None:
@@ -331,7 +331,7 @@ class PoseDataInfo(DetectDataInfo):
             **kwargs: 透传给父类。
         """
         super().__init__(**kwargs)
-        self.key_points = key_points
+        self.keypoints = keypoints
         self.kpt_shape = kpt_shape
 
 
@@ -440,7 +440,7 @@ class PoseBatchDataInfo(DetectBatchDataInfo):
     """姿态估计 batch 容器，未来可拓展 key_points 字段。"""
 
     def __init__(self,
-                 batch_key_points: torch.Tensor | None = None,
+                 batch_keypoints: torch.Tensor | None = None,
                  **kwargs
                  ) -> None:
         """
@@ -449,5 +449,5 @@ class PoseBatchDataInfo(DetectBatchDataInfo):
         :param kwargs: 其他关键字参数（传递给父类）
         """
         super().__init__(**kwargs)
-        self.batch_key_points = batch_key_points
+        self.batch_keypoints = batch_keypoints
 # endregion

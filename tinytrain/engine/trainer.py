@@ -204,7 +204,7 @@ class BaseTrainer:
         """
 
         freeze_layer_names = []
-        for k, v in self.model.module.named_parameters() if world_size > 1 else self.model.named_parameters():
+        for k, v in self.model.named_parameters():
             if any(x in k for x in freeze_layer_names):
                 LOGGER.info(f"Freezing layer '{k}'")
                 v.requires_grad = False
@@ -838,8 +838,8 @@ class BaseTrainer:
             self.train_dataloader = self.build_dataloader(world_size, mode="train")
 
         # validate dataloader
-        if self.val_dir:
-            self.val_dataloader = self.build_dataloader(world_size, mode="val")
+        self.val_dataloader = self.build_dataloader(world_size, mode="val")
+        if self.val_dataloader is not None:
             self.validator = self.get_validator(world_size)
 
         # test dataloader
@@ -1365,13 +1365,8 @@ class BaseTrainer:
             BaseValidator: 验证器实例。
         """
 
-        try:
-            return TTEngineRegistry.get(self.config_manager, "validator")(self, world_size)
-        except Exception as e:
-            print(f"no validator found for world size {world_size}")
-            raise e
-
-            # return None
+        validator_cls = TTEngineRegistry.get(self.config_manager, "validator")
+        return validator_cls(self, world_size) if validator_cls else None
 
     def do_validate(self) -> float:
         """

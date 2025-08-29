@@ -354,6 +354,7 @@ class SPPF(nn.Module):
         y.extend(self.m(y[-1]) for _ in range(3))
         return self.cv2(torch.cat(y, 1))
 
+
 @TTModuleRegistry.register
 class AAttn(nn.Module):
     """
@@ -440,6 +441,7 @@ class AAttn(nn.Module):
         x = x + self.pe(v)
         return self.proj(x)
 
+
 @TTModuleRegistry.register
 class ABlock(nn.Module):
     """
@@ -507,6 +509,7 @@ class ABlock(nn.Module):
         """
         x = x + self.attn(x)
         return x + self.mlp(x)
+
 
 @TTModuleRegistry.register
 class A2C2f(nn.Module):
@@ -614,3 +617,108 @@ class DFL(nn.Module):
         b, _, a = x.shape  # batch, channels, anchors
         return self.conv(x.view(b, 4, self.in_channels, a).transpose(2, 1).softmax(1)).view(b, 4, a)
         # return self.conv(x.view(b, self.c1, 4, a).softmax(1)).view(b, 4, a)
+
+
+@TTModuleRegistry.register
+class FPN(nn.Module):
+    def __init__(self, in_channels_list, out_channels):
+        super(FPN, self).__init__()
+        self.output1 = Conv(in_channels=in_channels_list[0], out_channels=out_channels)
+        self.output2 = Conv(in_channels=in_channels_list[1], out_channels=out_channels)
+        self.output3 = Conv(in_channels=in_channels_list[2], out_channels=out_channels)
+
+        self.merge1 = Conv(in_channels=out_channels, out_channels=out_channels, kernel_size=3, padding=1)
+        self.merge2 = Conv(in_channels=out_channels, out_channels=out_channels, kernel_size=3, padding=1)
+
+    def forward(self, x: list[torch.Tensor]):
+        output1 = self.output1(x[0])
+        output2 = self.output2(x[1])
+        output3 = self.output3(x[2])
+
+        up3 = F.interpolate(output3, size=[output2.size(2), output2.size(3)], mode="nearest")
+        output2 = output2 + up3
+        output2 = self.merge2(output2)
+
+        up2 = F.interpolate(output2, size=[output1.size(2), output1.size(3)], mode="nearest")
+        output1 = output1 + up2
+        output1 = self.merge1(output1)
+
+        out = [output1, output2, output3]
+        return out
+
+
+@TTModuleRegistry.register
+class SSH(nn.Module):
+    def __init__(self, in_channel, out_channel):
+        super(SSH, self).__init__()
+        assert out_channel % 4 == 0
+        self.conv3X3 = Conv(in_channels=in_channel, out_channels=out_channel // 2, kernel_size=3, act=False)
+
+        self.conv5X5_1 = Conv(in_channels=in_channel, out_channels=out_channel // 4, kernel_size=3)
+        self.conv5X5_2 = Conv(in_channels=out_channel // 4, out_channels=out_channel // 4, kernel_size=3, act=False)
+
+        self.conv7X7_2 = Conv(in_channels=out_channel // 4, out_channels=out_channel // 4, kernel_size=3)
+        self.conv7x7_3 = Conv(in_channels=out_channel // 4, out_channels=out_channel // 4, kernel_size=3, act=False)
+
+    def forward(self, x):
+        conv3X3 = self.conv3X3(x)
+
+        conv5X5_1 = self.conv5X5_1(x)
+        conv5X5 = self.conv5X5_2(conv5X5_1)
+
+        conv7X7_2 = self.conv7X7_2(conv5X5_1)
+        conv7X7 = self.conv7x7_3(conv7X7_2)
+
+        out = torch.cat([conv3X3, conv5X5, conv7X7], dim=1)
+        out = F.relu(out)
+        return out
+
+
+@TTModuleRegistry.register
+class PAN(nn.Module):
+    def __init__(self, in_channels, out_channels_list):
+        super(PAN, self).__init__()
+        self.ssh1 = SSH(in_channels, out_channels_list[0])
+        self.ssh2 = SSH(in_channels, out_channels_list[1])
+        self.ssh3 = SSH(in_channels, out_channels_list[2])
+
+    def forward(self, x: list[torch.Tensor]):
+        out1 = self.ssh1(x[0])
+        out2 = self.ssh2(x[1])
+        out3 = self.ssh3(x[2])
+
+        return [out1, out2, out3]
+
+@TTModuleRegistry.register
+class DWBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, residual=False):
+        super().__init__()
+        self.conv = nn.Sequential(
+            Conv(in_channels, in_channels, 3, 1, 1, groups=in_channels),
+            Conv(in_channels, out_channels, 1, 1, 0, act=False)
+        )
+        self.residual = residual
+
+    def forward(self, x):
+        if self.residual:
+            return x + self.conv(x)
+        else:
+            return self.conv(x)
+
+@TTModuleRegistry.register
+class Conv2Linear(nn.Module):
+    def __init__(self, in_channels, out_channels, hidden_channels=1024, kernel_size=1, stride=1, padding=None, groups=1, bias=False, p=0.0):
+        super().__init__()
+        self.conv = Conv(in_channels, hidden_channels, kernel_size, stride, padding, groups)
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.drop = nn.Dropout(p=p, inplace=True)
+        self.linear = nn.Linear(hidden_channels, out_channels, bias=bias)
+        self.bn = nn.BatchNorm1d(out_channels)
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.pool(x).flatten(1)
+        x = self.drop(x)
+        x = self.linear(x)
+        x = self.bn(x)
+        return x

@@ -1,6 +1,7 @@
 import torch
 
 from tinytrain.cfg.config_manager import ConfigManager
+from tinytrain.data import BaseBatchDataInfo
 from tinytrain.loss.loss import YOLOV8DetectionLoss
 from tinytrain.models.yolo.yolo_model import YOLOModel
 
@@ -38,6 +39,9 @@ class YOLODetectionModel(YOLOModel):
                                    self.config_manager.loss["box_loss_gain"],
                                    self.config_manager.loss["dfl_loss_gain"]
                                    )
+
+    def loss(self, preds: list[torch.Tensor], batch_samples: BaseBatchDataInfo) -> tuple[float, dict]:
+        return self.criterion(preds[0], batch_samples)
 
     def custom_parse_model(self, module_info):
         scale = self.config_manager.model["scale"]
