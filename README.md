@@ -25,6 +25,8 @@ TinyTrain 是一个基于 PyTorch 的轻量级弹性可扩展 AI 框架，易于
 pip install -e .
 ```
 
+下面以YOLO目标检测模型来做示例。
+
 # 模型训练
 ***
 TinyTrain 提供了 project 目录，可用于直接训练模型。

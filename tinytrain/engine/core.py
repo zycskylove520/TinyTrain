@@ -131,10 +131,12 @@ class Core:
             model = self._find_last_pt_file()
 
         # bind model
-        self._bind_model(model_scale, model)
+        if self.model is None:
+            self._bind_model(model_scale, model)
 
         # bind trainer
-        self._bind_trainer()
+        if self.trainer is None:
+            self._bind_trainer()
 
         # train
         self.trainer.train()
@@ -162,7 +164,8 @@ class Core:
             model = self._find_best_pt_file()
 
         # bind predictor
-        self._bind_predictor(model, backend, **kwargs)
+        if self.predictor is None:
+            self._bind_predictor(model, backend, **kwargs)
 
         yield from self.predictor.predict(source)
 
@@ -189,7 +192,8 @@ class Core:
             model = self._find_best_pt_file()
 
         # bind predictor
-        self._bind_exporter(backend=backend, model=model, **kwargs)
+        if self.exporter is None:
+            self._bind_exporter(backend=backend, model=model, **kwargs)
 
         self.exporter.export(export_dir=export_dir)
 
@@ -219,7 +223,9 @@ class Core:
             ValueError: 若任务未在注册表中注册对应 Tuner。
         """
 
-        self._bind_tuner(model_scale)
+        if self.tuner is None:
+            self._bind_tuner(model_scale)
+
         return self.tuner.tune(pop_size=pop_size, generations=generations)
 
     def distill(self, teacher_model: str | Path, student_model_scale: str, student_model: str | Path = None, process_name: str = None):
@@ -230,19 +236,21 @@ class Core:
             setproctitle.setproctitle(process_name)
 
         # bind student model
-        self._bind_model(student_model_scale, student_model)
-
-        # load teacher model
-        assert Path(teacher_model).suffix in {".pt", ".pth"}, f"{Path(teacher_model).suffix} is not supported"
-        teacher_model = check_file(teacher_model)
-        checkpoint = torch.load(teacher_model.as_posix(), map_location="cpu", weights_only=False)
-        teacher_config_manager = deepcopy(self.config_manager)
-        teacher_config_manager.model = checkpoint["model_args"]
-        teacher_model = TTEngineRegistry.get(teacher_config_manager, "teacher_model")(teacher_config_manager)
-        teacher_model.load_model_state_dict(checkpoint["model"], True)
+        if self.model is None:
+            self._bind_model(student_model_scale, student_model)
 
         # bind distiller
-        self._bind_distiller(teacher_model)
+        if self.distiller is None:
+            # load teacher model
+            assert Path(teacher_model).suffix in {".pt", ".pth"}, f"{Path(teacher_model).suffix} is not supported"
+            teacher_model = check_file(teacher_model)
+            checkpoint = torch.load(teacher_model.as_posix(), map_location="cpu", weights_only=False)
+            teacher_config_manager = deepcopy(self.config_manager)
+            teacher_config_manager.model = checkpoint["model_args"]
+            teacher_model = TTEngineRegistry.get(teacher_config_manager, "teacher_model")(teacher_config_manager)
+            teacher_model.load_model_state_dict(checkpoint["model"], True)
+
+            self._bind_distiller(teacher_model)
 
         # train
         self.distiller.train()

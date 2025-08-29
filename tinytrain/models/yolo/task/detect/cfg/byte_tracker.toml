@@ -7,5 +7,5 @@ match_threshold = 0.9  # 跟踪目标匹配阈值
 # save
 show_realtime_result = false  # 是否实时战死跟踪结果
 save_img = false  # 保存跟踪结果每一帧的图片
-save_video = true  # 保存跟踪结果视频
+save_video = false  # 保存跟踪结果视频
 save_video_fps = 24  # 保存的跟踪结果视频的帧率
