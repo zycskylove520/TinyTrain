@@ -19,6 +19,9 @@ class FaceRecognitionTuner(BaseTuner):
             },
             "loss": {
                 "cls_loss_gain": {"type": "continuous", "low": 0.1, "high": 10},
-                "face_type":{"type": "discrete", "choices": ["ArcFace", "CosFace", "SphereFace"], "low": 0, "high": 2},
+                "sample_rate": {"type": "continuous", "low": 0.1, "high": 1.0},
+                "s": {"type": "discrete", "choices": [16, 32, 64, 128], "low": 0, "high": 3},
+                "m_arc": {"type": "continuous", "low": 0.0, "high": 1.0},
+                "interclass_filtering_threshold": {"type": "continuous", "low": 0.0, "high": 1.0},
             }
         }

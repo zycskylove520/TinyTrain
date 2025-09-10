@@ -1,7 +1,7 @@
 from torch.utils.data import dataloader
 
 
-class InfiniteDataLoader(dataloader.DataLoader):
+class YOLOInfiniteDataLoader(dataloader.DataLoader):
     """
     无限循环的 DataLoader，可在训练过程中持续复用 worker 进程而无需重启。
 

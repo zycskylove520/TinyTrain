@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tinytrain"
-version = "0.2.1"
+version = "0.2.2"
 description = "A tiny training framework with PyTorch"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -15,10 +15,10 @@ authors = [
 dependencies = [
     "albumentations",
     "chardet",
-    "faster-coco-eval",
     "lap",
     "loguru",
     "matplotlib",
+    "mmeval",
     "numpy",
     "onnx",
     "onnxruntime",
@@ -28,8 +28,11 @@ dependencies = [
     "opencv_python_headless",
     "pandas",
     "Pillow",
+    "psutil",
+    "ptflops",
     "pycocotools",
     "pydantic",
+    "scikit_learn",
     "scipy",
     "seaborn",
     "setproctitle",

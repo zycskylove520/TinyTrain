@@ -3,7 +3,8 @@ import torch
 from torch import nn
 
 from tinytrain.utils import LOGGER
-from tinytrain.utils.box_utils import bbox_iou_torch
+
+from .box_utils import bbox_iou_torch
 
 
 class TaskAlignedAssigner(nn.Module):
@@ -262,51 +263,6 @@ class TaskAlignedAssigner(nn.Module):
         # Find each grid serve which gt(index)
         target_gt_idx = mask_pos.argmax(-2)  # (b, h*w)
         return target_gt_idx, fg_mask, mask_pos
-
-
-def make_anchors(feats: list[torch.Tensor], strides: torch.Tensor, grid_cell_offset: float = 0.5):
-    """
-    根据多尺度特征图生成 anchor 中心点及其 stride。
-
-    Args:
-        feats (list[Tensor]): 网络输出特征图列表，每个 shape (B, C, H, W)。
-        strides (Tensor): (n_levels,) 各层相对于输入图像的步长。
-        grid_cell_offset (float): 网格偏移，默认 0.5 表示中心点。
-
-    Returns:
-        Tuple[Tensor, Tensor]:
-            anchor_points (Tensor): (total_anchors, 2) 所有 anchor 中心坐标。
-            stride_tensor (Tensor): (total_anchors, 1) 每个 anchor 对应的 stride。
-    """
-    assert feats is not None, "Feature maps (feats) cannot be None"
-
-    anchor_points, stride_tensor = [], []
-    dtype, device = feats[0].dtype, feats[0].device
-
-    for i in range(strides.shape[0]):
-        stride = strides[i]
-        # Get feature map height and width
-        h, w = feats[i].shape[2:] if isinstance(feats, list) else (int(feats[i][0]), int(feats[i][1]))
-
-        # Generate grid cell coordinates
-        sx = torch.arange(end=w, device=device, dtype=dtype) + grid_cell_offset  # shift x
-        sy = torch.arange(end=h, device=device, dtype=dtype) + grid_cell_offset  # shift y
-
-        # Generate meshgrid for x and y coordinates
-        sx, sy = torch.meshgrid(sx, sy, indexing="xy")
-
-        # Stack x and y coordinates and reshape to (h*w, 2)
-        anchor_points.append(torch.stack((sx, sy), -1).view(-1, 2))
-
-        # Create stride tensor for each anchor point
-        # Use broadcasting to fill the tensor more efficiently
-        stride_tensor.append(torch.full((h * w, 1), stride, dtype=dtype, device=device))
-
-    # Concatenate all anchor points and stride tensors
-    anchor_points = torch.cat(anchor_points)
-    stride_tensor = torch.cat(stride_tensor)
-
-    return anchor_points, stride_tensor
 
 
 def dist2bbox(distance, anchor_points, xywh: bool = True, dim: int = -1):

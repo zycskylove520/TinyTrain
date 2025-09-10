@@ -39,16 +39,15 @@ from itertools import repeat
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
 
-from tinytrain.data import PoseBatchDataInfo
 from tinytrain.global_var import NUM_THREADS
 from tinytrain.utils import LOGGER
 from tinytrain.utils.TT_progress_bar import TTProgressBar
 from tinytrain.utils.checks import check_detect_yolo_label, check_pose_yolo_label
 from tinytrain.utils.data_utils import cv_imread, load_image_cache_file
-
-from tinytrain.models.yolo.yolo_augment import YOLODetectionAugmentation, YOLOPoseAugmentation
-from tinytrain.data.data_format import DetectDataInfo, DetectBatchDataInfo, PoseDataInfo
+from tinytrain.data.data_format import DetectDataInfo, DetectBatchDataInfo, PoseDataInfo, PoseBatchDataInfo
 from tinytrain.data.dataset import TTBaseVisionDataset
+
+from .yolo_augment import YOLODetectionAugmentation, YOLOPoseAugmentation
 
 
 class YOLODetectionDataset(TTBaseVisionDataset):
@@ -242,6 +241,7 @@ class YOLODetectionDataset(TTBaseVisionDataset):
             bboxes_idx=bboxes_idx
         )
 
+
 class YOLOPoseDataset(TTBaseVisionDataset):
     """
     YOLO 检测数据集封装，支持 YOLO 格式标签（class cx cy w h，已归一化）。
@@ -263,7 +263,7 @@ class YOLOPoseDataset(TTBaseVisionDataset):
             数据集模式，决定增强策略及 collate 行为。
         """
         self.rgb: bool = config_manager.augment["rgb"]
-        self.keypoint_shape= config_manager.dataset["keypoint_shape"]
+        self.keypoint_shape = config_manager.dataset["keypoint_shape"]
         self.samples: list[PoseDataInfo] = []
         super().__init__(config_manager=config_manager, img_path=img_path, mode=mode)
 

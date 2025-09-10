@@ -1,18 +1,17 @@
-# tinytrain/metrics/pose_metrics.py
-from pathlib import Path
-from typing import List, Optional, Sequence
-
 import numpy as np
-import pandas as pd
 import seaborn as sns
 import torch
 import torch.distributed as dist
+
+from pathlib import Path
+from typing import List, Optional, Sequence
 from matplotlib import pyplot as plt
 from mmeval import PCKAccuracy, EndPointError, KeypointAUC, KeypointNME
 
-from tinytrain.metrics import BaseMetric
 from tinytrain.utils import LOGGER
 from tinytrain.global_var import RANK, WORLD_SIZE
+
+from .base import BaseMetric
 
 
 class PoseMetrics(BaseMetric):
@@ -31,12 +30,12 @@ class PoseMetrics(BaseMetric):
     """
 
     def __init__(
-        self,
-        num_keypoints: int,
-        class_metrics: bool = False,
-        class_names: Optional[List[str]] = None,
-        norm_factor: float = 1.0,
-        auc_alpha: Sequence[float] = tuple(np.arange(0.0, 0.5, 0.01)),
+            self,
+            num_keypoints: int,
+            class_metrics: bool = False,
+            class_names: Optional[List[str]] = None,
+            norm_factor: float = 1.0,
+            auc_alpha: Sequence[float] = tuple(np.arange(0.0, 0.5, 0.01)),
     ):
         """
         Args:

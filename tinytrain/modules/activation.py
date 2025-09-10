@@ -1,9 +1,7 @@
-"""Activation modules."""
-
 import torch
 import torch.nn as nn
 
-from tinytrain.cfg.TT_register import TTModuleRegistry
+from tinytrain.cfg import TTModuleRegistry
 
 
 @TTModuleRegistry.register

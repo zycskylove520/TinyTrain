@@ -1,96 +1,109 @@
 import torch
+import torch.nn.functional as F
 
-from tinytrain.data.data_format import ClassifyBatchDataInfo, BaseBatchDataInfo
+from torch import nn
+
+from tinytrain.data.data_format import FaceRecognitionValidBatchDataInfo
 from tinytrain.engine import BaseTrainer
 from tinytrain.engine.validator import BaseValidator
 from tinytrain.global_var import RANK
-from tinytrain.metrics.confusion_matrix import ClassifyConfusionMatrix
-from tinytrain.metrics.img_result import ClassifyImgResult
-from tinytrain.metrics.top_k_accuracy import ClassifyTopKAccuracy, ClassifySingleClassesAccuracy
+from tinytrain.metrics.face_metrics import FaceRecognitionMetrics
 from tinytrain.utils.TT_progress_bar import TTProgressBar
 
 
 class FaceRecognitionValidator(BaseValidator):
-    """
-    人脸识别模型的验证器。
-    """
-
     def __init__(self, trainer: BaseTrainer, world_size: int):
         super().__init__(trainer, world_size)
-        self.loss_names = ["cls_loss"]
-        self.num_classes = self.config_manager.dataset["nc"]
-        self.class_names = list(self.config_manager.dataset["names"].values())
-        self.save_dir = trainer.save_dir
+        self.metrics = FaceRecognitionMetrics()
 
-        # top1 && topn accuracy
-        self.top1 = ClassifyTopKAccuracy(k=1)
-        self.n = self.num_classes if self.num_classes < 5 else 5
-        self.topn = ClassifyTopKAccuracy(k=self.n)
-
-        # img result
-        self.img_result = ClassifyImgResult(class_names_dict=self.config_manager.dataset["names"], save_dir=self.save_dir, mode="val", rgb=self.config_manager.augment["rgb"])
-
-    def preprocess(self, batch_samples: ClassifyBatchDataInfo) -> BaseBatchDataInfo:
-        batch_samples.target = batch_samples.target.to(self.device, non_blocking=True)
-        model = self.trainer.get_model_instance(self.world_size)
-        model.head.target = batch_samples.target
-
-        mean = self.config_manager.augment["mean"]
-        std = self.config_manager.augment["std"] + 1e-8
-        batch_samples.data = ((batch_samples.data.to(self.device, non_blocking=True).float() / 255.0) - mean) / std
-
+    def preprocess(self, batch_samples: FaceRecognitionValidBatchDataInfo) -> FaceRecognitionValidBatchDataInfo:
+        for i in range(2):
+            batch_samples.data[i] = batch_samples.data[i].to(self.device, non_blocking=True)
+        batch_samples.match_tensor = batch_samples.match_tensor.to(self.device, non_blocking=True)
         return batch_samples
 
-    def postprocess(self, preds: list[torch.Tensor]) -> list[torch.Tensor]:
-        return preds
+    def inference(self, model: nn.Module, batch_samples: FaceRecognitionValidBatchDataInfo):
+        # 返回未归一化的 BN 输出即可，后处理里再统一归一化
+        preds1 = model.inference(batch_samples.data[0])[0]
+        preds2 = model.inference(batch_samples.data[1])[0]
+        return preds1, preds2
+
+    def postprocess(self, preds: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        pred1 = preds[0]
+        pred2 = preds[1]
+
+        pred1 = F.normalize(pred1, p=2, dim=1)
+        pred2 = F.normalize(pred2, p=2, dim=1)
+        return F.cosine_similarity(pred1, pred2, dim=1)  # [B]
 
     def start_metrics_on_training(self, pbar: TTProgressBar):
-        self.top1.reset()
-        self.topn.reset()
+        self.metrics.reset()
 
-    def update_metrics_on_training(self, outputs: list[torch.Tensor], batch_samples: ClassifyBatchDataInfo, pbar: TTProgressBar):
-        # metrics update
-        self.top1.update(outputs[0], batch_samples.target)
-        self.topn.update(outputs[0], batch_samples.target)
+    def update_metrics_on_training(self, outputs: torch.Tensor, batch_samples: FaceRecognitionValidBatchDataInfo, pbar: TTProgressBar):
+        scores = outputs.detach().cpu().numpy()
+        labels = batch_samples.match_tensor.cpu().numpy()
+        self.metrics.update(scores, labels)
 
-        # metrics result
-        top1_accuracy = self.top1.compute()
-        topn_accuracy = self.topn.compute()
-
-        # log update
-        topn_acc = f"Top{self.n}_Acc"
-        title = f"{'val':^5}|{'classes':^15}|{'Top1_Acc':^15}|{topn_acc:^15}|"
-        desc = f"{'val':^5}|{self.num_classes:^15}|{top1_accuracy:^15.3f}|{topn_accuracy:^15.3f}|"
-        pbar.set_title(title)
+        desc = f"{'val':^5}|{'Accuracy':^15}|{'AUC':^15}|{'TPR@FAR=1e-3':^15}|{'Best_threshold':^15}|"
         pbar.set_description(desc)
 
     def end_metrics_on_training(self, pbar: TTProgressBar):
-        # metrics result
-        top1_accuracy = self.top1.compute()
-        topn_accuracy = self.topn.compute()
+        self.metrics.compute()
+        acc = self.metrics.balanced_accuracy()
+        auc = self.metrics.auc()
+        tpr_1e3 = self.metrics.tpr_1e3()
+        best_threshold = self.metrics.best_threshold()
+        self.trainer.best_threshold = best_threshold
 
-        if self.trainer.train_result is not None:
-            self.trainer.train_result.add("top1_accuracy", top1_accuracy)
-            topn_acc = f"top{self.n}_accuracy"
-            self.trainer.train_result.add(topn_acc, topn_accuracy)
+        if RANK in {-1, 0}:
+            # log
+            progress_str = f"{'val':^5}|{acc:^15.3f}|{auc:^15.3f}|{tpr_1e3:^15.3f}|{best_threshold:^15.3f}|"
+            print(progress_str)
+
+            # 写回日志
+            if self.trainer.train_result is not None:
+                self.trainer.train_result.add("Accuracy", acc)
+                self.trainer.train_result.add("AUC", auc)
+                self.trainer.train_result.add("TPR@FAR=1e-3", tpr_1e3)
+                self.trainer.train_result.add("best_threshold", best_threshold)
 
     def start_metrics_on_train_completed(self, pbar: TTProgressBar):
-        self.top1.reset()
+        self.metrics.reset()
 
-    def update_metrics_on_train_completed(self, outputs: list[torch.Tensor], batch_samples: ClassifyBatchDataInfo, pbar: TTProgressBar):
-        pred = outputs[0].cpu()
-        self.top1.update(outputs[0], batch_samples.target)
-        accuracy = self.top1.compute()
+    def update_metrics_on_train_completed(self, outputs: torch.Tensor, batch_samples: FaceRecognitionValidBatchDataInfo, pbar: TTProgressBar):
+        scores = outputs.detach().cpu().numpy()
+        labels = batch_samples.match_tensor.cpu().numpy()
+        self.metrics.update(scores, labels)
 
-        # log update
-        title = f"{'val':^5}|{'classes':^15}|{'Top1_Acc':^15}|"
-        desc = f"{'val':^5}|{self.num_classes:^15}|{accuracy:^15.3f}|"
-        pbar.set_title(title)
+        desc = f"{'val':^5}|{'Accuracy':^15}|{'AUC':^15}|{'TPR@FAR=1e-3':^15}|{'Best_threshold':^15}|"
         pbar.set_description(desc)
 
-        # plot
+    def end_metrics_on_train_completed(self, pbar: TTProgressBar):
+        self.metrics.compute()
+        acc = self.metrics.balanced_accuracy()
+        auc = self.metrics.auc()
+        tpr_1e3 = self.metrics.tpr_1e3()
+        best_threshold = self.metrics.best_threshold()
+
         if RANK in {-1, 0}:
-            self.img_result.plot(batch_samples, pred)
+            # log
+            progress_str = f"{'val':^5}|{acc:^15.3f}|{auc:^15.3f}|{tpr_1e3:^15.3f}|{best_threshold:^15.3f}|"
+            print(progress_str)
+
+            # plot
+            self.metrics.plot(self.save_dir)
 
     def get_fitness(self) -> float:
-        return (self.top1.compute() + self.topn.compute()) / 2
+        """超参搜索时可返回 AUC 或 Best_ACC"""
+        acc = self.metrics.balanced_accuracy()
+        auc = self.metrics.auc()
+        tpr_1e3 = self.metrics.tpr_1e3()
+        weights = [0.06, 0.04, 0.9]
+        return acc * weights[0] + auc * weights[1] + tpr_1e3 * weights[2]
+
+    def get_model_instance(self):
+        if self.trainer.ema:
+            model = self.trainer.ema.ema_model
+        else:
+            model = self.trainer.model
+        return model

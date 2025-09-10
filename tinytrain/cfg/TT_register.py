@@ -1,8 +1,11 @@
 # ---------- 全局注册器 ----------
 from __future__ import annotations
 
+import importlib
+import pkgutil
+
 import torch.nn as nn
-from typing import Dict, Iterable, Set, Type, List, Tuple, Any, Optional, ClassVar, Callable
+from typing import Dict, Iterable, Set, Type, List, Tuple, Any, Optional, ClassVar, Callable, Union
 
 from tinytrain.utils import LOGGER
 
@@ -346,3 +349,24 @@ class TTModuleRegistry:
         """
         cls.MODULE_REGISTRY.clear()
         cls._CLASS2ALIASES.clear()
+
+    @classmethod
+    def register_plugin(cls, target: Union[str, object]) -> None:
+        """
+        扫描并导入用户模块/包，从而触发 @TTModuleRegistry.register 装饰器。
+
+        用法：
+            TTModuleRegistry.register_plugin("my_models.blocks")  # 整包
+            TTModuleRegistry.register_plugin("my_models.block")   # 单模块
+        """
+        import importlib
+        import pkgutil
+
+        if isinstance(target, str):
+            mod = importlib.import_module(target)
+            # 如果是包，继续递归扫子模块
+            if hasattr(mod, "__path__"):
+                for _, subname, _ in pkgutil.walk_packages(
+                        mod.__path__, mod.__name__ + "."
+                ):
+                    importlib.import_module(subname)

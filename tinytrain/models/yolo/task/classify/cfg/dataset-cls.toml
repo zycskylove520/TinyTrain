@@ -1,9 +1,8 @@
 img_size = 32
-cache = true
-path = "datasets/mnist"
+cache = false
 
-train = "train"
-val = "val"
+train = "datasets/mnist/train"
+val = "datasets/mnist/val"
 
 nc = 10
 [names]

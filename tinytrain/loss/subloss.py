@@ -7,6 +7,26 @@ from tinytrain.utils.box_utils import bbox_iou_torch
 from tinytrain.utils.tal import bbox2dist
 
 
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        BCE_loss = F.binary_cross_entropy(inputs, targets, reduction='none')
+        pt = torch.exp(-BCE_loss)  # Prevents nans when probability 0
+        F_loss = self.alpha * (1 - pt) ** self.gamma * BCE_loss
+
+        if self.reduction == 'mean':
+            return torch.mean(F_loss)
+        elif self.reduction == 'sum':
+            return torch.sum(F_loss)
+        else:
+            return F_loss
+
+
 class DFLoss(nn.Module):
     """
     Distribution Focal Loss（DFL）
@@ -59,6 +79,71 @@ class DFLoss(nn.Module):
         ).mean(-1, keepdim=True)
 
 
+class BoxLoss(nn.Module):
+    """
+    框回归损失类，计算预测框和真实框之间的损失。
+    使用 IoU 损失作为框回归损失。
+    """
+
+    def __init__(self):
+        super(BoxLoss, self).__init__()
+
+    def forward(self, pred_bboxes, gt_bboxes):
+        """
+        计算框回归损失。
+
+        Args:
+            pred_bboxes (Tensor): 预测的边界框，形状为 (B, N, 4)，格式为 (lx, ly, rx, ry)。
+            gt_bboxes (Tensor): 真实的边界框，形状为 (B, N, 4)，格式为 (lx, ly, rx, ry)。
+
+        Returns:
+            Tensor: 框回归损失。
+        """
+        return self.iou_loss(pred_bboxes, gt_bboxes)
+
+    def iou_loss(self, pred_bboxes, gt_bboxes):
+        """
+        计算 IoU 损失。
+
+        Args:
+            pred_bboxes (Tensor): 预测的边界框，形状为 (B, N, 4)，格式为 (lx, ly, rx, ry)。
+            gt_bboxes (Tensor): 真实的边界框，形状为 (B, N, 4)，格式为 (lx, ly, rx, ry)。
+
+        Returns:
+            Tensor: IoU 损失。
+        """
+        ious = self.compute_iou(pred_bboxes, gt_bboxes)
+        iou_loss = 1 - ious.mean()
+        return iou_loss
+
+    def compute_iou(self, pred_bboxes, gt_bboxes):
+        """
+        计算 IoU。
+
+        Args:
+            pred_bboxes (Tensor): 预测的边界框，形状为 (B, N, 4)，格式为 (lx, ly, rx, ry)。
+            gt_bboxes (Tensor): 真实的边界框，形状为 (B, N, 4)，格式为 (lx, ly, rx, ry)。
+
+        Returns:
+            Tensor: IoU 值。
+        """
+        # 计算交集
+        inter_x1 = torch.max(pred_bboxes[:, :, 0], gt_bboxes[:, :, 0])
+        inter_y1 = torch.max(pred_bboxes[:, :, 1], gt_bboxes[:, :, 1])
+        inter_x2 = torch.min(pred_bboxes[:, :, 2], gt_bboxes[:, :, 2])
+        inter_y2 = torch.min(pred_bboxes[:, :, 3], gt_bboxes[:, :, 3])
+        inter_area = torch.clamp(inter_x2 - inter_x1, min=0) * torch.clamp(inter_y2 - inter_y1, min=0)
+
+        # 计算并集
+        pred_area = (pred_bboxes[:, :, 2] - pred_bboxes[:, :, 0]) * (pred_bboxes[:, :, 3] - pred_bboxes[:, :, 1])
+        gt_area = (gt_bboxes[:, :, 2] - gt_bboxes[:, :, 0]) * (gt_bboxes[:, :, 3] - gt_bboxes[:, :, 1])
+        union_area = pred_area + gt_area - inter_area
+
+        # 计算 IoU
+        ious = inter_area / union_area
+        return ious
+
+
 class BboxLossWithDFL(nn.Module):
     """
     边界框回归损失 = IoU 损失 + 可选 DFL 损失。
@@ -75,7 +160,7 @@ class BboxLossWithDFL(nn.Module):
         Args:
             reg_max (int): 离散区间数量。>1 时启用 DFL，否则仅 IoU。
         """
-        super(BboxLossWithDFL, self).__init__()
+        super().__init__()
         self.dfl_loss = DFLoss(reg_max) if reg_max > 1 else None
 
     def forward(self, pred_dist, pred_bboxes, anchor_points, target_bboxes, target_scores, target_scores_sum, fg_mask):

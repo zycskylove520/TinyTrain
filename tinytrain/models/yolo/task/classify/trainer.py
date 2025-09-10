@@ -1,15 +1,9 @@
-import os
-import torch
-
-from torch.utils.data import DataLoader, DistributedSampler
-
 from tinytrain.data.data_format import ClassifyBatchDataInfo
 from tinytrain.data.dataset import TTClassificationDataset
-from tinytrain.engine.trainer import BaseTrainer
-from tinytrain.global_var import RANK
+from tinytrain.models.yolo.yolo_trainer import YOLOTrainer
 
 
-class YOLOClassificationTrainer(BaseTrainer):
+class YOLOClassificationTrainer(YOLOTrainer):
     def build_dataset(self, mode="train"):
         if mode == "train":
             return TTClassificationDataset(config_manager=self.config_manager,

@@ -2,11 +2,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Union
 
-from tinytrain.cfg.config_manager import ConfigManager
+from tinytrain.cfg import ConfigManager, TTEngineRegistry
 from tinytrain.utils.callback import Callback
-from tinytrain.cfg.TT_register import TTEngineRegistry
 
 if TYPE_CHECKING:
+    import torch
     from torch import nn
     from tinytrain.server.export_server import BaseExportServer
 
@@ -27,8 +27,12 @@ class BaseExporter:
     2. 调用 export：exporter.export(Path("runs/export"))
     """
 
+    # ------------------------------------------------------------------
+    # 1. 构造与入口
+    # ------------------------------------------------------------------
     def __init__(self,
                  config_manager: ConfigManager,
+                 device: torch.device,
                  model: nn.Module,
                  callback: Callback,
                  backend: str | None = None,
@@ -48,8 +52,7 @@ class BaseExporter:
         self.backend = backend
 
         # select device
-        from tinytrain.utils.checks import check_device_mini
-        self.device = check_device_mini(self.config_manager.core["device"])
+        self.device = device
 
         # 根据模型类型初始化导出服务
         self.export_server = self._setup_export_server(model=model, **kwargs)
@@ -57,6 +60,9 @@ class BaseExporter:
         # callback
         self.callback = callback
 
+    # ------------------------------------------------------------------
+    # 2. 唯一公开主链
+    # ------------------------------------------------------------------
     def export(self, export_dir: str | Path):
         """
         执行模型导出流程，将模型转换为目标格式并保存到指定目录。
@@ -74,6 +80,9 @@ class BaseExporter:
             self.export_server.export(export_dir)
         self.callback.run_callback(self, "on_export_end")
 
+    # ------------------------------------------------------------------
+    # 3. 内部工具（不建议重写）
+    # ------------------------------------------------------------------
     def _setup_export_server(self, model: nn.Module, **kwargs) -> Union[nn.Module, BaseExportServer]:
         """
         根据模型类型初始化导出服务器（目前仅支持 PyTorch nn.Module）。
@@ -93,6 +102,6 @@ class BaseExporter:
         if isinstance(model, nn.Module):
             model = model.to(self.device)
             model.eval()
-            return TTEngineRegistry.get(self.config_manager,"export_server", self.backend)(model=model, device=self.device, **kwargs)
+            return TTEngineRegistry.get(self.config_manager, "export_server", self.backend)(model=model, device=self.device, **kwargs)
         else:
             raise TypeError(f"only supported pytorch model!")

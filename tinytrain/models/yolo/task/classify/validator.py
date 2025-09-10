@@ -1,13 +1,22 @@
+from __future__ import annotations
+
 import torch
 
+from typing import TYPE_CHECKING
+
 from tinytrain.data.data_format import ClassifyBatchDataInfo, BaseBatchDataInfo
-from tinytrain.engine import BaseTrainer
-from tinytrain.engine.validator import BaseValidator
+from tinytrain.engine import BaseValidator
 from tinytrain.global_var import RANK
-from tinytrain.metrics.confusion_matrix import ClassifyConfusionMatrix
-from tinytrain.metrics.img_result import ClassifyImgResult
-from tinytrain.metrics.top_k_accuracy import ClassifyTopKAccuracy, ClassifySingleClassesAccuracy
 from tinytrain.utils.TT_progress_bar import TTProgressBar
+from tinytrain.metrics.classify_metrics import (
+    ClassifyConfusionMatrix,
+    ClassifyImgResult,
+    ClassifyTopKAccuracy,
+    ClassifySingleClassesAccuracy
+)
+
+if TYPE_CHECKING:
+    from tinytrain.engine import BaseTrainer
 
 
 class YOLOClassificationValidator(BaseValidator):
@@ -20,7 +29,6 @@ class YOLOClassificationValidator(BaseValidator):
         self.loss_names = ["cls_loss"]
         self.num_classes = self.config_manager.dataset["nc"]
         self.class_names = list(self.config_manager.dataset["names"].values())
-        self.save_dir = trainer.save_dir
 
         # top1 && topn accuracy
         self.top1 = ClassifyTopKAccuracy(k=1)

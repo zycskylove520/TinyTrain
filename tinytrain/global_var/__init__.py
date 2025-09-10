@@ -24,6 +24,10 @@ NUM_THREADS = min(8, max(1, os.cpu_count() - 1))
 # log
 LOGGING_NAME = "TinyTrain"
 
+# format
+IMG_FORMATS = {"bmp", "dng", "jpeg", "jpg", "mpo", "png", "tif", "tiff", "webp", "pfm", "heic"}  # image suffixes
+VID_FORMATS = {"asf", "avi", "gif", "m4v", "mkv", "mov", "mp4", "mpeg", "mpg", "ts", "wmv", "webm"}  # video suffixes
+
 # albumentations
 os.environ["NO_ALBUMENTATIONS_UPDATE"] = "1"  # disable automatic new versions checks
 warnings.filterwarnings("ignore", module="albumentations.*")

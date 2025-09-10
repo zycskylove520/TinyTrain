@@ -1,14 +1,13 @@
-import os
-
 import torch
 
 from torch import nn
 from copy import deepcopy
+from typing import Any, Dict
 
-from tinytrain.cfg.config_manager import ConfigManager
+from tinytrain.cfg import ConfigManager, TTModuleRegistry
 from tinytrain.data.data_format import BaseBatchDataInfo
+from tinytrain.global_var import RANK
 from tinytrain.utils import LOGGER
-from tinytrain.cfg.TT_register import TTModuleRegistry
 
 
 class BaseModel(nn.Module):
@@ -17,7 +16,7 @@ class BaseModel(nn.Module):
     1. 根据配置文件动态解析网络结构（entry / flow / head）。
     2. 管理前向传播：支持推理模式（inference）与训练模式（loss）。
     3. 提供权重加载、初始化、日志打印等通用功能。
-    4. 兼容绝大多数AI任务（视觉、自然语言处理等），子类只需实现 `init_criterion()`。
+    4. 兼容绝大多数AI任务（视觉、自然语言处理等）。
 
     设计要点：
     - 结构配置完全由 ConfigManager 驱动，无需硬编码。
@@ -27,7 +26,10 @@ class BaseModel(nn.Module):
     - 自动初始化权重（initialize_weights），支持 Kaiming / BN / ReLU 等。
     """
 
-    def __init__(self, config_manager: ConfigManager, *args, **kwargs):
+    # ------------------------------------------------------------------
+    # 1. 构造与入口
+    # ------------------------------------------------------------------
+    def __init__(self, config_manager: ConfigManager = None, device: torch.device = None, *args, **kwargs):
         """
         初始化模型。
 
@@ -39,16 +41,16 @@ class BaseModel(nn.Module):
         self.DEPTH_GAIN = None  # 深度增益
 
         self.config_manager = config_manager
+        self.device = device
         self.module_list, self.record_list, self.ask_set, self.log_info = self.parse_model()
-        self.initialize_weights()
         self.criterion = None
 
         # 只有第一次启动时打印模型信息
-        if "LOCAL_RANK" not in os.environ:
+        if RANK in {-1, 0}:
             self._model_log()
 
     # ------------------------------------------------------------------
-    # 以下建议子类可重写的方法
+    # 2. 子类可重写钩子
     # ------------------------------------------------------------------
     def init_criterion(self):
         """
@@ -61,6 +63,19 @@ class BaseModel(nn.Module):
             NotImplementedError: 必须由子类实现。
         """
         raise NotImplementedError("compute_loss() needs to be implemented by task heads")
+
+    def loss(self, preds: list[torch.Tensor], batch_samples: BaseBatchDataInfo) -> tuple[float, dict]:
+        """
+        训练/验证模式：计算损失。
+
+        Args:
+            preds (list[torch.Tensor] | None): 模型前向推理输出结果
+            batch_samples (BaseBatchDataInfo): 包含输入与标签的数据对象。
+
+        Returns:
+            tuple[float, dict]: (总损失, 各分量损失字典),各分量损失字典例如：{"cls_loss", value}
+        """
+        return self.criterion(preds, batch_samples)
 
     def custom_parse_model(self, module_info):
         """
@@ -77,6 +92,8 @@ class BaseModel(nn.Module):
         - Conv2d: Kaiming 正态分布
         - BatchNorm2d: γ=1, β=0, running_mean=0, running_var=1
         - 激活函数: 设置为 inplace=True
+
+        注意：该函数不会自动调用，需用户手动调用
         """
 
         for m in self.modules():
@@ -93,7 +110,7 @@ class BaseModel(nn.Module):
                 m.inplace = True
 
     # ------------------------------------------------------------------
-    # 以下不建议子类重写的方法
+    # 3. 统一前向入口（不建议重写）
     # ------------------------------------------------------------------
     def forward(self, data: BaseBatchDataInfo | torch.Tensor | list[torch.Tensor]):
         """
@@ -109,21 +126,20 @@ class BaseModel(nn.Module):
         """
 
         if isinstance(data, BaseBatchDataInfo):
-            if self.criterion is None:
-                self.criterion = self.init_criterion()
-            outputs = self.inference(data.data)
+            outputs = self.inference(data.data, data.extra_data)
             return self.loss(outputs, data)
         elif isinstance(data, (torch.Tensor, list[torch.Tensor])):
             return self.inference(data)
         else:
             raise TypeError(f"type(data): {type(data)} is not supported")
 
-    def inference(self, data: torch.Tensor | list[torch.Tensor]):
+    def inference(self, data: torch.Tensor | list[torch.Tensor], extra_data: Dict[str, Dict[str, Any]] = None):
         """
         推理模式前向传播。
 
         Args:
             data (torch.Tensor | list[torch.Tensor]): 输入张量或多输入列表。
+            extra_data Dict[str, Dict[str,Any]]: 传递给模型的额外参数.
 
         Returns:
             list[torch.Tensor]: 模型输出列表（每个 head 对应一个输出）。
@@ -143,11 +159,16 @@ class BaseModel(nn.Module):
         outputs: list = []  # 存放模型推理最终的输出
         for i, layer in enumerate(self.module_list):
             try:
+                current_data = data
+
                 # 拿到第i层的info
                 record_info = self.record_list[i]
+                module_type: str = record_info["type"]
+                module_name: str = record_info["module"]
+                num_from: int = len(record_info["from"])
 
                 # entry层特殊部分
-                if record_info["type"] == "entry":
+                if module_type == "entry":
                     try:
                         entry_idx_mapping[i] = inputs_idx
                     except KeyError:
@@ -155,12 +176,12 @@ class BaseModel(nn.Module):
                         raise
                     inputs_idx += 1
 
-                    if len(record_info["from"]) == 1:
+                    if num_from == 1:
                         rf = record_info["from"][0]
                         assert rf == -1, f"if entry type from_list only have one element, must be -1."
                         # 拿对应的input的输入数据
-                        data = layer(inputs[entry_idx_mapping[i]])
-                    elif len(record_info["from"]) > 1:
+                        current_data = inputs[entry_idx_mapping[i]]
+                    elif num_from > 1:
                         rfs = record_info["from"]
                         for rf in [j for j in rfs if j != -1]:
                             assert rf in self.ask_set, f"from index {rf} not found in ask_set {sorted(self.ask_set)}"
@@ -170,37 +191,38 @@ class BaseModel(nn.Module):
                                 temp_list.append(self.record_list[rf]["data"])
                             else:
                                 temp_list.append(inputs[entry_idx_mapping[i]])
-                        data = layer(temp_list)
+                        current_data = temp_list
+                    else:
+                        raise ValueError(f"from length must >=1.")
+                else:
+                    if num_from == 1:
+                        rf = record_info["from"][0]
+                        if rf == -1:
+                            pass
+                        else:
+                            assert rf in self.ask_set, f"from index {rf} not found in ask_set {sorted(self.ask_set)}"
+                            current_data = self.record_list[rf]["data"]
+                    elif num_from > 1:
+                        rfs = record_info["from"]
+                        for rf in [j for j in rfs if j != -1]:
+                            assert rf in self.ask_set, f"from index {rf} not found in ask_set {sorted(self.ask_set)}"
+
+                        temp_list: list = []
+                        for rf in rfs:
+                            if rf != -1:
+                                temp_list.append(self.record_list[rf]["data"])
+                            else:
+                                temp_list.append(data)
+                        current_data = temp_list
                     else:
                         raise ValueError(f"from length must >=1.")
 
-                    if i in self.ask_set:
-                        self.record_list[i]["data"] = data  # add new key-value to record_list
-                    continue
-
-                if len(record_info["from"]) == 1:
-                    rf = record_info["from"][0]
-                    if rf == -1:
-                        data = layer(data)
-                    else:
-                        assert rf in self.ask_set, f"from index {rf} not found in ask_set {sorted(self.ask_set)}"
-                        data = layer(self.record_list[rf]["data"])
-                elif len(record_info["from"]) > 1:
-                    rfs = record_info["from"]
-                    for rf in [j for j in rfs if j != -1]:
-                        assert rf in self.ask_set, f"from index {rf} not found in ask_set {sorted(self.ask_set)}"
-
-                    temp_list: list = []
-                    for rf in rfs:
-                        if rf != -1:
-                            temp_list.append(self.record_list[rf]["data"])
-                        else:
-                            temp_list.append(data)
-                    data = layer(temp_list)
+                if extra_data:
+                    data = layer(current_data, **extra_data.get(module_name, {}))
                 else:
-                    raise ValueError(f"from length must >=1.")
+                    data = layer(current_data)
 
-                if record_info["type"] == "head":
+                if module_type == "head":
                     outputs.append(data)
 
                 if i in self.ask_set:
@@ -210,49 +232,12 @@ class BaseModel(nn.Module):
                 raise
 
         if len(outputs) == 0:
-            raise RuntimeError("No output.")
+            raise RuntimeError("Model no output!")
         return outputs
 
-    def loss(self, preds: list[torch.Tensor], batch_samples: BaseBatchDataInfo) -> tuple[float, dict]:
-        """
-        训练/验证模式：计算损失。
-
-        Args:
-            preds (list[torch.Tensor] | None): 模型前向推理输出结果
-            batch_samples (BaseBatchDataInfo): 包含输入与标签的数据对象。
-
-        Returns:
-            tuple[float, dict]: (总损失, 各分量损失字典),各分量损失字典例如：{"cls_loss", value}
-        """
-        return self.criterion(preds, batch_samples)
-
-    def load_model_state_dict(self, state_dict, force_load=True):
-        """
-        加载权重，支持强制匹配或宽松匹配。
-
-        Args:
-            state_dict (dict[str, torch.Tensor]): 待加载的权重字典。
-            force_load (bool, optional): True 时要求形状完全匹配，否则跳过；False 时抛出异常。默认 True。
-
-        Raises:
-            KeyError: force_load=False 且形状不匹配时抛出。
-        """
-        model_state_dict = self.state_dict()
-
-        match_state_dict = {}
-        for key in state_dict:
-            if key in self.state_dict():
-                if state_dict[key].shape == model_state_dict[key].shape:
-                    match_state_dict[key] = state_dict[key]
-                else:
-                    if not force_load:
-                        raise KeyError(f"no match key:{key}, pt key shape:{state_dict[key].shape}, model key shape:{model_state_dict[key].shape}")
-                    LOGGER.warning(f"no match key:{key}, pt key shape:{state_dict[key].shape}, model key shape:{model_state_dict[key].shape}")
-            else:
-                LOGGER.warning(f"not exist key:{key}")
-
-        self.load_state_dict(match_state_dict, strict=False)
-
+    # ------------------------------------------------------------------
+    # 4. 模型结构解析（内部工具，不建议重写）
+    # ------------------------------------------------------------------
     def parse_model(self):
         """
         解析配置文件，动态构建网络结构。
@@ -315,6 +300,7 @@ class BaseModel(nn.Module):
                 # 构造网络模块
                 try:
                     layer = self._get_layer(_module)
+                    layer.config_manager = self.config_manager
                 except (NameError, AttributeError) as e:
                     raise ValueError(f"Failed to get module {_module}: {e}")
 
@@ -323,10 +309,10 @@ class BaseModel(nn.Module):
 
                 record_list.append({
                     "type": _type,  # type指明当前的模块类型
-                    "module": _module,
+                    "module": _module,  # module指明当前模块类
                     "layer": level,  # layer指明当前是第几层
                     "from": _from,  # from指明接受第几层的输入
-                    "repeat": _repeat
+                    "repeat": _repeat,  # repeat指明当前模块重复次数
                 })
 
                 ask_set.update([f for f in _from if f != -1])
@@ -337,6 +323,44 @@ class BaseModel(nn.Module):
                 raise e
 
         return layers, record_list, ask_set, log_info
+
+    @staticmethod
+    def _get_layer(module_str: str):
+        import importlib
+        module_str = module_str.strip()
+
+        # 1. 完整包路径
+        if "." in module_str:
+            *pkg_parts, cls_name = module_str.split(".")
+            pkg = ".".join(pkg_parts)
+            try:
+                mod = importlib.import_module(pkg)
+                return getattr(mod, cls_name)
+            except (ModuleNotFoundError, AttributeError):
+                pass
+
+        # 2. 候选包搜索（保持与之前一致）
+        candidate_pkgs = [
+            "torch.nn",
+            "torchvision.ops",
+            "transformers",
+        ]
+        for pkg in candidate_pkgs:
+            try:
+                mod = importlib.import_module(pkg)
+                if hasattr(mod, module_str):
+                    return getattr(mod, module_str)
+            except ModuleNotFoundError:
+                continue
+
+        # 3. ⭐ 查全局注册表 ⭐
+        if module_str in TTModuleRegistry.MODULE_REGISTRY:
+            return TTModuleRegistry.get(module_str)
+
+        raise ValueError(
+            f"Unrecognized module string '{module_str}'. "
+            f"Please check spelling, add candidate package, or use @register_module."
+        )
 
     def _model_log(self):
         """
@@ -383,7 +407,8 @@ class BaseModel(nn.Module):
             f"|{'repeat':^{align_len['repeat']}}"
             f"|{'from':^{align_len['from']}}"
             f"|{'module':^{align_len['module']}}"
-            f"|{'args':^{align_len['args']}}|"
+            f"|{'args':^{align_len['args']}}"
+            f"|"
         )
         for layer, info in enumerate(self.log_info):
             _repeat = max(round(info["repeat"] * depth), 1) if info["repeat"] > 1 else info["repeat"]
@@ -393,45 +418,37 @@ class BaseModel(nn.Module):
                 f"|{_repeat:^{align_len['repeat']}}"
                 f"|{str(info['from']):^{align_len['from']}}"
                 f"|{info['module']:^{align_len['module']}}"
-                f"|{str(info.get('args', {})):<{align_len['args']}}|"
+                f"|{str(info.get('args', {})):<{align_len['args']}}"
+                f"|"
             )
         print(f"model summary: {scale_info['summary']}\n")
 
-    @staticmethod
-    def _get_layer(module_str: str):
-        import importlib
-        module_str = module_str.strip()
+    # ------------------------------------------------------------------
+    # 5. 权重参数加载
+    # ------------------------------------------------------------------
+    def load_model_state_dict(self, state_dict, force_load=True):
+        """
+        加载权重，支持强制匹配或宽松匹配。
 
-        # 1. 完整包路径
-        if "." in module_str:
-            *pkg_parts, cls_name = module_str.split(".")
-            pkg = ".".join(pkg_parts)
-            try:
-                mod = importlib.import_module(pkg)
-                return getattr(mod, cls_name)
-            except (ModuleNotFoundError, AttributeError):
-                pass
+        Args:
+            state_dict (dict[str, torch.Tensor]): 待加载的权重字典。
+            force_load (bool, optional): True 时要求形状完全匹配，否则跳过；False 时抛出异常。默认 True。
 
-        # 2. 候选包搜索（保持与之前一致）
-        candidate_pkgs = [
-            # "tinytrain.modules",
-            "torch.nn",
-            "torchvision.ops",
-            "transformers",
-        ]
-        for pkg in candidate_pkgs:
-            try:
-                mod = importlib.import_module(pkg)
-                if hasattr(mod, module_str):
-                    return getattr(mod, module_str)
-            except ModuleNotFoundError:
-                continue
+        Raises:
+            KeyError: force_load=False 且形状不匹配时抛出。
+        """
+        model_state_dict = self.state_dict()
 
-        # 3. ⭐ 查全局注册表 ⭐
-        if module_str in TTModuleRegistry.MODULE_REGISTRY:
-            return TTModuleRegistry.get(module_str)
+        match_state_dict = {}
+        for key in state_dict:
+            if key in self.state_dict():
+                if state_dict[key].shape == model_state_dict[key].shape:
+                    match_state_dict[key] = state_dict[key]
+                else:
+                    if not force_load:
+                        raise KeyError(f"no match key:{key}, pt key shape:{state_dict[key].shape}, model key shape:{model_state_dict[key].shape}")
+                    LOGGER.warning(f"no match key:{key}, pt key shape:{state_dict[key].shape}, model key shape:{model_state_dict[key].shape}")
+            else:
+                LOGGER.warning(f"not exist key:{key}")
 
-        raise ValueError(
-            f"Unrecognized module string '{module_str}'. "
-            f"Please check spelling, add candidate package, or use @register_module."
-        )
+        self.load_state_dict(match_state_dict, strict=False)

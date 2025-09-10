@@ -34,6 +34,9 @@ class BaseTuner:
     >>> best_cfg = result["best_config"]
     """
 
+    # ------------------------------------------------------------------
+    # 1. 构造与入口
+    # ------------------------------------------------------------------
     def __init__(self, core, model_scale):
         """
         初始化调优器，完成以下工作：
@@ -65,7 +68,7 @@ class BaseTuner:
         self.flat_keys, self.flat_meta = self._flatten_param_tree(self.param_tree)
 
     # ------------------------------------------------------------------
-    # 子类可覆写：新增/修改超参
+    # 2. 子类可重写：搜索空间定义
     # ------------------------------------------------------------------
     @staticmethod
     def build_param_tree() -> Dict[str, Dict[str, Dict]]:
@@ -95,7 +98,7 @@ class BaseTuner:
         }
 
     # ------------------------------------------------------------------
-    # 以下不建议子类重写的方法
+    # 3. 公开主链（不建议重写）
     # ------------------------------------------------------------------
     def tune(
             self,
@@ -134,50 +137,8 @@ class BaseTuner:
         self._save(history, best_config)
         return {"history": history, "best_config": best_config}
 
-    @staticmethod
-    def _flatten_param_tree(tree: Dict[str, Any]) -> Tuple[List[Tuple[str, str]], List[Dict]]:
-        """
-        将嵌套的超参数树扁平化为两个平行列表：
-        keys: [(link_type, param_name), ...]
-        meta: [meta_dict, ...]
-
-        Args:
-            tree (dict): build_param_tree() 返回的字典。
-
-        Returns:
-            Tuple[List[Tuple[str, str]], List[Dict]]: (keys, meta)
-        """
-        keys, meta = [], []
-        for link_type, group in tree.items():
-            for pname, m in group.items():
-                keys.append((link_type, pname))
-                meta.append(m)
-        return keys, meta
-
-    def _decode_vector(self, vector: List[float]) -> Dict[str, Dict[str, Any]]:
-        """
-        将 GA 个体（实数向量）解码为可直接注入训练器的配置字典。
-
-        Args:
-            vector (List[float]): 一维实数向量，长度与 flat_meta 相同。
-
-        Returns:
-            Dict[str, Dict[str, Any]]: 形如 {"core": {"lr0": 0.01, ...}, ...}
-        """
-        cfg = {}
-        for (link_type, pname), m, val in zip(self.flat_keys, self.flat_meta, vector):
-            cfg.setdefault(link_type, {})
-            if m["type"] == "continuous":
-                cfg[link_type][pname] = float(max(m["low"], min(m["high"], val)))
-            elif m["type"] == "discrete":
-                idx = int(np.clip(np.round(val), 0, len(m["choices"]) - 1))
-                cfg[link_type][pname] = m["choices"][idx]
-            else:
-                raise ValueError(m["type"])
-        return cfg
-
     # ------------------------------------------------------------------
-    # 遗传算法实现
+    # 4. 遗传算法核心（内部工具）
     # ------------------------------------------------------------------
     def _ga_search(
             self,
@@ -240,24 +201,6 @@ class BaseTuner:
         best_config = self._decode_vector(best_ind.tolist())
         return history, best_config
 
-    # 遗传算法内部工具
-    def _random_genome(self) -> np.ndarray:
-        """
-        根据 flat_meta 随机生成一条染色体（实数向量）。
-
-        Returns:
-            np.ndarray: 一维实数向量。
-        """
-        vec = []
-        for m in self.flat_meta:
-            if m["type"] == "continuous":
-                vec.append(np.random.uniform(m["low"], m["high"]))
-            elif m["type"] == "discrete":
-                vec.append(np.random.uniform(0, len(m["choices"])))
-            else:
-                raise ValueError(m["type"])
-        return np.array(vec, dtype=np.float32)
-
     def _evaluate(self, pop: List[np.ndarray]) -> List[float]:
         """
         评估整个种群的适应度。
@@ -298,6 +241,23 @@ class BaseTuner:
                 fit = -float("inf")
             fitnesses.append(fit)
         return fitnesses
+
+    def _random_genome(self) -> np.ndarray:
+        """
+        根据 flat_meta 随机生成一条染色体（实数向量）。
+
+        Returns:
+            np.ndarray: 一维实数向量。
+        """
+        vec = []
+        for m in self.flat_meta:
+            if m["type"] == "continuous":
+                vec.append(np.random.uniform(m["low"], m["high"]))
+            elif m["type"] == "discrete":
+                vec.append(np.random.uniform(0, len(m["choices"])))
+            else:
+                raise ValueError(m["type"])
+        return np.array(vec, dtype=np.float32)
 
     def _tournament_select(self, pop, fits, k: int = 3):
         """
@@ -359,8 +319,50 @@ class BaseTuner:
         return mutant.astype(np.float32)
 
     # ------------------------------------------------------------------
-    # 保存
+    # 5. 编解码 & 持久化（内部工具）
     # ------------------------------------------------------------------
+    @staticmethod
+    def _flatten_param_tree(tree: Dict[str, Any]) -> Tuple[List[Tuple[str, str]], List[Dict]]:
+        """
+        将嵌套的超参数树扁平化为两个平行列表：
+        keys: [(link_type, param_name), ...]
+        meta: [meta_dict, ...]
+
+        Args:
+            tree (dict): build_param_tree() 返回的字典。
+
+        Returns:
+            Tuple[List[Tuple[str, str]], List[Dict]]: (keys, meta)
+        """
+        keys, meta = [], []
+        for link_type, group in tree.items():
+            for pname, m in group.items():
+                keys.append((link_type, pname))
+                meta.append(m)
+        return keys, meta
+
+    def _decode_vector(self, vector: List[float]) -> Dict[str, Dict[str, Any]]:
+        """
+        将 GA 个体（实数向量）解码为可直接注入训练器的配置字典。
+
+        Args:
+            vector (List[float]): 一维实数向量，长度与 flat_meta 相同。
+
+        Returns:
+            Dict[str, Dict[str, Any]]: 形如 {"core": {"lr0": 0.01, ...}, ...}
+        """
+        cfg = {}
+        for (link_type, pname), m, val in zip(self.flat_keys, self.flat_meta, vector):
+            cfg.setdefault(link_type, {})
+            if m["type"] == "continuous":
+                cfg[link_type][pname] = float(max(m["low"], min(m["high"], val)))
+            elif m["type"] == "discrete":
+                idx = int(np.clip(np.round(val), 0, len(m["choices"]) - 1))
+                cfg[link_type][pname] = m["choices"][idx]
+            else:
+                raise ValueError(m["type"])
+        return cfg
+
     def _save(self, history: List[Dict], best_config: Dict):
         """
         持久化调优结果。

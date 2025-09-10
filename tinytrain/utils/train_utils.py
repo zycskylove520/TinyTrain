@@ -1,8 +1,7 @@
 import math
+import torch
 
 from copy import deepcopy
-
-import torch
 
 from tinytrain.utils import LOGGER
 
@@ -25,19 +24,18 @@ class ModelEMA:
     ...     loss = train_step(batch)
     ...     ema.update(model)
     """
-    def __init__(self, model, world_size: int, decay: float = 0.9999, tau: int = 2000, updates: int = 0):
+
+    def __init__(self, model, decay: float = 0.9999, tau: int = 2000, updates: int = 0):
         """
         初始化 EMA 实例。
 
         Args:
             model (torch.nn.Module): 原始训练模型。
-            world_size (int): DDP 进程数；>1 时自动解包 `model.module`。
             decay (float): 目标衰减系数；训练初期会按升温公式动态调整。
             tau (int): 升温时间常数，越小升温越快。
             updates (int): 已完成的更新次数，用于继续训练时恢复状态。
         """
-        self.world_size = world_size
-        self.ema_model = deepcopy(model.module if world_size > 1 else model).eval()  # FP32 EMA
+        self.ema_model = deepcopy(model).eval()  # FP32 EMA
         self.updates = updates  # number of EMA updates
         self.decay = lambda x: decay * (1 - math.exp(-x / tau))  # decay exponential ramp (to help early epochs)
         self.decay_cache = {}  # cache decay values to avoid repeated computation
@@ -63,7 +61,6 @@ class ModelEMA:
         if self.updates not in self.decay_cache:
             self.decay_cache[self.updates] = d
 
-        model = model.module if self.world_size > 1 else model
         msd = model.state_dict()  # model state_dict
         ema_sd = self.ema_model.state_dict()  # EMA state_dict
         for k, v in ema_sd.items():

@@ -1,19 +1,7 @@
-img_size = 32
-cache = true
-path = "datasets/mnist"
+train_img_size = 112
+val_img_size = 112
 
-train = "train"
-val = "val"
+train = "datasets/face_dataset/glint360k"
+val = "datasets/face_dataset/lfw/lfw_test_pair.txt"
 
-nc = 10
-[names]
-0 = "0"
-1 = "1"
-2 = "2"
-3 = "3"
-4 = "4"
-5 = "5"
-6 = "6"
-7 = "7"
-8 = "8"
-9 = "9"
+nc = 360232  # train dataset num classes!

@@ -1,9 +1,8 @@
 img_size = 640
-cache = true
+cache = false
 
-path = "datasets/xxx"
-train = "images/train"
-val = "images/val"
+train = "datasets/xxx/images/train"
+val = "datasets/xxx/images/val"
 test = ""
 
 nc = 3

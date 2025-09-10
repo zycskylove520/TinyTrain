@@ -4,7 +4,7 @@ from tinytrain.server.inference_server import BaseOnnxInferenceServer
 
 
 class YOLOClassificationOnnxInferenceServer(BaseOnnxInferenceServer):
-    def inference(self, data: torch.Tensor) -> list[torch.Tensor]:
+    def inference(self, data: torch.Tensor):
         """
         单张或多张图片的 ONNX 前向推理。
 

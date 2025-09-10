@@ -4,7 +4,6 @@
 """
 
 import os
-
 import torch
 import numpy as np
 
@@ -13,12 +12,8 @@ from PIL import ImageOps, Image
 from torch import autocast
 from torch.utils.data import DataLoader
 
-from tinytrain.global_var import ROOT
+from tinytrain.global_var import ROOT, IMG_FORMATS, VID_FORMATS
 from tinytrain.utils import LOGGER
-
-IMG_FORMATS = {"bmp", "dng", "jpeg", "jpg", "mpo", "png", "tif", "tiff", "webp", "pfm", "heic"}  # image suffixes
-VID_FORMATS = {"asf", "avi", "gif", "m4v", "mkv", "mov", "mp4", "mpeg", "mpg", "ts", "wmv", "webm"}  # video suffixes
-FORMATS_HELP_MSG = f"Supported formats are:\nimages: {IMG_FORMATS}\nvideos: {VID_FORMATS}"
 
 
 def exif_size(img: Image.Image) -> tuple[int, int]:
@@ -163,7 +158,7 @@ def check_device_mini(device):
         raise ValueError("Device must be 'cpu', 'cuda', 'mps', an integer (GPU index), or a list of integers (GPU indices).")
 
 
-def check_amp(trainer, model, dataset):
+def check_amp(trainer):
     """
     检测模型在 AMP 模式下是否数值稳定（不 NaN、不崩溃）。
 
@@ -172,14 +167,11 @@ def check_amp(trainer, model, dataset):
 
     Args:
         trainer:  训练器实例，用于数据预处理
-        model:    待检测模型
-        dataset:  数据集实例，用于采样小批次
 
     Returns:
         bool: 是否支持 AMP
     """
-
-    device = next(model.parameters()).device  # Get the model's device
+    device = trainer.device
 
     def amp_allclose(model: torch.nn.Module, batch: torch.Tensor):
         """
@@ -204,12 +196,13 @@ def check_amp(trainer, model, dataset):
         return a.shape == b.shape and torch.allclose(a, b.float(), atol=0.5)
 
     # Create a temporary DataLoader to get a batch of data
+    dataset = trainer.train_dataloader.dataset
     temp_dataloader = DataLoader(dataset=dataset, batch_size=2, collate_fn=dataset.collate_fn)
     batch_samples = trainer.preprocess_data(next(iter(temp_dataloader)))
 
     try:
         # Perform the AMP check
-        assert amp_allclose(model, batch_samples.data)
+        assert amp_allclose(trainer.model, batch_samples.data)
     except (AttributeError, ModuleNotFoundError) as e:
         LOGGER.warning(
             f"AMP: Checks skipped due to unsupported functionality. {e}. "
@@ -245,7 +238,7 @@ def check_image(img_file: Path, *args):
 
             # 检查图像格式
             image_format = image.format.lower()
-            assert image_format in IMG_FORMATS, f"Invalid image format {image.format}. {FORMATS_HELP_MSG}"
+            assert image_format in IMG_FORMATS, f"Invalid image format {image.format}. Supported formats are:\nimages: {IMG_FORMATS}\nvideos: {VID_FORMATS}"
 
             # 修复损坏的 JPEG 图像
             if image_format in {"jpg", "jpeg"}:

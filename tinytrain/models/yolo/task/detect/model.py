@@ -1,21 +1,21 @@
 import torch
 
-from tinytrain.cfg.config_manager import ConfigManager
-from tinytrain.data import BaseBatchDataInfo
-from tinytrain.loss.loss import YOLOV8DetectionLoss
+from tinytrain.cfg import ConfigManager
+from tinytrain.data.data_format import BaseBatchDataInfo
+from tinytrain.loss import YOLOV8DetectionLoss
 from tinytrain.models.yolo.yolo_model import YOLOModel
 
 
 class YOLODetectionModel(YOLOModel):
-    def __init__(self, config_manager: ConfigManager, *args, **kwargs):
-        super().__init__(config_manager, *args, **kwargs)
+    def __init__(self, config_manager: ConfigManager, device, *args, **kwargs):
+        super().__init__(config_manager, device=device, *args, **kwargs)
         self.initialize_weights()
 
         input_channel = config_manager.model["network"][0]["args"]["in_channels"]
-        m = self.module_list[-1]  # Detect()
+        m = self.module_list[-1]  # YOLODetectHead()
 
-        # 初始化 stride
-        self.stride = m.stride = self._initialize_stride(input_channel)
+        # 初始化 strides
+        self.strides = m.strides = self._initialize_stride(input_channel)
 
     def _initialize_stride(self, input_channel):
         """
@@ -24,8 +24,7 @@ class YOLODetectionModel(YOLOModel):
         stride = 256  # 2x min stride
         with torch.no_grad():  # 确保不会改变模型状态
             # 模拟一张 256x256 的图片
-            device = next(self.parameters()).device
-            dummy_input = torch.zeros(1, input_channel, stride, stride, device=device)
+            dummy_input = torch.zeros(1, input_channel, stride, stride)
             # 前向传播，获取输出
             outputs = self.forward(dummy_input)[0]
             # 计算 stride
@@ -35,6 +34,7 @@ class YOLODetectionModel(YOLOModel):
     def init_criterion(self):
         return YOLOV8DetectionLoss(self,
                                    self.config_manager.dataset["img_size"],
+                                   self.device,
                                    self.config_manager.loss["cls_loss_gain"],
                                    self.config_manager.loss["box_loss_gain"],
                                    self.config_manager.loss["dfl_loss_gain"]

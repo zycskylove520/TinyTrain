@@ -4,10 +4,11 @@ import torch
 import torch.distributed as dist
 
 from typing import TYPE_CHECKING
+from torch import nn
 
 from tinytrain.data.data_format import BaseBatchDataInfo
 from tinytrain.utils.TT_progress_bar import TTProgressBar
-from tinytrain.cfg.config_manager import ConfigManager
+from tinytrain.cfg import ConfigManager
 
 if TYPE_CHECKING:
     from .trainer import BaseTrainer
@@ -34,6 +35,9 @@ class BaseValidator:
     - 支持 DDP；若需跨进程聚合指标，请在子类中自行实现。
     """
 
+    # ------------------------------------------------------------------
+    # 1. 构造与入口
+    # ------------------------------------------------------------------
     def __init__(self, trainer: BaseTrainer, world_size: int):
         """
         初始化验证器。
@@ -46,6 +50,7 @@ class BaseValidator:
         self.trainer: BaseTrainer = trainer
         self.world_size = world_size
         self.config_manager: ConfigManager = trainer.config_manager
+        self.save_dir = trainer.save_dir
 
         # device
         self.device: torch.device = trainer.device
@@ -62,6 +67,9 @@ class BaseValidator:
         """
         self.validate(*args, **kwargs)
 
+    # ------------------------------------------------------------------
+    # 2. 主验证流程（唯一公开主链）
+    # ------------------------------------------------------------------
     @torch.inference_mode()
     def validate(self):
         """
@@ -75,7 +83,7 @@ class BaseValidator:
         stop = self.trainer.stop
 
         # 获取模型
-        model = self.trainer.get_model_instance(self.world_size)
+        model = self.get_model_instance()
         model.eval()
 
         self.callbacks.run_callback(self, "on_val_start")
@@ -94,7 +102,7 @@ class BaseValidator:
             batch_samples = self.preprocess(batch_samples)  # type: ignore[arg-type]
 
             # Inference
-            preds = model(batch_samples.data)
+            preds = self.inference(model, batch_samples)
 
             # Postprocess
             outputs = self.postprocess(preds)
@@ -119,8 +127,15 @@ class BaseValidator:
 
         return fitness
 
+    def inference(self, model: nn.Module, batch_samples: BaseBatchDataInfo) -> list[torch.Tensor]:
+        if batch_samples.extra_data:
+            preds = model.inference(batch_samples.data, batch_samples.extra_data)
+        else:
+            preds = model.inference(batch_samples.data)
+        return preds
+
     # ------------------------------------------------------------------
-    # 以下子类可重写的方法
+    # 3. 数据流水（子类需重写）
     # ------------------------------------------------------------------
     def preprocess(self, batch_samples: BaseBatchDataInfo) -> BaseBatchDataInfo:
         """
@@ -147,7 +162,7 @@ class BaseValidator:
         return preds
 
     # ------------------------------------------------------------------
-    # 指标生命周期：训练过程中验证
+    # 4. 指标生命周期：训练过程中验证（子类需重写）
     # ------------------------------------------------------------------
     def start_metrics_on_training(self, pbar: TTProgressBar):
         """
@@ -178,8 +193,18 @@ class BaseValidator:
         """
         pass
 
+    def get_fitness(self) -> float:
+        """
+        返回一个标量，用于衡量当前模型在验证集上的优劣。
+        训练器会把该值用于 checkpoint 选择、早停、学习率调度等。
+
+        Returns:
+            float: 越大表示模型越好；默认返回 0（子类必须重写以提供有效指标）。
+        """
+        return 0.
+
     # ------------------------------------------------------------------
-    # 指标生命周期：训练完成后最终验证
+    # 5. 指标生命周期：训练完成后最终验证（子类需重写）
     # ------------------------------------------------------------------
     def start_metrics_on_train_completed(self, pbar: TTProgressBar):
         """
@@ -210,17 +235,16 @@ class BaseValidator:
         """
         pass
 
-    def get_fitness(self) -> float:
-        """
-        返回一个标量，用于衡量当前模型在验证集上的优劣。
-        训练器会把该值用于 checkpoint 选择、早停、学习率调度等。
+    # ------------------------------------------------------------------
+    # 6. 分布式辅助 & 内部工具
+    # ------------------------------------------------------------------
+    def get_model_instance(self):
+        if self.trainer.ema:
+            model = self.trainer.ema.ema_model
+        else:
+            model = self.trainer.model
+        return model
 
-        Returns:
-            float: 越大表示模型越好；默认返回 0（子类必须重写以提供有效指标）。
-        """
-        return 0
-
-    # ====== 分布式辅助函数 ======
     @classmethod
     def _all_reduce_tensor(cls, tensor: torch.Tensor, op=dist.ReduceOp.SUM):
         """把 tensor 在所有 rank 上做 all_reduce（原地）"""

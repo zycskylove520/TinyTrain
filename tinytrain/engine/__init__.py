@@ -1,4 +1,5 @@
 from .core import Core
+from .distiller import BaseDistiller
 from .exporter import BaseExporter
 from .model import BaseModel
 from .predictor import BasePredictor

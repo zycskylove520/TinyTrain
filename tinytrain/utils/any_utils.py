@@ -20,6 +20,7 @@ from tinytrain.utils import LOGGER
 
 T = TypeVar('T')
 
+
 def make2tuple(x: Union[T, Sequence[T]]) -> Tuple[T, T]:
     """
     将标量或长度为 2 的序列统一成二元组。
@@ -92,8 +93,10 @@ def set_random_seed(seed: int = 0, deterministic: bool = False) -> None:
         # 启用CUDA的非确定性算法
         if torch.backends.cudnn.is_available():
             torch.backends.cudnn.deterministic = deterministic
-            # 启用 CUDNN（如果可用）
-            torch.backends.cudnn.benchmark = True
+            if deterministic:
+                torch.backends.cudnn.benchmark = False
+            else:
+                torch.backends.cudnn.benchmark = True
 
 
 @contextmanager
@@ -158,7 +161,6 @@ def create_iter_directory(base_dir, start_string="train_"):
     return Path(new_project_dir)
 
 
-
 def make_divisible(x, divisor=8):
     """
     将输入整数向上取整为 divisor 的最近倍数，常用于网络输入尺寸对齐。
@@ -174,11 +176,12 @@ def make_divisible(x, divisor=8):
         divisor = int(divisor.max())  # to int
     return math.ceil(x / divisor) * divisor
 
+
 def _get_free_shm_mb() -> float:
     """返回 /dev/shm 剩余空间（单位 MB）。"""
     shm_path = "/dev/shm"
     if not os.path.exists(shm_path):
-        return float("inf")          # Windows / 特殊环境
+        return float("inf")  # Windows / 特殊环境
     return shutil.disk_usage(shm_path).free / 1024 / 1024
 
 

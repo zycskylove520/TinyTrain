@@ -7,7 +7,7 @@ YOLO分类算法支持多个不同的模型结构，具体可查阅当前目录�
 构建YOLO分类数据集时使用通用分类数据集格式，可以参考Pytorch的ImageFloder读取数据集的目录格式。
 
 数据集目录格式如下：
-root/
+dataset/
 ├── train/
 │   ├── cat/
 │   │   ├── cat_001.jpg
@@ -39,7 +39,7 @@ root/
 │   └── ...
 
 ## 说明
-- **`root/`**：数据集的根目录。
+- **`dataset/`**：数据集的根目录。
 - **`train/`**：训练集目录，包含所有用于训练的图像。
   - **`class1/`**：类别1的图像目录。
   - **`class2/`**：类别2的图像目录。
@@ -51,31 +51,32 @@ root/
 
 # 模型训练
 ***
+
 ```python
 from tinytrain import YOLOCore
 
 # 指定YOLO分类模型的link.toml文件
-yolo = YOLOCore(link_file="../link.toml")
+yolo = YOLOCore(link_file="../../task/classify/link.toml")
 
 # 可通过override覆盖配置文件参数
 yolo.set_config_overrides(
-    link_type="core",
-    task="classify",  # 指定task为classify
-    warmup_epochs=2,
-    epochs=10,
-    batch_size=16,
-    lr0=1e-2,
-    lr1=1e-4,
-    scheduler="auto",
-    workers=1,
-    launch_tb=False,
-    amp=False,
+  link_type="core",
+  task="classify",  # 指定task为classify
+  warmup_epochs=2,
+  epochs=10,
+  batch_size=16,
+  lr0=1e-2,
+  lr1=1e-4,
+  scheduler="auto",
+  workers=1,
+  launch_tb=False,
+  amp=False,
 )
 
 yolo.set_config_overrides(
-    link_type="dataset",
-    img_size=28,
-    cache=False
+  link_type="dataset",
+  img_size=28,
+  cache=False
 )
 
 # 启动训练

@@ -1,7 +1,8 @@
-from tinytrain.models.yolo.task.detect import YOLODetectionTrainer
 from tinytrain.models.yolo.yolo_dataset import YOLOPoseDataset
+from tinytrain.models.yolo.yolo_trainer import YOLOTrainer
 
-class YOLOPoseTrainer(YOLODetectionTrainer):
+
+class YOLOPoseTrainer(YOLOTrainer):
     def build_dataset(self, mode="train"):
         if mode == "train":
             return YOLOPoseDataset(config_manager=self.config_manager,

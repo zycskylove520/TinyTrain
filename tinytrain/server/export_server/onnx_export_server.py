@@ -7,8 +7,9 @@ import torch
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .base_export_server import BaseExportServer
 from tinytrain.utils import LOGGER
+
+from .base_export_server import BaseExportServer
 
 if TYPE_CHECKING:
     from torch import nn
@@ -18,6 +19,7 @@ class BaseOnnxExportServer(BaseExportServer):
     """
     通用 ONNX 导出服务器，支持 torch → ONNX → onnxslim 完整链路。
     """
+
     def __init__(self,
                  model: nn.Module,
                  device: torch.device,

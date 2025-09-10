@@ -1,14 +1,14 @@
 import torch
 
 from tinytrain.cfg.config_manager import ConfigManager
-from tinytrain.loss.loss import YOLOV8DetectionLoss, YOLOV8PoseLoss
+from tinytrain.loss.loss import YOLOV8PoseLoss
 from tinytrain.models.yolo.task.detect import YOLODetectionModel
 from tinytrain.models.yolo.yolo_model import YOLOModel
 
 
 class YOLOPoseModel(YOLODetectionModel):
-    def __init__(self, config_manager: ConfigManager, *args, **kwargs):
-        super().__init__(config_manager, *args, **kwargs)
+    def __init__(self, config_manager: ConfigManager, device, *args, **kwargs):
+        super().__init__(config_manager=config_manager, device=device, *args, **kwargs)
         self.initialize_weights()
 
         input_channel = config_manager.model["network"][0]["args"]["in_channels"]
@@ -24,8 +24,7 @@ class YOLOPoseModel(YOLODetectionModel):
         stride = 256  # 2x min stride
         with torch.no_grad():  # 确保不会改变模型状态
             # 模拟一张 256x256 的图片
-            device = next(self.parameters()).device
-            dummy_input = torch.zeros(1, input_channel, stride, stride, device=device)
+            dummy_input = torch.zeros(1, input_channel, stride, stride, device=self.device)
             # 前向传播，获取输出
             outputs = self.forward(dummy_input)[0][0]
             # 计算 stride

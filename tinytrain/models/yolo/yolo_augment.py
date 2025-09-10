@@ -4,9 +4,9 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from tinytrain.cfg.config_manager import ConfigManager
-from tinytrain.data import DetectDataInfo
-from tinytrain.data.augment_base import BaseAugmentation
+from tinytrain.cfg import ConfigManager
+from tinytrain.data.data_format import DetectDataInfo
+from tinytrain.data.base import BaseAugmentation
 from tinytrain.utils.any_utils import make2tuple
 from tinytrain.data.augment_ops import DynamicFilling
 
@@ -210,7 +210,7 @@ class YOLOPoseAugmentation(BaseAugmentation):
             # A.Normalize(mean=self.mean, std=self.std),
         ])
 
-    def set_transform(self) -> TTCompose:
+    def set_transform(self):
         """
         构建 **验证/预测阶段** 轻量增强流水线（仅 resize 与 bbox 同步）。
 

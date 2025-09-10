@@ -1,6 +1,1 @@
-from .loss import ClassificationLoss, YOLOV8DetectionLoss
-
-__all__ = [
-    'ClassificationLoss',
-    'YOLOV8DetectionLoss'
-]
+from .loss import ClassificationLoss, YOLOV8DetectionLoss, YOLOV8PoseLoss, ClassificationWithFocalLoss

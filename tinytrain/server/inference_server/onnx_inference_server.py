@@ -1,11 +1,12 @@
 import onnx
-import onnxruntime as ort
 import torch
+import onnxruntime as ort
 
 from tabulate import tabulate
 
+from tinytrain.utils import LOGGER
+
 from .base_inference_server import BaseInferenceServer
-from ...utils import LOGGER
 
 
 class BaseOnnxInferenceServer(BaseInferenceServer):
@@ -19,6 +20,7 @@ class BaseOnnxInferenceServer(BaseInferenceServer):
     3. 支持 CPU / CUDA EP，自动适配 device。
     4. 统一返回 `list[torch.Tensor]`，方便下游组件。
     """
+
     def __init__(self, model_file, device, **kwargs):
         """
         初始化 ONNX 推理服务器。

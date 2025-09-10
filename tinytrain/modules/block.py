@@ -1,13 +1,10 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
-"""Block modules."""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from .conv import Conv, DWConv, GhostConv
 
-from tinytrain.cfg.TT_register import TTModuleRegistry
+from tinytrain.cfg import TTModuleRegistry
 
 
 @TTModuleRegistry.register
@@ -689,6 +686,7 @@ class PAN(nn.Module):
 
         return [out1, out2, out3]
 
+
 @TTModuleRegistry.register
 class DWBlock(nn.Module):
     def __init__(self, in_channels, out_channels, residual=False):
@@ -705,20 +703,20 @@ class DWBlock(nn.Module):
         else:
             return self.conv(x)
 
+
 @TTModuleRegistry.register
 class Conv2Linear(nn.Module):
-    def __init__(self, in_channels, out_channels, hidden_channels=1024, kernel_size=1, stride=1, padding=None, groups=1, bias=False, p=0.0):
+    def __init__(self, in_channels, out_channels, hidden_channels=512, kernel_size=1, stride=1, padding=None, groups=1, bias=False):
         super().__init__()
         self.conv = Conv(in_channels, hidden_channels, kernel_size, stride, padding, groups)
         self.pool = nn.AdaptiveAvgPool2d(1)
-        self.drop = nn.Dropout(p=p, inplace=True)
         self.linear = nn.Linear(hidden_channels, out_channels, bias=bias)
         self.bn = nn.BatchNorm1d(out_channels)
 
     def forward(self, x):
         x = self.conv(x)
         x = self.pool(x).flatten(1)
-        x = self.drop(x)
         x = self.linear(x)
         x = self.bn(x)
+
         return x

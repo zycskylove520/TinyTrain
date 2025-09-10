@@ -347,13 +347,16 @@ class BaseBatchDataInfo:
     """
 
     def __init__(self,
-                 data: torch.Tensor | list[torch.Tensor] | Any | None = None
+                 data: torch.Tensor | list[torch.Tensor] | Any | None = None,
+                 extra_data: Dict[str, Dict[str, Any]] | None = None
                  ):
         """
         Args:
-            data: 一批原始输入或中间特征。
+            data: 模型的输入数据。
+            extra_data: 模型的额外输入数据。
         """
         self.data = data
+        self.extra_data = extra_data
 
 
 class ImgBatchDataInfo(BaseBatchDataInfo):
@@ -450,4 +453,11 @@ class PoseBatchDataInfo(DetectBatchDataInfo):
         """
         super().__init__(**kwargs)
         self.batch_keypoints = batch_keypoints
+
+
+class FaceRecognitionValidBatchDataInfo(BaseBatchDataInfo):
+    def __init__(self, match_tensor: torch.Tensor | None = None, **kwargs):
+        super().__init__(**kwargs)
+        self.match_tensor = match_tensor
+
 # endregion

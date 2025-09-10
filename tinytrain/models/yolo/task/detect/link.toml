@@ -4,4 +4,5 @@ loss = "cfg/loss-det.toml"
 dataset = "cfg/dataset-det.toml"
 augment = "cfg/augment-det.toml"
 inference="cfg/inference-det.toml"
+tracker="cfg/byte_tracker.toml"
 

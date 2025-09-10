@@ -1,28 +1,26 @@
-from typing import Any
-
 import cv2
 import torch
+import torch.nn.functional as F
 
+from typing import Any
 from PIL import Image
 from torchvision import transforms
 
-from tinytrain.data import AnyDataInfo
-from tinytrain.engine import BasePredictor, BaseModel
+from tinytrain.data.data_format import AnyDataInfo
+from tinytrain.engine import BasePredictor
 from tinytrain.utils.data_utils import cv_imread
 
 
 class FaceRecognitionPredictor(BasePredictor):
     def __init__(self,
                  config_manager,
+                 device,
                  model,
                  callback,
                  backend=None,
                  **kwargs):
-        super().__init__(config_manager=config_manager, model=model, callback=callback, backend=backend, **kwargs)
+        super().__init__(config_manager=config_manager, device=device, model=model, callback=callback, backend=backend, **kwargs)
 
-        # 设置模型head层为export模式
-        if isinstance(self.model, BaseModel):
-            self.model.module_list[-1].export = True
         self.img_shape = kwargs.get("img_shape")
         if self.img_shape is None:
             raise ValueError("img_shape must be set")
@@ -42,7 +40,10 @@ class FaceRecognitionPredictor(BasePredictor):
         rgb_img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
         rgb_img2 = Image.fromarray(rgb_img2)
 
-        tf_list = [transforms.ToTensor(), transforms.Normalize(mean=0, std=1)]
+        tf_list = [
+            transforms.ToTensor(),
+            transforms.Normalize(mean=0.5, std=0.5)
+        ]
         if self.img_shape is not None:
             tf_list.insert(0, transforms.Resize(self.img_shape))
         transform = transforms.Compose(tf_list)
@@ -60,8 +61,10 @@ class FaceRecognitionPredictor(BasePredictor):
 
     # ---------- 后处理 ----------
     def postprocess(self, data_info: AnyDataInfo, preds: list[torch.Tensor]):
+        pred1 = F.normalize(preds[0], p=2, dim=1)
+        pred2 = F.normalize(preds[1], p=2, dim=1)
         # 计算余弦相似度
-        cosine_similarity = torch.nn.functional.cosine_similarity(preds[0], preds[1], dim=1).item()
+        cosine_similarity = torch.nn.functional.cosine_similarity(pred1, pred2, dim=1).item()
         return cosine_similarity, preds
 
     # ---------- 可视化 ----------

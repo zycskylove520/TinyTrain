@@ -42,19 +42,19 @@ network:
 """
 
 from copy import deepcopy
+from torch import nn
 
-from tinytrain.cfg.config_manager import ConfigManager
+from tinytrain.cfg import ConfigManager
 from tinytrain.engine import BaseModel
-from tinytrain.modules import *
 from tinytrain.utils import LOGGER
 from tinytrain.utils.any_utils import make_divisible
 
 
 class YOLOModel(BaseModel):
     # YOLO模型专属类变量
-    def __init__(self, config_manager: ConfigManager, *args, **kwargs):
+    def __init__(self, config_manager: ConfigManager, device, *args, **kwargs):
         self.WIDTH_GAIN = None  # 宽度增益
-        super().__init__(config_manager, *args, **kwargs)
+        super().__init__(config_manager=config_manager, device=device, *args, **kwargs)
 
     def parse_model(self):
         """
@@ -167,10 +167,11 @@ class YOLOModel(BaseModel):
             # 构造网络模块
             try:
                 layer = self._get_layer(_module)
+                layer.config_manager = self.config_manager
             except (NameError, AttributeError) as e:
                 raise ValueError(f"Failed to get module {_module}: {e}")
 
-            layer = torch.nn.Sequential(*(layer(**_args) for _ in range(_repeat))) if _repeat > 1 else layer(**_args)
+            layer = nn.Sequential(*(layer(**_args) for _ in range(_repeat))) if _repeat > 1 else layer(**_args)
             layers.append(layer)
 
             record_list.append({

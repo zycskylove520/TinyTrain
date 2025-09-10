@@ -1,10 +1,8 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
-"""Convolution modules."""
 import math
 import torch.nn as nn
 import torch
 
-from tinytrain.cfg.TT_register import TTModuleRegistry
+from tinytrain.cfg import TTModuleRegistry
 
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation

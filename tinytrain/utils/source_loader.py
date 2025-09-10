@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Iterable, Type
 
-from tinytrain.data import BaseDataInfo
+from tinytrain.data.data_format import BaseDataInfo
 
 
 class SourceParser(ABC):
@@ -54,7 +54,7 @@ class ImageParser(SourceParser):
             ImgDataInfo: 包含 img, origin_shape, current_shape, img_file 等信息。
             None: 迭代结束标志。
         """
-        from tinytrain.data import ImgDataInfo
+        from tinytrain.data.data_format import ImgDataInfo
         from tinytrain.utils.data_utils import cv_imread
 
         img = cv_imread(str(source))
@@ -84,7 +84,7 @@ class VideoParser(SourceParser):
             ImgDataInfo: 包含 frame_id, img, origin_shape 等信息。
             None: 迭代结束标志。
         """
-        from tinytrain.data import ImgDataInfo
+        from tinytrain.data.data_format import ImgDataInfo
         import cv2
 
         cap = cv2.VideoCapture(source if isinstance(source, int) else str(source))
@@ -102,7 +102,7 @@ class VideoParser(SourceParser):
             yield ImgDataInfo(
                 frame_id=frame_id,
                 img=frame,
-                origin_shape=frame.shape[:2][::-1],
+                origin_shape=frame.shape[:2][::-1],  # type: ignore[arg-type]
                 target_shape=None,
                 img_file=None
             )
@@ -126,7 +126,7 @@ class TextFileParser(SourceParser):
             TextDataInfo: 封装单行文本内容。
             None: 迭代结束标志。
         """
-        from tinytrain.data import TextDataInfo
+        from tinytrain.data.data_format import TextDataInfo
 
         with open(source, encoding="utf-8") as f:
             for line in f:
@@ -150,7 +150,7 @@ class NullParser(SourceParser):
             AnyDataInfo: 封装后的统一数据对象。
             None: 迭代结束标志。
         """
-        from tinytrain.data import AnyDataInfo
+        from tinytrain.data.data_format import AnyDataInfo
         yield AnyDataInfo(data=source)
         yield None
 

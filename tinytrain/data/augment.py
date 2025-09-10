@@ -6,7 +6,7 @@ from tinytrain.cfg.config_manager import ConfigManager
 from tinytrain.utils.any_utils import make2tuple
 
 from .data_format import ClassifyDataInfo
-from .augment_base import BaseAugmentation
+from tinytrain.data.base.base_augment import BaseAugmentation
 
 if TYPE_CHECKING:
     pass

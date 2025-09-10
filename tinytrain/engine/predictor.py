@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import threading
-
 import torch
 
 from concurrent.futures import ThreadPoolExecutor
@@ -9,12 +8,11 @@ from pathlib import Path
 from queue import Queue
 from typing import TYPE_CHECKING, Any, Generator, Union
 
-from tinytrain.cfg.config_manager import ConfigManager
-from tinytrain.data import BaseDataInfo
+from tinytrain.cfg import ConfigManager, TTEngineRegistry
+from tinytrain.data.data_format import BaseDataInfo
 from tinytrain.utils import LOGGER
 from tinytrain.utils.any_utils import create_iter_directory
 from tinytrain.utils.callback import Callback
-from tinytrain.cfg.TT_register import TTEngineRegistry
 
 if TYPE_CHECKING:
     from torch import nn
@@ -39,8 +37,12 @@ class BasePredictor:
     3. 调用 `predict(source)` 即可获得结果生成器。
     """
 
+    # ------------------------------------------------------------------
+    # 1. 构造与入口
+    # ------------------------------------------------------------------
     def __init__(self,
                  config_manager: ConfigManager,
+                 device: torch.device,
                  model,
                  callback: Callback,
                  backend: str | None = None,
@@ -68,8 +70,7 @@ class BasePredictor:
         self.backend = backend
 
         # device
-        from tinytrain.utils.checks import check_device_mini
-        self.device = check_device_mini(self.config_manager.core["device"])
+        self.device = device
 
         # model
         self.model = self._setup_inference_server(model, **kwargs)
@@ -98,7 +99,65 @@ class BasePredictor:
         self.output_dir = None
 
     # ------------------------------------------------------------------
-    # 以下子类可重写的方法
+    # 2. 唯一公开主链
+    # ------------------------------------------------------------------
+    def predict(self, source) -> Union[Generator[Any, None, None], list[Any]]:
+        """
+        启动推理流程，返回结果生成器。
+
+        Args:
+            source: 输入源，可为文件夹、视频、摄像头索引、URL 等，由 SourceParserHub 自动选择解析器。
+
+        Returns:
+            Generator[Any, None, None] | list[Any]: 推理结果生成器或列表。
+        """
+        from tinytrain.utils.source_loader import SourceParserHub
+
+        self.output_dir = create_iter_directory(self.save_dir, start_string="predict_")
+
+        self.callback.run_callback(self, "on_predict_start")
+        try:
+            # 1. 选择解析器并启动线程
+            parser = SourceParserHub.auto(source)
+            threading.Thread(target=self._produce, args=(parser, source), daemon=True).start()
+
+            # 2. 消费队列
+            yield from self._consume()
+        finally:
+            self.callback.run_callback(self, "on_predict_end")
+
+    # ------------------------------------------------------------------
+    # 3. 后端初始化（内部工具）
+    # ------------------------------------------------------------------
+    def _setup_inference_server(self, model: Union[nn.Module, str, Path], **kwargs) -> Union[nn.Module, BaseInferenceServer]:
+        """
+        根据输入类型初始化推理后端。
+
+        Args:
+            model (nn.Module | str | Path):
+                - nn.Module：本地模型，直接加载到 self.device。
+                - str / Path：模型文件路径或远程配置，交由 BaseInferenceServer 处理。
+            **kwargs: 透传给 BaseInferenceServer 的额外参数。
+
+        Returns:
+            nn.Module | BaseInferenceServer: 已就绪的推理后端。
+
+        Raises:
+            TypeError: 不支持的模型类型。
+        """
+        from torch import nn
+
+        if isinstance(model, nn.Module):
+            model.to(self.device)
+            model.eval()
+            return model
+        elif isinstance(model, (str, Path)):
+            return TTEngineRegistry.get(self.config_manager, "inference_server", self.backend)(model_file=model, device=self.device, **kwargs)
+        else:
+            raise TypeError(f"Unsupported model type: {type(model)}")
+
+    # ------------------------------------------------------------------
+    # 4. 数据流水（子类可重写）
     # ------------------------------------------------------------------
     def register_parsers(self) -> None:
         """
@@ -148,60 +207,8 @@ class BasePredictor:
         return data_info
 
     # ------------------------------------------------------------------
-    # 以下不建议子类重写的方法
+    # 5. 异步生产-消费（内部协奏）
     # ------------------------------------------------------------------
-    def predict(self, source) -> Union[Generator[Any, None, None], list[Any]]:
-        """
-        启动推理流程，返回结果生成器。
-
-        Args:
-            source: 输入源，可为文件夹、视频、摄像头索引、URL 等，由 SourceParserHub 自动选择解析器。
-
-        Returns:
-            Generator[Any, None, None] | list[Any]: 推理结果生成器或列表。
-        """
-        from tinytrain.utils.source_loader import SourceParserHub
-
-        self.output_dir= create_iter_directory(self.save_dir, start_string="predict_")
-
-        self.callback.run_callback(self, "on_predict_start")
-        try:
-            # 1. 选择解析器并启动线程
-            parser = SourceParserHub.auto(source)
-            threading.Thread(target=self._produce, args=(parser, source), daemon=True).start()
-
-            # 2. 消费队列
-            yield from self._consume()
-        finally:
-            self.callback.run_callback(self, "on_predict_end")
-
-    def _setup_inference_server(self, model: Union[nn.Module, str, Path], **kwargs) -> Union[nn.Module, BaseInferenceServer]:
-        """
-        根据输入类型初始化推理后端。
-
-        Args:
-            model (nn.Module | str | Path):
-                - nn.Module：本地模型，直接加载到 self.device。
-                - str / Path：模型文件路径或远程配置，交由 BaseInferenceServer 处理。
-            **kwargs: 透传给 BaseInferenceServer 的额外参数。
-
-        Returns:
-            nn.Module | BaseInferenceServer: 已就绪的推理后端。
-
-        Raises:
-            TypeError: 不支持的模型类型。
-        """
-        from torch import nn
-
-        if isinstance(model, nn.Module):
-            model.to(self.device)
-            model.eval()
-            return model
-        elif isinstance(model, (str, Path)):
-            return TTEngineRegistry.get(self.config_manager, "inference_server", self.backend)(model_file=model, device=self.device, **kwargs)
-        else:
-            raise TypeError(f"Unsupported model type: {type(model)}")
-
     def _produce(self, parser: SourceParser, source):
         """
         生产者线程：将解析后的数据项放入队列。

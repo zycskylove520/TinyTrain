@@ -124,9 +124,8 @@ args.act = false
 [[network]]
 # 10
 type = "head"
-module = "ArcFace"
+module = "FaceHead"
 repeat = 1
 from = [-1]
 args.in_channels = 512
-args.feature_dim = 1024
-args.nc = -1
+args.embedding_size = 1024

@@ -1,21 +1,23 @@
+from __future__ import annotations
+
 import torch
 
-from tinytrain.data import DetectBatchDataInfo
-from tinytrain.engine import BaseTrainer
-from tinytrain.engine.validator import BaseValidator
+from typing import TYPE_CHECKING
+
+from tinytrain.data.data_format import DetectBatchDataInfo
+from tinytrain.engine import BaseValidator
 from tinytrain.global_var import RANK
-from tinytrain.metrics.box_metrics import BoxMetrics
-from tinytrain.metrics.confusion_matrix import DetectConfusionMatrix
-from tinytrain.metrics.img_result import YOLODetectImgResult
-from tinytrain.utils import LOGGER
+from tinytrain.metrics.detect_metrics import BoxMetrics, DetectConfusionMatrix, DetectImgResult
 from tinytrain.utils.TT_progress_bar import TTProgressBar
 from tinytrain.utils.nms import detect_nms
+
+if TYPE_CHECKING:
+    from tinytrain.engine import BaseTrainer
 
 
 class YOLODetectionValidator(BaseValidator):
     def __init__(self, trainer: BaseTrainer, world_size: int):
         super().__init__(trainer, world_size)
-        self.save_dir = trainer.save_dir
         self.num_classes = self.config_manager.dataset["nc"]
         self.class_names = list(self.config_manager.dataset["names"].values())
 
@@ -26,7 +28,7 @@ class YOLODetectionValidator(BaseValidator):
         self.confuse_matrix = DetectConfusionMatrix(num_classes=self.num_classes,
                                                     class_names=self.class_names)
 
-        self.img_result = YOLODetectImgResult(self.save_dir, mode="val", rgb=self.config_manager.augment["rgb"], draw_conf_threshold=0.25)
+        self.img_result = DetectImgResult(self.save_dir, mode="val", rgb=self.config_manager.augment["rgb"], draw_conf_threshold=0.25)
 
     def preprocess(self, batch_samples: DetectBatchDataInfo) -> DetectBatchDataInfo:
         # 在这里做归一化速度提升

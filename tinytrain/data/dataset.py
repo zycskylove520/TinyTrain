@@ -9,7 +9,6 @@ import torch.distributed as dist
 
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
-from torch.utils.data import Dataset, IterableDataset
 from torchvision.datasets import ImageFolder
 
 from tinytrain.global_var import NUM_THREADS, RANK
@@ -19,91 +18,8 @@ from tinytrain.utils.checks import check_image_and_label, check_image, IMG_FORMA
 from tinytrain.utils.data_utils import save_dict_cache_file, cv_imread, get_hash, load_dict_cache_file, save_image_cache_file
 
 from .augment import ClassificationAugmentation
-from .data_format import ClassifyDataInfo, ClassifyBatchDataInfo, BaseBatchDataInfo, BaseDataInfo
-
-
-class TTBaseMapDataset(Dataset):
-    """
-    所有map-style数据集的 **抽象基类**。
-
-    职责
-    ----
-    1. 定义必须实现的接口：`__getitem__`、`__len__`、`collate_fn`。
-    2. 作为类型标记，便于 `DataLoader` 自动识别。
-
-    子类要求
-    --------
-    - 必须实现 `__getitem__`、`__len__`、`collate_fn`。
-    - 必须返回 **继承自 `BaseDataInfo` 的对象**。
-    """
-
-    def __init__(self, config_manager):
-        """
-        Args:
-            config_manager (ConfigManager): 全局配置管理器。
-        """
-        super().__init__()
-        self.config_manager = config_manager
-
-    def __getitem__(self, index) -> BaseDataInfo:
-        """子类必须实现：返回单个样本（`BaseDataInfo` 子类）。"""
-        raise NotImplementedError
-
-    def __len__(self) -> int:
-        """子类必须实现：返回数据集大小。"""
-        raise NotImplementedError
-
-    def collate_fn(self, batch: list[BaseDataInfo]) -> BaseBatchDataInfo:
-        """
-        子类必须实现：将 `list[BaseDataInfo]` 整理为 `BaseBatchDataInfo`。
-
-        Args:
-            batch (list): 一批样本。
-
-        Returns:
-            BaseBatchDataInfo: 批数据容器。
-        """
-        return batch  # type: ignore[arg-type]
-
-
-class TTBaseIterableDataset(IterableDataset):
-    """
-    所有 iterable-style 数据集的 **抽象基类**。
-
-    职责
-    ----
-    1. 定义必须实现的接口：`__iter__`、`collate_fn`。
-    2. 作为类型标记，便于 `DataLoader` 自动识别。
-
-    子类要求
-    --------
-    - 必须实现 `__iter__`，按需返回 **继承自 `BaseDataInfo` 的对象**。
-    - 必须实现 `collate_fn`，用于整理批数据。
-    """
-
-    def __init__(self, config_manager):
-        """
-        Args:
-            config_manager (ConfigManager): 全局配置管理器。
-        """
-        super().__init__()
-        self.config_manager = config_manager
-
-    def __iter__(self) -> BaseDataInfo:
-        """子类必须实现：返回数据迭代器，每次产出单个样本（`BaseDataInfo` 子类）。"""
-        raise NotImplementedError
-
-    def collate_fn(self, batch: list[BaseDataInfo]) -> BaseBatchDataInfo:
-        """
-        子类必须实现：将 `list[BaseDataInfo]` 整理为 `BaseBatchDataInfo`。
-
-        Args:
-            batch (list): 一批样本。
-
-        Returns:
-            BaseBatchDataInfo: 批数据容器。
-        """
-        return batch  # type: ignore[arg-type]
+from .base.base_dataset import TTBaseMapDataset
+from .data_format import ClassifyDataInfo, ClassifyBatchDataInfo
 
 
 class TTBaseVisionDataset(TTBaseMapDataset):
@@ -361,7 +277,7 @@ class TTClassificationDataset(ImageFolder):
         """
         if isinstance(root, list):
             if len(root) > 1:
-                LOGGER.warning(f"Classify datasets do not support multiple directories!Only loaded: {root}")
+                LOGGER.warning(f"Classify datasets do not support multiple directories! Only loaded: {root[0]}")
             root = root[0]
 
         super().__init__(root)
@@ -571,7 +487,7 @@ class TTClassificationDataset(ImageFolder):
 
         # 预分配张量，避免 Python list → tensor 拷贝
         first = batch[0].img  # (H, W, C) numpy
-        C, H, W = first.transpose(2, 0, 1).shape
+        H, W, C = first.shape
         dtype = torch.from_numpy(first).dtype  # 保持原 dtype
 
         images = torch.empty((B, C, H, W), dtype=dtype)

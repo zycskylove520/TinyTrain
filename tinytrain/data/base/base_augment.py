@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .data_format import BaseDataInfo
+from tinytrain.data.data_format import BaseDataInfo
 
 
 class BaseAugmentation:
@@ -20,13 +20,13 @@ class BaseAugmentation:
         """离线增强接口，子类自定义流水线，默认空实现。"""
         pass
 
-    def set_transform(self, *args, **kwargs):
-        """在线变换接口，子类自定义流水线，默认空实现。"""
-        pass
-
     def do_augment(self, sample: BaseDataInfo):
         """执行离线增强，默认空实现。"""
         return sample
+
+    def set_transform(self, *args, **kwargs):
+        """在线变换接口，子类自定义流水线，默认空实现。"""
+        pass
 
     def do_transform(self, sample: BaseDataInfo):
         """执行在线变换，默认空实现。"""

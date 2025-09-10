@@ -2,7 +2,7 @@ import torch
 
 from torch import nn, Tensor
 
-from tinytrain.cfg.TT_register import TTModuleRegistry
+from tinytrain.cfg import TTModuleRegistry
 
 
 @TTModuleRegistry.register

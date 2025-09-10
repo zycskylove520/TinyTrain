@@ -1,11 +1,10 @@
 import torch
 import cv2
 
-from typing import Any
 from PIL import Image
 from torchvision import transforms
 
-from tinytrain.data import ClassifyDataInfo
+from tinytrain.data.data_format import ClassifyDataInfo
 from tinytrain.engine.predictor import BasePredictor
 from tinytrain.utils.source_loader import ImageParser, VideoParser, SourceParserHub
 
@@ -19,12 +18,13 @@ class YOLOClassificationPredictor(BasePredictor):
 
     def __init__(self,
                  config_manager,
+                 device,
                  model,
                  callback,
                  backend=None,
                  **kwargs
                  ):
-        super().__init__(config_manager=config_manager, model=model, callback=callback, backend=backend, **kwargs)
+        super().__init__(config_manager=config_manager, device=device, model=model, callback=callback, backend=backend, **kwargs)
         self.img_shape = kwargs.get("img_shape")
 
         if self.img_shape is None:

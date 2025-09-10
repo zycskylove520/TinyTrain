@@ -10,7 +10,6 @@ import gc
 import os
 import tempfile
 import hashlib
-import cv2
 import numpy as np
 from pathlib import Path
 from typing import Any, Union

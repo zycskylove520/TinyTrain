@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from tinytrain.cfg.config_manager import ConfigManager
-from tinytrain.utils.any_utils import create_iter_directory
 from tinytrain.utils.callback import Callback
 
 if TYPE_CHECKING:
@@ -23,6 +21,7 @@ class BaseTrackServer:
     2. 通过回调系统，在 predictor 启动时自动创建保存目录。
     3. 提供统一的接口 `update`，将检测框更新为跟踪轨迹。
     """
+
     def __init__(self, config_manager: ConfigManager, callback: Callback, **kwargs):
         """
         初始化跟踪服务器。

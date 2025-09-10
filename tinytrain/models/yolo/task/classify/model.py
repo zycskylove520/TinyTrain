@@ -1,6 +1,6 @@
 import torch
 
-from tinytrain.data import ClassifyBatchDataInfo
+from tinytrain.data.data_format import ClassifyBatchDataInfo
 from tinytrain.loss import ClassificationLoss
 from tinytrain.models.yolo.yolo_model import YOLOModel
 
@@ -20,7 +20,6 @@ class YOLOClassificationModel(YOLOModel):
             损失权重由配置文件 `loss.cls_loss_gain` 控制。
         """
         return ClassificationLoss(self.config_manager.loss["cls_loss_gain"])
-
 
     def loss(self, preds: list[torch.Tensor], batch_samples: ClassifyBatchDataInfo) -> tuple[float, dict]:
         return self.criterion(preds[0], batch_samples)

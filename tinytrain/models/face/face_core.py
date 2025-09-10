@@ -1,10 +1,12 @@
-from tinytrain.cfg.TT_register import TTEngineRegistry
+from tinytrain.cfg import TTEngineRegistry
 from tinytrain.engine import Core, BaseExporter
-from tinytrain.models.face.task.recognition.export_server import FaceRecognitionOnnxExportServer
-from tinytrain.models.face.task.recognition.model import FaceRecognitionModel
-from tinytrain.models.face.task.recognition.predictor import FaceRecognitionPredictor
-from tinytrain.models.face.task.recognition.trainer import FaceRecognitionTrainer
-from tinytrain.models.face.task.recognition.validator import FaceRecognitionValidator
+from tinytrain.models.face.task.recognition import (
+    FaceRecognitionModel,
+    FaceRecognitionTrainer,
+    FaceRecognitionValidator,
+    FaceRecognitionPredictor,
+)
+from tinytrain.server.export_server import BaseOnnxExportServer
 from tinytrain.server.inference_server import BaseOnnxInferenceServer
 
 
@@ -18,4 +20,4 @@ class FaceCore(Core):
         TTEngineRegistry.register(cls, "recognition", "predictor")(FaceRecognitionPredictor)
         TTEngineRegistry.register(cls, "recognition", "inference_server", "onnx")(BaseOnnxInferenceServer)
         TTEngineRegistry.register(cls, "recognition", "exporter")(BaseExporter)
-        TTEngineRegistry.register(cls, "recognition", "export_server", "onnx")(FaceRecognitionOnnxExportServer)
+        TTEngineRegistry.register(cls, "recognition", "export_server", "onnx")(BaseOnnxExportServer)

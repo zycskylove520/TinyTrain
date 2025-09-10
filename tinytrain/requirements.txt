@@ -1,9 +1,9 @@
 albumentations
 chardet
-faster-coco-eval
 lap
 loguru
 matplotlib
+mmeval
 numpy
 onnx
 onnxruntime
@@ -13,8 +13,11 @@ opencv_python
 opencv_python_headless
 pandas
 Pillow
+psutil
+ptflops
 pycocotools
 pydantic
+scikit_learn
 scipy
 seaborn
 setproctitle

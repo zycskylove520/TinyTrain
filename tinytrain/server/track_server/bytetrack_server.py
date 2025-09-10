@@ -4,12 +4,13 @@ import cv2
 
 from typing import TYPE_CHECKING
 
-from tinytrain.cfg.config_manager import ConfigManager
-from tinytrain.data import DetectDataInfo
-from tinytrain.server.track_server.base_track_server import BaseTrackServer
-from tinytrain.tracker.bytetracker.byte_tracker import STrack, BYTETracker
+from tinytrain.cfg import ConfigManager
+from tinytrain.data.data_format import DetectDataInfo
+from tinytrain.tracker import STrack, BYTETracker
 from tinytrain.utils import LOGGER
 from tinytrain.utils.callback import Callback
+
+from .base_track_server import BaseTrackServer
 
 if TYPE_CHECKING:
     from tinytrain.engine import BasePredictor

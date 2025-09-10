@@ -3,10 +3,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .block import Conv2Linear
 from .conv import Conv, DWConv
-from tinytrain.cfg.TT_register import TTModuleRegistry
-from tinytrain.utils.tal import make_anchors, dist2bbox
+from tinytrain.cfg import TTModuleRegistry
+from tinytrain.utils.tal import dist2bbox
+from tinytrain.utils.box_utils import make_anchors
 
 
 @TTModuleRegistry.register
@@ -41,163 +41,28 @@ class Classify(nn.Module):
 
 
 @TTModuleRegistry.register
-class ArcFace(nn.Module):
-    def __init__(self, in_channels, feature_dim, nc, kernel_size=1, stride=1, padding=None, groups=1, s=30.0, m=0.50, easy_margin=False):
+class FaceHead(nn.Module):
+    def __init__(self, in_channels, embedding_size,nc):
         super().__init__()
-        self.features = Conv2Linear(in_channels=in_channels, out_channels=feature_dim, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups)
-        self.weight = nn.Parameter(torch.FloatTensor(nc, feature_dim))
-
-        nn.init.xavier_uniform_(self.weight)
-        self.target = None
-
-        self.s = s
-        self.m = m
-        self.easy_margin = easy_margin
-        self.cos_m = math.cos(m)
-        self.sin_m = math.sin(m)
-        self.th = math.cos(math.pi - m)
-        self.mm = math.sin(math.pi - m) * m
-
-        self.export = False
+        self.conv = Conv(in_channels, 512, kernel_size=(4, 4), stride=(1, 1), padding=(0, 0), groups=512)
+        self.flatten = nn.Flatten()
+        self.linear = nn.Linear(512, embedding_size, bias=False)
+        self.bn = nn.BatchNorm1d(embedding_size)
+        # self.weight = nn.Parameter(torch.FloatTensor(nc, embedding_size))
 
     def forward(self, x):
-        x = self.features(x)
+        x = self.conv(x)
+        x = self.flatten(x)
+        x = self.linear(x)
+        x = self.bn(x)
 
-        if self.export:
-            return x
-
-        # --------------------------- cos(theta) & phi(theta) ---------------------------
-        # resnet网络最后一层输出的是全连接层，把全连接层权重W归一化。
-        # 这里全连接层输出的是cosine的原因为，X和W都使用了l2范数变成了单位向量，因此计算出来的每一个值都是余弦值
-        cosine = F.linear(F.normalize(x), F.normalize(self.weight))
-        sine = torch.sqrt((1.0 - torch.pow(cosine, 2)).clamp(0, 1))  # 这里使用clamp可能是担心精度溢出
-        phi = cosine * self.cos_m - sine * self.sin_m  # 计算：cos(theta + m)
-        if self.easy_margin:
-            # easy_margin可以理解为θ+m>pi，此时cos(θ+m)超过了0-pi的单调区间，那就不管了，直接用cos(θ)代替
-            # cosine>0表示theta<pi/2，因此m+theta不会超过pi，在该区间使用cos(theta+m)可以将同类之间收的更紧
-            # 如果cosine<0表示theta>pi/2，因此m+theta在最坏的情况下，比如theta=pi时，theta+m会超过pi，此时跳出了cos在0-pi的单调区间，
-            # 为了保持单调性，这种情况直接使用cos(theta)，因为cos(theta)在单调区间内。所以就是不将同类收紧了，无所谓了
-            phi = torch.where(cosine > 0, phi, cosine)
-        else:
-            # 非easy_margin可以理解为就算θ+m>pi，此时cos(θ+m)超过了0-pi的单调区间，也要坚持使用m收紧同类
-            # cos在0-pi的单调区间内，cos(θ) > cos(pi-m)表示θ<pi-m即：θ+m<pi时，使用cos(θ+m)
-            # 否则就使用类似cosface的损失函数来代替
-            phi = torch.where(cosine > self.th, phi, cosine - self.mm)
-        # --------------------------- convert label to one-hot ---------------------------
-        # one_hot = torch.zeros(cosine.size(), requires_grad=True, device='cuda')
-        one_hot = torch.zeros(cosine.size(), device=self.target.device)
-        one_hot.scatter_(1, self.target.view(-1, 1).long(), 1)
-        # -------------torch.where(out_i = {x_i if condition_i else y_i) -------------
-        output = (one_hot * phi) + (
-                (1.0 - one_hot) * cosine)  # you can use torch.where if your torch.__version__ is 0.4
-        output *= self.s
-
-        return output
-
-    def inference(self, x):
-        x = self.features(x)
         return x
 
-
-@TTModuleRegistry.register
-class CosFace(nn.Module):
-    def __init__(self, in_channels, feature_dim, nc, kernel_size=1, stride=1, padding=None, groups=1, s=30.0, m=0.40):
-        super().__init__()
-        self.features = Conv2Linear(in_channels=in_channels, out_channels=feature_dim, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups)
-        self.weight = nn.Parameter(torch.FloatTensor(nc, feature_dim))
-        nn.init.xavier_uniform_(self.weight)
-        self.target = None
-
-        self.s = s
-        self.m = m
-
-        self.export = False
-
-    def forward(self, x):
-        x = self.features(x)
-
-        if self.export:
-            return x
-
-        # --------------------------- cos(theta) & phi(theta) ---------------------------
-        cosine = F.linear(F.normalize(x), F.normalize(self.weight))
-        phi = cosine - self.m
-        # --------------------------- convert label to one-hot ---------------------------
-        one_hot = torch.zeros(cosine.size(), device=self.target.device)
-        # one_hot = one_hot.cuda() if cosine.is_cuda else one_hot
-        one_hot.scatter_(1, self.target.view(-1, 1).long(), 1)
-        # -------------torch.where(out_i = {x_i if condition_i else y_i) -------------
-        output = (one_hot * phi) + (
-                (1.0 - one_hot) * cosine)  # you can use torch.where if your torch.__version__ is 0.4
-        output *= self.s
-
-        return output
-
-    def inference(self, x):
-        x = self.features(x)
-        return x
-
-
-@TTModuleRegistry.register
-class SphereFace(nn.Module):
-    def __init__(self, in_channels, feature_dim, nc, m=4, kernel_size=1, stride=1, padding=None, groups=1):
-        super().__init__()
-        self.features = Conv2Linear(in_channels=in_channels, out_channels=feature_dim, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups)
-        self.weight = nn.Parameter(torch.FloatTensor(nc, feature_dim))
-        nn.init.xavier_uniform_(self.weight)
-        self.m = m
-        self.base = 1000.0
-        self.gamma = 0.12
-        self.power = 1
-        self.LambdaMin = 5.0
-        self.iter = 0
-        self.target = None
-
-        # duplication formula
-        self.mlambda = [
-            lambda x: x ** 0,
-            lambda x: x ** 1,
-            lambda x: 2 * x ** 2 - 1,
-            lambda x: 4 * x ** 3 - 3 * x,
-            lambda x: 8 * x ** 4 - 8 * x ** 2 + 1,
-            lambda x: 16 * x ** 5 - 20 * x ** 3 + 5 * x
-        ]
-
-        self.export = False
-
-    def forward(self, x):
-        x = self.features(x)
-
-        if self.export:
-            return x
-
-        # lambda = max(lambda_min,base*(1+gamma*iteration)^(-power))
-        self.iter += 1
-        self.lamb = max(self.LambdaMin, self.base * (1 + self.gamma * self.iter) ** (-1 * self.power))
-
-        # --------------------------- cos(theta) & phi(theta) ---------------------------
-        cos_theta = F.linear(F.normalize(x), F.normalize(self.weight))
-        cos_theta = cos_theta.clamp(-1, 1)
-        cos_m_theta = self.mlambda[self.m](cos_theta)
-        theta = cos_theta.data.acos()
-        k = (self.m * theta / 3.14159265).floor()
-        phi_theta = ((-1.0) ** k) * cos_m_theta - 2 * k
-        NormOfFeature = torch.norm(x, 2, 1)
-
-        # --------------------------- convert label to one-hot ---------------------------
-        one_hot = torch.zeros(cos_theta.size())
-        one_hot = one_hot.cuda() if cos_theta.is_cuda else one_hot
-        one_hot.scatter_(1, self.target.view(-1, 1), 1)
-
-        # --------------------------- Calculate output ---------------------------
-        output = (one_hot * (phi_theta - cos_theta) / (1 + self.lamb)) + cos_theta
-        output *= NormOfFeature.view(-1, 1)
-
-        return output
-
-    def inference(self, x):
-        x = self.features(x)
-        return x
+        # if not self.training:
+        #     return x
+        #
+        # cosine = F.linear(F.normalize(x), F.normalize(self.weight))
+        # return cosine
 
 
 @TTModuleRegistry.register
@@ -255,7 +120,7 @@ class YOLODetect(nn.Module):
         # inference模式下，bboxes已解码,返回的shape为：[batch, num_anchors, 4+nc]
 
         # 解码锚框,self.stride是在构建模型时添加的属性，详见TinyTrain\models\yolo\detect\model中的__init__函数
-        anchors, strides = make_anchors(x, self.stride)
+        anchors, strides = make_anchors(x, self.strides)
 
         shape = x[0].shape  # BCHW
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
