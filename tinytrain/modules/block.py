@@ -689,13 +689,14 @@ class PAN(nn.Module):
 
 @TTModuleRegistry.register
 class DWBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, residual=False):
+    def __init__(self, in_channels, out_channels, residual=False, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1):
         super().__init__()
-        self.conv = nn.Sequential(
-            Conv(in_channels, in_channels, 3, 1, 1, groups=in_channels),
-            Conv(in_channels, out_channels, 1, 1, 0, act=False)
-        )
         self.residual = residual
+        self.conv = nn.Sequential(
+            Conv(in_channels=in_channels, out_channels=groups, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
+            Conv(in_channels=groups, out_channels=groups, kernel_size=kernel_size, stride=stride, padding=padding),
+            Conv(in_channels=groups, out_channels=out_channels, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0), act=False)
+        )
 
     def forward(self, x):
         if self.residual:

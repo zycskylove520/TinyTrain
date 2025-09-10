@@ -1,14 +1,10 @@
-from typing import Mapping, Any
-
 import torch
 
 from tinytrain.cfg import ConfigManager
 from tinytrain.data.data_format import BaseBatchDataInfo
 from tinytrain.engine import BaseModel
-from tinytrain.global_var import WORLD_SIZE
 from tinytrain.models.face.face_loss import PartialFCLoss
 from tinytrain.models.face.task.recognition.margin import CombinedMargin
-from tinytrain.utils import LOGGER
 
 
 class FaceRecognitionModel(BaseModel):
@@ -41,6 +37,21 @@ class FaceRecognitionModel(BaseModel):
     def loss(self, preds: list[torch.Tensor], batch_samples: BaseBatchDataInfo) -> tuple[float, dict]:
         return self.criterion(preds[0], batch_samples)
 
-    def custom_parse_model(self, module_info):
-        if module_info["type"] == "head" and module_info["module"] == "Conv2Linear":
-            self.embedding_size = module_info["args"]["out_channels"]
+    def custom_parse_model(self, layer, module_info):
+        name = self.config_manager.model["name"]
+        scale = self.config_manager.model["scale"]
+
+        if name == "MobileFaceNet":
+            for i, _scale in enumerate("nsmlx"):
+                expand = (i + 1) * 2
+                if scale == _scale:
+                    if module_info["type"] == "entry":
+                        module_info["args"]["out_channels"] *= expand
+                    elif module_info["type"] == "flow":
+                        module_info["args"]["in_channels"] *= expand
+                        module_info["args"]["out_channels"] *= expand
+                    elif module_info["type"] == "head":
+                        module_info["args"]["in_channels"] *= expand
+
+            if module_info["module"] == "GDC":
+                self.embedding_size = module_info["args"]["embedding_size"]

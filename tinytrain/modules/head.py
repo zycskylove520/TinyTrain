@@ -41,28 +41,20 @@ class Classify(nn.Module):
 
 
 @TTModuleRegistry.register
-class FaceHead(nn.Module):
-    def __init__(self, in_channels, embedding_size,nc):
+class GDC(nn.Module):
+    """MobileFaceNet head"""
+
+    def __init__(self, in_channels, embedding_size):
         super().__init__()
-        self.conv = Conv(in_channels, 512, kernel_size=(4, 4), stride=(1, 1), padding=(0, 0), groups=512)
-        self.flatten = nn.Flatten()
-        self.linear = nn.Linear(512, embedding_size, bias=False)
-        self.bn = nn.BatchNorm1d(embedding_size)
-        # self.weight = nn.Parameter(torch.FloatTensor(nc, embedding_size))
+        self.layers = nn.Sequential(
+            Conv(in_channels=in_channels, out_channels=512, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
+            Conv(in_channels=512, out_channels=512, groups=512, kernel_size=(7, 7), stride=(1, 1), padding=(0, 0), act=False),
+            nn.Flatten(),
+            nn.Linear(512, embedding_size, bias=False),
+            nn.BatchNorm1d(embedding_size))
 
     def forward(self, x):
-        x = self.conv(x)
-        x = self.flatten(x)
-        x = self.linear(x)
-        x = self.bn(x)
-
-        return x
-
-        # if not self.training:
-        #     return x
-        #
-        # cosine = F.linear(F.normalize(x), F.normalize(self.weight))
-        # return cosine
+        return self.layers(x)
 
 
 @TTModuleRegistry.register

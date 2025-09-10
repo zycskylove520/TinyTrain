@@ -1,4 +1,5 @@
 # YOLOv12-det model_config.
+name = "YOLOv12-det"
 
 scale = "n"
 
@@ -6,27 +7,27 @@ scale = "n"
 [scales.n]
 depth = 0.50
 width = 0.25
-summary = "464 layers, 2568227 parameters, 2568227 gradients, 6.44 GFLOPs"
+summary = "464 layers, 2568227 parameters, 2568227 gradients, 6.44 GFLOPs, for a 640×640 input."
 
 [scales.s]
 depth = 0.50
 width = 0.50
-summary = "464 layers, 9253507 parameters, 9253507 gradients, 21.44 GFLOPs"
+summary = "464 layers, 9253507 parameters, 9253507 gradients, 21.44 GFLOPs, for a 640×640 input."
 
 [scales.m]
 depth = 0.50
 width = 1.00
-summary = "500 layers, 35388675 parameters, 35388675 gradients, 80.09 GFLOPs"
+summary = "500 layers, 35388675 parameters, 35388675 gradients, 80.09 GFLOPs, for a 640×640 input."
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "830 layers, 48820883 parameters, 48820883 gradients, 107.42 GFLOPs"
+summary = "830 layers, 48820883 parameters, 48820883 gradients, 107.42 GFLOPs, for a 640×640 input."
 
 [scales.x]
 depth = 1.00
 width = 1.50
-summary = "830 layers, 109483891 parameters, 109483891 gradients, 240.45 GFLOPs"
+summary = "830 layers, 109483891 parameters, 109483891 gradients, 240.45 GFLOPs, for a 640×640 input."
 
 # ----------------------------backbone---------------------------------
 [[network]]

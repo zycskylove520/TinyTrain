@@ -1,4 +1,5 @@
 # YOLOv5-p6-det model_config.
+name = "YOLOv5-p6-det"
 
 scale = "l"
 
@@ -6,27 +7,27 @@ scale = "l"
 [scales.n]
 depth = 0.33
 width = 0.25
-summary = "500 layers, 4485112 parameters, 4485112 gradients, 7.14 GFLOPs"
+summary = "500 layers, 4485112 parameters, 4485112 gradients, 7.14 GFLOPs, for a 640×640 input."
 
 [scales.s]
 depth = 0.33
 width = 0.50
-summary = "500 layers, 16638680 parameters, 16638680 gradients, 23.8 GFLOPs"
+summary = "500 layers, 16638680 parameters, 16638680 gradients, 23.8 GFLOPs, for a 640×640 input."
 
 [scales.m]
 depth = 0.67
 width = 0.75
-summary = "685 layers, 43987704 parameters, 43987704 gradients, 69.55 GFLOPs"
+summary = "685 layers, 43987704 parameters, 43987704 gradients, 69.55 GFLOPs, for a 640×640 input."
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "941 layers, 101828248 parameters, 101828248 gradients, 163.73 GFLOPs"
+summary = "941 layers, 101828248 parameters, 101828248 gradients, 163.73 GFLOPs, for a 640×640 input."
 
 [scales.x]
 depth = 1.33
 width = 1.25
-summary = "1193 layers, 196993720 parameters, 196993720 gradients, 321.34 GFLOPs"
+summary = "1193 layers, 196993720 parameters, 196993720 gradients, 321.34 GFLOPs, for a 640×640 input."
 
 # ----------------------------backbone---------------------------------
 [[network]]

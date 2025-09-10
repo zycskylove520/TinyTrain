@@ -1,4 +1,5 @@
 # YOLOv11-cls image classification model_config.
+name = "YOLOv11-cls"
 
 scale = "n"
 
@@ -6,27 +7,27 @@ scale = "n"
 [scales.n]
 depth = 0.50
 width = 0.25
-summary = "151 layers, 1543914 parameters, 1543914 gradients, 0.4 GFLOPs"
+summary = "151 layers, 1543914 parameters, 1543914 gradients, 0.4 GFLOPs, for a 224×224 input."
 
 [scales.s]
 depth = 0.50
 width = 0.50
-summary = "151 layers, 5455818 parameters, 5455818 gradients, 1.48 GFLOPs"
+summary = "151 layers, 5455818 parameters, 5455818 gradients, 1.48 GFLOPs, for a 224×224 input."
 
 [scales.m]
 depth = 0.50
 width = 1.00
-summary = "187 layers, 20471626 parameters, 20471626 gradients, 5.83 GFLOPs"
+summary = "187 layers, 20471626 parameters, 20471626 gradients, 5.83 GFLOPs, for a 224×224 input."
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "287 layers, 25046346 parameters, 25046346 gradients, 7.28 GFLOPs"
+summary = "287 layers, 25046346 parameters, 25046346 gradients, 7.28 GFLOPs, for a 224×224 input."
 
 [scales.x]
 depth = 1.00
 width = 1.50
-summary = "287 layers, 55317994 parameters, 55317994 gradients, 16.22 GFLOPs"
+summary = "287 layers, 55317994 parameters, 55317994 gradients, 16.22 GFLOPs, for a 224×224 input."
 
 # ----------------------------backbone---------------------------------
 [[network]]

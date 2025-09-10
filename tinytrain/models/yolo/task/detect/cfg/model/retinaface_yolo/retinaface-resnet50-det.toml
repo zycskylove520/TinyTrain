@@ -1,11 +1,12 @@
 # retinaface-resnet50-det model_config.
+name = "Retinaface-resnet50-det"
 
 scale = "l"
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "375 layers, 32875523 parameters, 32875523 gradients, 100.58 GFLOPs"
+summary = "375 layers, 32875523 parameters, 32875523 gradients, 100.58 GFLOPs, for a 640×640 input."
 
 
 # ----------------------------backbone---------------------------------

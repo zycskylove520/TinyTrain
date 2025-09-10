@@ -1,11 +1,12 @@
 # YOLOv3-spp-det model_config.
+name = "YOLOv3-spp-det"
 
 scale = "l"
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "341 layers, 99531954 parameters, 99531954 gradients, 263.22 GFLOPs"
+summary = "341 layers, 99531954 parameters, 99531954 gradients, 263.22 GFLOPs, for a 640×640 input."
 
 # ----------------------------darknet53 backbone---------------------------------
 [[network]]
@@ -138,7 +139,7 @@ repeat = 1
 from = [-1]
 args.in_channels = 1024
 args.out_channels = 512
-args.kernel_size = [5,9,13]
+args.kernel_size = [5, 9, 13]
 
 [[network]]
 # 13

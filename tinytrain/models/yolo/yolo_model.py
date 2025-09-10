@@ -162,7 +162,7 @@ class YOLOModel(BaseModel):
                     _args["in_channels"] = make_divisible(_args.get("in_channels") * width)
 
             # 用户可自定义模型解析方式
-            self.custom_parse_model(_info)
+            self.custom_parse_model(level, _info)
 
             # 构造网络模块
             try:
@@ -247,4 +247,6 @@ class YOLOModel(BaseModel):
                 f"|{info['module']:^{align_len['module']}}"
                 f"|{str(info.get('args', {})):<{align_len['args']}}|"
             )
-        print(f"model summary: {scale_info['summary']}\n")
+
+        model_name = self.config_manager.model["name"]
+        print(f"{model_name} model summary: {scale_info['summary']}\n")

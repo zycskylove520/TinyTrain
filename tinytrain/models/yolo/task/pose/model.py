@@ -41,7 +41,7 @@ class YOLOPoseModel(YOLODetectionModel):
                               self.config_manager.loss["kobj_loss_gain"],
                               )
 
-    def custom_parse_model(self, module_info):
+    def custom_parse_model(self, level, module_info):
         scale = self.config_manager.model["scale"]
 
         width = YOLOModel.WIDTH_GAIN

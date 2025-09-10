@@ -1,4 +1,5 @@
 # YOLOv8-ghost-p2-det model_config.
+name = "YOLOv8-ghost-p2-det"
 
 scale = "n"
 
@@ -6,27 +7,27 @@ scale = "n"
 [scales.n]
 depth = 0.33
 width = 0.25
-summary = "732 layers, 1738380 parameters, 1738380 gradients, 8.42 GFLOPs"
+summary = "732 layers, 1738380 parameters, 1738380 gradients, 8.42 GFLOPs, for a 640×640 input."
 
 [scales.s]
 depth = 0.33
 width = 0.50
-summary = "732 layers, 5806336 parameters, 5806336 gradients, 20.71 GFLOPs"
+summary = "732 layers, 5806336 parameters, 5806336 gradients, 20.71 GFLOPs, for a 640×640 input."
 
 [scales.m]
 depth = 0.67
 width = 0.75
-summary = "920 layers, 14455320 parameters, 14455320 gradients, 45.92 GFLOPs"
+summary = "920 layers, 14455320 parameters, 14455320 gradients, 45.92 GFLOPs, for a 640×640 input."
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "1298 layers, 32513400 parameters, 32513400 gradients, 98.33 GFLOPs"
+summary = "1298 layers, 32513400 parameters, 32513400 gradients, 98.33 GFLOPs, for a 640×640 input."
 
 [scales.x]
 depth = 1.00
 width = 1.25
-summary = "1298 layers, 50264464 parameters, 50264464 gradients, 148.97 GFLOPs"
+summary = "1298 layers, 50264464 parameters, 50264464 gradients, 148.97 GFLOPs, for a 640×640 input."
 
 # ----------------------------backbone---------------------------------
 [[network]]

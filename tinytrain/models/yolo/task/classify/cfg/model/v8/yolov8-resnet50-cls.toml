@@ -1,4 +1,5 @@
 # YOLOv8-resnet50-cls image classification model_config.
+name = "YOLOv8-resnet50-cls"
 
 scale = "n"
 
@@ -6,27 +7,27 @@ scale = "n"
 [scales.n]
 depth = 0.33
 width = 0.25
-summary = "232 layers, 2151706 parameters, 2151706 gradients, 0.64 GFLOPs"
+summary = "232 layers, 2151706 parameters, 2151706 gradients, 0.64 GFLOPs, for a 224×224 input."
 
 [scales.s]
 depth = 0.33
 width = 0.50
-summary = "232 layers, 7218730 parameters, 7218730 gradients, 2.27 GFLOPs"
+summary = "232 layers, 7218730 parameters, 7218730 gradients, 2.27 GFLOPs, for a 224×224 input."
 
 [scales.m]
 depth = 0.67
 width = 0.75
-summary = "232 layers, 15216442 parameters, 15216442 gradients, 4.89 GFLOPs"
+summary = "232 layers, 15216442 parameters, 15216442 gradients, 4.89 GFLOPs, for a 224×224 input."
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "232 layers, 26144842 parameters, 26144842 gradients, 8.5 GFLOPs"
+summary = "232 layers, 26144842 parameters, 26144842 gradients, 8.5 GFLOPs, for a 224×224 input."
 
 [scales.x]
 depth = 1.00
 width = 1.25
-summary = "232 layers, 40003930 parameters, 40003930 gradients, 13.1 GFLOPs"
+summary = "232 layers, 40003930 parameters, 40003930 gradients, 13.1 GFLOPs, for a 224×224 input."
 
 # ----------------------------backbone---------------------------------
 [[network]]

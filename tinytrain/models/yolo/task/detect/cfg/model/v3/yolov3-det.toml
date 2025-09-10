@@ -1,11 +1,12 @@
 # YOLOv3-det model_config.
+name = "YOLOv3-det"
 
 scale = "l"
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "333 layers, 98482354 parameters, 98482354 gradients, 262.38 GFLOPs"
+summary = "333 layers, 98482354 parameters, 98482354 gradients, 262.38 GFLOPs, for a 640×640 input."
 
 # ----------------------------backbone---------------------------------
 [[network]]

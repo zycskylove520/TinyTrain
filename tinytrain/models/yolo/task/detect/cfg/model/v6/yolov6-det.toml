@@ -1,4 +1,5 @@
 # YOLOv6-det model_config.
+name = "YOLOv6-det"
 
 scale = "n"
 
@@ -6,27 +7,27 @@ scale = "n"
 [scales.n]
 depth = 0.33
 width = 0.25
-summary = "218 layers, 4160322 parameters, 4160322 gradients, 11.54 GFLOPs"
+summary = "218 layers, 4160322 parameters, 4160322 gradients, 11.54 GFLOPs, for a 640×640 input."
 
 [scales.s]
 depth = 0.33
 width = 0.50
-summary = "218 layers, 15986354 parameters, 15986354 gradients, 42.92 GFLOPs"
+summary = "218 layers, 15986354 parameters, 15986354 gradients, 42.92 GFLOPs, for a 640×640 input."
 
 [scales.m]
 depth = 0.67
 width = 0.75
-summary = "296 layers, 61909986 parameters, 61909986 gradients, 167.13 GFLOPs"
+summary = "296 layers, 61909986 parameters, 61909986 gradients, 167.13 GFLOPs, for a 640×640 input."
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "374 layers, 156533650 parameters, 156533650 gradients, 424.24 GFLOPs"
+summary = "374 layers, 156533650 parameters, 156533650 gradients, 424.24 GFLOPs, for a 640×640 input."
 
 [scales.x]
 depth = 1.00
 width = 1.25
-summary = "374 layers, 244324738 parameters, 244324738 gradients, 661.66 GFLOPs"
+summary = "374 layers, 244324738 parameters, 244324738 gradients, 661.66 GFLOPs, for a 640×640 input."
 
 # ----------------------------YOLOv6-3.0 backbone---------------------------------
 [[network]]
@@ -160,7 +161,7 @@ args.in_channels = 256
 args.out_channels = 256
 args.kernel_size = 2
 args.stride = 2
-args.padding=0
+args.padding = 0
 
 [[network]]
 # 12 cat backbone P4
@@ -212,7 +213,7 @@ args.in_channels = 128
 args.out_channels = 128
 args.kernel_size = 2
 args.stride = 2
-args.padding=0
+args.padding = 0
 
 [[network]]
 # 17 cat backbone P3

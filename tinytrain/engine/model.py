@@ -77,11 +77,12 @@ class BaseModel(nn.Module):
         """
         return self.criterion(preds, batch_samples)
 
-    def custom_parse_model(self, module_info):
+    def custom_parse_model(self, level, module_info):
         """
         钩子：子类可重写以动态修改模块配置。
 
         Args:
+            level (int): 当前模块属于第几层
             module_info (dict): 当前模块的配置字典。
         """
         pass
@@ -268,6 +269,7 @@ class BaseModel(nn.Module):
                 _from: list = _info["from"]
                 _module: str = _info["module"]
                 _repeat: int = _info["repeat"]
+                _allow_repeat: bool = _info.get("allow_repeat", False)  # 针对那些repeat次数为1，但希望能通过width进行repeat的模块
                 _args: dict = _info.get("args", {})
 
                 # check network
@@ -292,10 +294,11 @@ class BaseModel(nn.Module):
 
                 # depth gain
                 if _type == "flow":
-                    _repeat = max(round(_repeat * depth), 1) if _repeat > 1 else _repeat
+                    if _repeat > 1 or _allow_repeat:
+                        _repeat = max(round(_repeat * depth), 1)
 
                 # 用户可自定义模型解析方式
-                self.custom_parse_model(_info)
+                self.custom_parse_model(level, _info)
 
                 # 构造网络模块
                 try:
@@ -421,7 +424,9 @@ class BaseModel(nn.Module):
                 f"|{str(info.get('args', {})):<{align_len['args']}}"
                 f"|"
             )
-        print(f"model summary: {scale_info['summary']}\n")
+
+        model_name = self.config_manager.model["name"]
+        print(f"{model_name} model summary: {scale_info['summary']}\n")
 
     # ------------------------------------------------------------------
     # 5. 权重参数加载

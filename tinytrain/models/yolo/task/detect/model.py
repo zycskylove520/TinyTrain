@@ -43,7 +43,7 @@ class YOLODetectionModel(YOLOModel):
     def loss(self, preds: list[torch.Tensor], batch_samples: BaseBatchDataInfo) -> tuple[float, dict]:
         return self.criterion(preds[0], batch_samples)
 
-    def custom_parse_model(self, module_info):
+    def custom_parse_model(self, level, module_info):
         scale = self.config_manager.model["scale"]
 
         width = self.WIDTH_GAIN

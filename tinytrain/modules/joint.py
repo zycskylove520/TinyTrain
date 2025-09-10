@@ -84,3 +84,12 @@ class Combine(nn.Module):
         if not all(isinstance(item, torch.Tensor) for item in x):
             raise TypeError("All elements in the input list must be torch.Tensor.")
         return x
+
+
+@TTModuleRegistry.register
+class Flatten(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return x.reshape(x.shape[0], -1)

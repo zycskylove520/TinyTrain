@@ -24,7 +24,7 @@ class YOLOClassificationModel(YOLOModel):
     def loss(self, preds: list[torch.Tensor], batch_samples: ClassifyBatchDataInfo) -> tuple[float, dict]:
         return self.criterion(preds[0], batch_samples)
 
-    def custom_parse_model(self, module_info):
+    def custom_parse_model(self, level, module_info):
         """
         分类任务专属解析逻辑，在通用解析完成后、模块实例化前调用。
 
