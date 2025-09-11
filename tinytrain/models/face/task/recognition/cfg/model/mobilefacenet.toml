@@ -25,12 +25,12 @@ depth = 4
 summary = "682 layers, 13775680 parameters, 13775680 gradients, 7.36 GFLOPs, for a 112×112 input."
 
 [scales.xl]
-depth = 4
-summary = "682 layers, 16443136 parameters, 16443136 gradients, 8.8 GFLOPs, for a 112×112 input."
+depth = 5
+summary = "838 layers, 20081472 parameters, 20081472 gradients, 10.77 GFLOPs, for a 112×112 input."
 
 [scales.xxl]
-depth = 4
-summary = "682 layers, 19110592 parameters, 19110592 gradients, 10.25 GFLOPs, for a 112×112 input."
+depth = 6
+summary = "994 layers, 27588672 parameters, 27588672 gradients, 14.83 GFLOPs, for a 112×112 input."
 
 # ----------------------------backbone---------------------------------
 [[network]]
