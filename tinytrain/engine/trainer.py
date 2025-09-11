@@ -388,6 +388,7 @@ class BaseTrainer:
         统一返回 list，即使只有一个数据集。
         """
         LOGGER.info(f"Setting dataset directory...")
+
         def _get_dirs(dataset_dirs: Union[str, List[str]]) -> List[Path]:
             """辅助函数：根据 split_key 获取所有存在的路径列表"""
             dataset_dirs = [dataset_dirs] if isinstance(dataset_dirs, (str, Path)) else dataset_dirs
@@ -424,8 +425,7 @@ class BaseTrainer:
 
         # 检查批量大小是否为 16 的倍数
         if self.batch_size % 16 != 0:
-            LOGGER.warning(
-                "Batch size is not a multiple of 16. It is recommended to set batch size as a multiple of 16 for better training performance.")
+            LOGGER.warning("Batch size is not a multiple of 16. It is recommended to set batch size as a multiple of 16 for better training performance.")
 
         # 打印批量大小信息
         if world_size > 1:
@@ -582,7 +582,7 @@ class BaseTrainer:
         elif mode == "test":
             shuffle = shuffle_test
         else:
-            raise
+            raise TypeError(f"build dataloader mode must be 'train' or 'val' or 'test'")
 
         # 计算每个 rank 实际分到的样本数
         if world_size > 1 and (mode == "train" or (mode == "val" and dist_val) or (mode == "val" and dist_test)):
@@ -624,8 +624,8 @@ class BaseTrainer:
             num_workers = max(0, num_workers // 2)
 
         # DDP均摊 num_workers
-        if world_size > 1:
-            num_workers = max(0, num_workers // world_size)
+        # if world_size > 1:
+        #     num_workers = max(0, num_workers // world_size)
 
         # 创建 DataLoader
         dataloader = DataLoader(
@@ -665,11 +665,13 @@ class BaseTrainer:
         if self.config_manager.link["model"].suffix in {".pt", ".pth"}:
             self.load_extra_save_params(self.model)
 
+        # model -> device
         self.model = self.model.to(self.device)
 
         # check AMP
         self.check_amp(world_size)
 
+        # convert to DDP model
         self.convert_ddp_model(world_size)
 
         # EMA
@@ -699,8 +701,7 @@ class BaseTrainer:
         self.model = DDP(
             self.model,
             device_ids=[LOCAL_RANK],
-            gradient_as_bucket_view=True,
-            find_unused_parameters=True
+            gradient_as_bucket_view=True
         )
 
     def set_optimizer(self, world_size: int):
@@ -1362,7 +1363,7 @@ class BaseTrainer:
             if self.best_fitness == self.fitness:
                 torch.save(checkpoint, self.best_pt.as_posix())
 
-            # 按周期保存模型（仅主进程）
+            # 按周期保存模型
             save_period = self.config_manager.core["save_period"]
             if save_period > 0 and (current_epoch + 1) % save_period == 0:
                 epoch_checkpoint_path = Path(self.weight_dir / f"epoch_{current_epoch + 1}.pt")

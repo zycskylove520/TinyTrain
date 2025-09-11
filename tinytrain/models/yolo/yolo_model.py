@@ -226,9 +226,9 @@ class YOLOModel(BaseModel):
         depth = scale_info["depth"]
         width = scale_info["width"]
         LOGGER.info(f"start parse model...")
-        _struct_info = f"current model scale:{scale}," + f" depth:{depth}" + ("." if width else f", width:{width}")
+        model_name = self.config_manager.model["name"]
+        _struct_info = f"{model_name} model scale:{scale}," + f" depth:{depth}" + ("," if width else f", width:{width},") + f" struct:"
         print(_struct_info)
-        print(f"{self.__class__.__name__} struct:")
         print(
             f"|{'layer':^{align_len['layer']}}"
             f"|{'type':^{align_len['type']}}"
@@ -247,6 +247,4 @@ class YOLOModel(BaseModel):
                 f"|{info['module']:^{align_len['module']}}"
                 f"|{str(info.get('args', {})):<{align_len['args']}}|"
             )
-
-        model_name = self.config_manager.model["name"]
-        print(f"{model_name} model summary: {scale_info['summary']}\n")
+        print(f"model summary: {scale_info['summary']}\n")

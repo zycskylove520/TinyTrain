@@ -6,23 +6,31 @@ scale = "n"
 # model_config compound scaling constants
 [scales.n]
 depth = 0.5
-summary = "140 layers, 7225216 parameters, 7225216 gradients, 2.83 GFLOPs, for a 112×112 input."
+summary = "140 layers, 888576 parameters, 888576 gradients, 0.37 GFLOPs, for a 112×112 input."
 
 [scales.s]
 depth = 1
-summary = "213 layers, 12207616 parameters, 12207616 gradients, 5.28 GFLOPs, for a 112×112 input."
+summary = "213 layers, 2066752 parameters, 2066752 gradients, 0.99 GFLOPs, for a 112×112 input."
 
 [scales.m]
 depth = 2
-summary = "370 layers, 22898304 parameters, 22898304 gradients, 10.84 GFLOPs, for a 112×112 input."
+summary = "370 layers, 4768320 parameters, 4768320 gradients, 2.47 GFLOPs, for a 112×112 input."
 
 [scales.l]
 depth = 3
-summary = "526 layers, 35991808 parameters, 35991808 gradients, 17.7 GFLOPs, for a 112×112 input."
+summary = "526 layers, 8671296 parameters, 8671296 gradients, 4.59 GFLOPs, for a 112×112 input."
 
 [scales.x]
 depth = 4
-summary = "682 layers, 51488128 parameters, 51488128 gradients, 25.85 GFLOPs, for a 112×112 input."
+summary = "682 layers, 13775680 parameters, 13775680 gradients, 7.36 GFLOPs, for a 112×112 input."
+
+[scales.xl]
+depth = 4
+summary = "682 layers, 16443136 parameters, 16443136 gradients, 8.8 GFLOPs, for a 112×112 input."
+
+[scales.xxl]
+depth = 4
+summary = "682 layers, 19110592 parameters, 19110592 gradients, 10.25 GFLOPs, for a 112×112 input."
 
 # ----------------------------backbone---------------------------------
 [[network]]

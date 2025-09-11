@@ -694,9 +694,10 @@ class DWBlock(nn.Module):
         self.residual = residual
         self.conv = nn.Sequential(
             Conv(in_channels=in_channels, out_channels=groups, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            Conv(in_channels=groups, out_channels=groups, kernel_size=kernel_size, stride=stride, padding=padding),
+            Conv(in_channels=groups, out_channels=groups, groups=groups, kernel_size=kernel_size, stride=stride, padding=padding),
             Conv(in_channels=groups, out_channels=out_channels, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0), act=False)
         )
+
 
     def forward(self, x):
         if self.residual:

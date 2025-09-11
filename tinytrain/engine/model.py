@@ -401,9 +401,10 @@ class BaseModel(nn.Module):
         scale_info = self.config_manager.model["scales"][scale]
         depth = scale_info["depth"]
         LOGGER.info(f"start parse model...")
-        _struct_info = f"current model scale:{scale}," + f" depth:{depth}"
+        model_name = self.config_manager.model["name"]
+        _struct_info = f"{model_name} model scale:{scale}, depth:{depth}, struct:"
         print(_struct_info)
-        print(f"{self.__class__.__name__} struct:")
+        # print(f"{self.__class__.__name__} struct:")
         print(
             f"|{'layer':^{align_len['layer']}}"
             f"|{'type':^{align_len['type']}}"
@@ -424,9 +425,7 @@ class BaseModel(nn.Module):
                 f"|{str(info.get('args', {})):<{align_len['args']}}"
                 f"|"
             )
-
-        model_name = self.config_manager.model["name"]
-        print(f"{model_name} model summary: {scale_info['summary']}\n")
+        print(f"model summary: {scale_info['summary']}\n")
 
     # ------------------------------------------------------------------
     # 5. 权重参数加载

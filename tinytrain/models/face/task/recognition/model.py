@@ -44,7 +44,8 @@ class FaceRecognitionModel(BaseModel):
 
         if name == "MobileFaceNet":
             for i, _scale in enumerate(scales):
-                expand = (i + 1) * 2
+                i+=1
+                expand = i
                 if scale == _scale:
                     if module_info["type"] == "entry":
                         module_info["args"]["out_channels"] *= expand
