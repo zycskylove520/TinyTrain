@@ -356,7 +356,7 @@ class BaseTrainer:
         Args:
             world_size (int): 分布式训练中的进程数量。
         """
-
+        LOGGER.info(f"Setting save directory...")
         # 节点内主进程（LOCAL_RANK==0）负责创建目录
         if LOCAL_RANK in {-1, 0}:
             config_core = self.config_manager.core
@@ -387,7 +387,7 @@ class BaseTrainer:
         设置训练、验证和测试数据集路径。
         统一返回 list，即使只有一个数据集。
         """
-
+        LOGGER.info(f"Setting dataset directory...")
         def _get_dirs(dataset_dirs: Union[str, List[str]]) -> List[Path]:
             """辅助函数：根据 split_key 获取所有存在的路径列表"""
             dataset_dirs = [dataset_dirs] if isinstance(dataset_dirs, (str, Path)) else dataset_dirs
@@ -416,6 +416,8 @@ class BaseTrainer:
         Args:
             world_size (int): 分布式训练中的进程数量。
         """
+        LOGGER.info(f"Checking batch size...")
+
         # 检查批量大小是否为 1
         if self.batch_size == 1:
             raise ValueError(f"Batch size {self.batch_size} cannot be 1.")
@@ -445,6 +447,8 @@ class BaseTrainer:
         #         LOGGER.info("Enabling AMP (Automatic Mixed Precision) for DDP (Distributed Data Parallel) training.")
         # else:
         # 单卡情况下检查 AMP 支持
+        LOGGER.info(f"Checking AMP...")
+
         if self.amp:
             do_amp = False
             if self.device.type == "cpu":
@@ -489,6 +493,8 @@ class BaseTrainer:
         Args:
             world_size (int): 分布式训练中的进程数量。
         """
+        LOGGER.info(f"Setting dataloader...")
+
         # train dataloader
         if self.train_dir:
             self.train_dataloader = self.build_dataloader(world_size, mode="train")
@@ -646,6 +652,7 @@ class BaseTrainer:
         Args:
             world_size (int): 分布式训练中的进程数量。
         """
+        LOGGER.info(f"Setting model...")
 
         # freeze layers
         self.freeze_layers(self.model, world_size)
@@ -700,6 +707,8 @@ class BaseTrainer:
         """
         构建优化器，支持参数分组、学习率缩放、多种优化器选择。
         """
+        LOGGER.info(f"Setting optimizer...")
+
         # ---------------- 1. 超参 ----------------
         optimizer_name = self.config_manager.core["optimizer"]
         lr0 = self.config_manager.core["lr0"]
@@ -817,6 +826,7 @@ class BaseTrainer:
         """
         设置预热阶段的学习率调度器。
         """
+        LOGGER.info(f"Setting warmup scheduler...")
 
         if self.warmup_epochs <= 0:
             return
@@ -884,6 +894,7 @@ class BaseTrainer:
         """
         设置正式训练阶段的学习率调度器。
         """
+        LOGGER.info(f"Setting normal scheduler...")
 
         if self.epochs <= self.warmup_epochs:
             return
@@ -968,6 +979,8 @@ class BaseTrainer:
         将配置保存为 TOML 文件到指定目录。
         """
         import toml
+
+        LOGGER.info(f"Saving all config files...")
 
         # 简化数据结构，确保值符合 TOML 格式
         def simplify_value(v):

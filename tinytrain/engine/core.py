@@ -510,7 +510,7 @@ class Core:
             if resume:
                 raise KeyError("Error: Detected resume=True, but no valid .pt or .pth file was provided.")
 
-            scales = self.config_manager.model["scales"].keys()  # 添加model的scale
+            scales = list(self.config_manager.model["scales"].keys())  # 添加model的scale
             if not scales:
                 raise KeyError("Error: Model.toml no scales were provided.")
 

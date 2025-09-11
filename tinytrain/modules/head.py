@@ -42,7 +42,11 @@ class Classify(nn.Module):
 
 @TTModuleRegistry.register
 class GDC(nn.Module):
-    """MobileFaceNet head"""
+    """
+    MobileFaceNet 人脸识别头。
+    training模型下返回: [batch, embedding_size]
+    eval模式下返回: [batch, embedding_size], embedding_size已做L2正则化
+    """
 
     def __init__(self, in_channels, embedding_size):
         super().__init__()
@@ -54,7 +58,11 @@ class GDC(nn.Module):
             nn.BatchNorm1d(embedding_size))
 
     def forward(self, x):
-        return self.layers(x)
+        x = self.layers(x)
+
+        if not self.training:
+            x = F.normalize(x, p=2, dim=-1)
+        return x
 
 
 @TTModuleRegistry.register

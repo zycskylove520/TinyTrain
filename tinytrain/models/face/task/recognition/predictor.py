@@ -61,10 +61,8 @@ class FaceRecognitionPredictor(BasePredictor):
 
     # ---------- 后处理 ----------
     def postprocess(self, data_info: AnyDataInfo, preds: list[torch.Tensor]):
-        pred1 = F.normalize(preds[0], p=2, dim=1)
-        pred2 = F.normalize(preds[1], p=2, dim=1)
         # 计算余弦相似度
-        cosine_similarity = torch.nn.functional.cosine_similarity(pred1, pred2, dim=1).item()
+        cosine_similarity = torch.nn.functional.cosine_similarity(preds[0], preds[1], dim=1).item()
         return cosine_similarity, preds
 
     # ---------- 可视化 ----------

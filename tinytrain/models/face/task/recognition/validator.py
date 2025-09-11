@@ -23,7 +23,7 @@ class FaceRecognitionValidator(BaseValidator):
         return batch_samples
 
     def inference(self, model: nn.Module, batch_samples: FaceRecognitionValidBatchDataInfo):
-        # 返回未归一化的 BN 输出即可，后处理里再统一归一化
+        # 返回归一化的 BN 输出即可，后处理里不需要再归一化
         preds1 = model.inference(batch_samples.data[0])[0]
         preds2 = model.inference(batch_samples.data[1])[0]
         return preds1, preds2
@@ -32,8 +32,6 @@ class FaceRecognitionValidator(BaseValidator):
         pred1 = preds[0]
         pred2 = preds[1]
 
-        pred1 = F.normalize(pred1, p=2, dim=1)
-        pred2 = F.normalize(pred2, p=2, dim=1)
         return F.cosine_similarity(pred1, pred2, dim=1)  # [B]
 
     def start_metrics_on_training(self, pbar: TTProgressBar):
