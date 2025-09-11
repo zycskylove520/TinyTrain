@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .block import Conv2Linear
 from .conv import Conv, DWConv
 from tinytrain.cfg import TTModuleRegistry
 from tinytrain.utils.tal import dist2bbox
@@ -59,6 +60,25 @@ class GDC(nn.Module):
 
     def forward(self, x):
         x = self.layers(x)
+
+        if not self.training:
+            x = F.normalize(x, p=2, dim=-1)
+        return x
+
+
+@TTModuleRegistry.register
+class GeneralFace(nn.Module):
+    """
+        通用人脸识别头。
+        training模型下返回: [batch, embedding_size]
+        eval模式下返回: [batch, embedding_size], embedding_size已做L2正则化
+        """
+    def __init__(self, in_channels, embedding_size):
+        super().__init__()
+        self.c2l = Conv2Linear(in_channels=in_channels, out_channels=embedding_size, kernel_size=(1, 1), stride=(1, 1))
+
+    def forward(self, x):
+        x = self.c2l(x)
 
         if not self.training:
             x = F.normalize(x, p=2, dim=-1)

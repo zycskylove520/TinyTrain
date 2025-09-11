@@ -93,7 +93,7 @@ class DDPLauncher:
         self.resolve_port()
 
         cmd = self.build_torchrun_cmd() if use_torchrun else self.build_launch_cmd()
-        LOGGER.info("Launching DDP with command:", " ".join(cmd))
+        LOGGER.info("Launching DDP with command:" + " ".join(cmd))
         subprocess.run(cmd, check=True)
 
     def resolve_port(self):

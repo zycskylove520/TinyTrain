@@ -13,7 +13,6 @@ class FaceRecognitionModel(BaseModel):
     """
 
     def __init__(self, config_manager: ConfigManager, device, *args, **kwargs):
-        self.embedding_size = None
         super().__init__(config_manager=config_manager, device=device, *args, **kwargs)
 
     def init_criterion(self):
@@ -29,7 +28,7 @@ class FaceRecognitionModel(BaseModel):
         return PartialFCLoss(
             margin_loss=margin_loss,
             device=self.device,
-            embedding_size=self.embedding_size,
+            embedding_size=self.config_manager.loss["embedding_size"],
             num_classes=self.config_manager.dataset["nc"],
             sample_rate=self.config_manager.loss["sample_rate"],
             cls_loss_gain=self.config_manager.loss["cls_loss_gain"])
@@ -40,9 +39,11 @@ class FaceRecognitionModel(BaseModel):
     def custom_parse_model(self, layer, module_info):
         name = self.config_manager.model["name"]
         scale = self.config_manager.model["scale"]
+        scales = self.config_manager.model["scales"]
+        depth = self.DEPTH_GAIN
 
         if name == "MobileFaceNet":
-            for i, _scale in enumerate("nsmlx"):
+            for i, _scale in enumerate(scales):
                 expand = (i + 1) * 2
                 if scale == _scale:
                     if module_info["type"] == "entry":
@@ -54,4 +55,27 @@ class FaceRecognitionModel(BaseModel):
                         module_info["args"]["in_channels"] *= expand
 
             if module_info["module"] == "GDC":
-                self.embedding_size = module_info["args"]["embedding_size"]
+                module_info["args"]["embedding_size"] = self.config_manager.loss["embedding_size"]
+        elif name == "YOLOv11-face":
+            for i, _scale in enumerate(scales):
+                i += 1
+                expand = i * 2
+                if scale == _scale:
+                    if module_info["type"] == "entry":
+                        module_info["args"]["out_channels"] *= expand
+                    elif module_info["type"] == "flow":
+                        module_info["args"]["in_channels"] *= expand
+                        module_info["args"]["out_channels"] *= expand
+                    elif module_info["type"] == "head":
+                        module_info["args"]["in_channels"] *= expand
+
+                if module_info["module"] == "C3k2":
+                    n = max(round(module_info["args"]["n"] * depth), 1)
+                    module_info["args"]["n"] = n
+
+                    # 只有m型号开启c3k模块
+                    if scale == "m":
+                        module_info["args"]["c3k"] = True
+
+            if module_info["module"] == "GeneralFace":
+                module_info["args"]["embedding_size"] = self.config_manager.loss["embedding_size"]

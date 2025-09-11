@@ -2,6 +2,9 @@
 # 人脸识别loss配置文件
 # ==========================
 
+embedding_size = 512
+# 模型最终输出的特征维度。
+
 cls_loss_gain = 1
 # 分类损失在总损失中的权重系数。
 # 最终回传的分类 loss = 原始分类 loss × cls_loss_gain。

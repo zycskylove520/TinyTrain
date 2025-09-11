@@ -6,23 +6,23 @@ scale = "n"
 # model_config compound scaling constants
 [scales.n]
 depth = 0.5
-summary = "140 layers, 7488384 parameters, 7488384 gradients, 2.83 GFLOPs, for a 112×112 input."
+summary = "140 layers, 7225216 parameters, 7225216 gradients, 2.83 GFLOPs, for a 112×112 input."
 
 [scales.s]
 depth = 1
-summary = "213 layers, 12470784 parameters, 12470784 gradients, 5.28 GFLOPs, for a 112×112 input."
+summary = "213 layers, 12207616 parameters, 12207616 gradients, 5.28 GFLOPs, for a 112×112 input."
 
 [scales.m]
 depth = 2
-summary = "370 layers, 23161472 parameters, 23161472 gradients, 10.84 GFLOPs, for a 112×112 input."
+summary = "370 layers, 22898304 parameters, 22898304 gradients, 10.84 GFLOPs, for a 112×112 input."
 
 [scales.l]
 depth = 3
-summary = "526 layers, 36254976 parameters, 36254976 gradients, 17.7 GFLOPs, for a 112×112 input."
+summary = "526 layers, 35991808 parameters, 35991808 gradients, 17.7 GFLOPs, for a 112×112 input."
 
 [scales.x]
 depth = 4
-summary = "682 layers, 51751296 parameters, 51751296 gradients, 25.85 GFLOPs, for a 112×112 input."
+summary = "682 layers, 51488128 parameters, 51488128 gradients, 25.85 GFLOPs, for a 112×112 input."
 
 # ----------------------------backbone---------------------------------
 [[network]]
@@ -141,4 +141,4 @@ module = "GDC"
 repeat = 1
 from = [-1]
 args.in_channels = 128
-args.embedding_size = 1024
+args.embedding_size = 512
