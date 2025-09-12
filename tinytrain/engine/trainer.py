@@ -1388,13 +1388,13 @@ class BaseTrainer:
         # 获取要保存的模型
         model = self.get_model_instance(world_size)
 
-        # 将模型设置为评估模式
-        model.eval()
-
         fp16_pt = self.config_manager.core["fp16_pt"]
         if fp16_pt:
             model = model.half()
             LOGGER.info("Simplified model converted to float16 (fp16) format.")
+
+        # 将模型设置为评估模式
+        model.eval()
 
         checkpoint = {
             'model': model.state_dict(),

@@ -72,10 +72,14 @@ class FaceRecognitionTrainer(BaseTrainer):
                     model.module_list[i] = model.module_list[i].module
             model.eval()
 
+            # 剔除criterion.weight参数
+            new_state_dict = model.state_dict()
+            new_state_dict.pop("criterion.weight")
+
             # 构建检查点
             checkpoint = {
                 "current_epoch": current_epoch + 1,
-                "model": model.state_dict(),
+                "model": new_state_dict,
                 "best_threshold": self.best_threshold,
                 "optimizer": self.optimizer.state_dict(),
                 "fitness": self.fitness,
@@ -115,15 +119,21 @@ class FaceRecognitionTrainer(BaseTrainer):
         for i in range(len(model.module_list)):
             if isinstance(model.module_list[i], torch.nn.parallel.DistributedDataParallel):
                 model.module_list[i] = model.module_list[i].module
-        model.eval()
 
         fp16_pt = self.config_manager.core["fp16_pt"]
         if fp16_pt:
             model = model.half()
             LOGGER.info("Simplified model converted to float16 (fp16) format.")
 
+        model.eval()
+
+        # 剔除criterion.weight参数
+        new_state_dict = model.state_dict()
+        new_state_dict.pop("criterion.weight")
+
         checkpoint = {
-            'model': model.state_dict(),
+            'model': new_state_dict,
+            "best_threshold": self.best_threshold,
             "core_args": {k: (v.as_posix() if isinstance(v, Path) else v) for k, v in self.config_manager.core.items()},
             "model_args": {k: (v.as_posix() if isinstance(v, Path) else v) for k, v in self.config_manager.model.items()},
             "fp16": fp16_pt
