@@ -1,5 +1,5 @@
-# YOLOv11-face image classification model_config.
-name="YOLOv11-face"
+# YOLOv11-rec image classification model_config.
+name="YOLOv11_FaceNet"
 
 scale = "n"
 

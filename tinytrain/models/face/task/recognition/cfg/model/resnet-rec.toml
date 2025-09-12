@@ -1,0 +1,101 @@
+# ResNet-face face recognition model_config.
+name = "ResFaceNet"
+
+scale = "n"
+
+# model_config compound scaling constants
+[scales.n]
+depth = 1
+summary = "Use ResNet18, 139 layers, 8231360 parameters, 8231360 gradients, 2.57 GFLOPs, for a 224×224 input."
+
+[scales.s]
+depth = 1
+summary = "Use ResNet34, 235 layers, 14415168 parameters, 14415168 gradients, 4.85 GFLOPs, for a 224×224 input."
+
+[scales.m]
+depth = 1
+summary = "Use ResNet50, 331 layers, 20194624 parameters, 20194624 gradients, 7.11 GFLOPs, for a 224×224 input."
+
+[scales.l]
+depth = 1
+summary = "Use ResNet100, 631 layers, 33382464 parameters, 33382464 gradients, 14.21 GFLOPs, for a 224×224 input."
+
+[scales.x]
+depth = 1
+summary = "Use ResNet200, 1219 layers, 66204608 parameters, 66204608 gradients, 28.12 GFLOPs, for a 224×224 input."
+
+# ----------------------------backbone---------------------------------
+[[network]]
+# 0-P1/2
+type = "entry"
+module = "Conv"
+repeat = 1
+from = [-1]
+args.in_channels = 3
+args.out_channels = 64
+args.padding = 1
+args.kernel_size = 3
+args.stride = 1
+args.act = false
+
+[[network]]
+# 1-P1/4
+type = "flow"
+module = "ResNetLayer"
+repeat = 1
+from = [-1]
+args.in_channels = 64
+args.out_channels = 64
+args.stride = 2
+args.is_first = false
+args.e = 1
+args.n = 2
+
+[[network]]
+# 2-P2/8
+type = "flow"
+module = "ResNetLayer"
+repeat = 1
+from = [-1]
+args.in_channels = 64
+args.out_channels = 128
+args.stride = 2
+args.is_first = false
+args.e = 1
+args.n = 2
+
+[[network]]
+# 3-P3/16
+type = "flow"
+module = "ResNetLayer"
+repeat = 1
+from = [-1]
+args.in_channels = 128
+args.out_channels = 256
+args.stride = 2
+args.is_first = false
+args.e = 1
+args.n = 2
+
+[[network]]
+# 4-P4/32
+type = "flow"
+module = "ResNetLayer"
+repeat = 1
+from = [-1]
+args.in_channels = 256
+args.out_channels = 512
+args.stride = 2
+args.is_first = false
+args.e = 1
+args.n = 2
+
+# ----------------------------------head--------------------------------------
+[[network]]
+# 10
+type = "head"
+module = "GDC"
+repeat = 1
+from = [-1]
+args.in_channels = 512
+args.embedding_size = 512

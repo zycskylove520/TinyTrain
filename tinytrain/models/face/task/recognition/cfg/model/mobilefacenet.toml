@@ -60,7 +60,7 @@ args.padding = 1
 args.groups = 64
 
 [[network]]
-# 2
+# 2-P2/4
 type = "flow"
 module = "DWBlock"
 repeat = 1
@@ -87,7 +87,7 @@ args.groups = 128
 args.residual = true
 
 [[network]]
-# 4
+# 4-P3/8
 type = "flow"
 module = "DWBlock"
 repeat = 1
@@ -114,7 +114,7 @@ args.groups = 256
 args.residual = true
 
 [[network]]
-# 6
+# 6-P4/16
 type = "flow"
 module = "DWBlock"
 repeat = 1

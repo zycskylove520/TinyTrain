@@ -44,7 +44,7 @@ class FaceRecognitionModel(BaseModel):
 
         if name == "MobileFaceNet":
             for i, _scale in enumerate(scales):
-                i+=1
+                i += 1
                 expand = i
                 if scale == _scale:
                     if module_info["type"] == "entry":
@@ -57,7 +57,7 @@ class FaceRecognitionModel(BaseModel):
 
             if module_info["module"] == "GDC":
                 module_info["args"]["embedding_size"] = self.config_manager.loss["embedding_size"]
-        elif name == "YOLOv11-face":
+        elif name == "YOLOv11_FaceNet":
             for i, _scale in enumerate(scales):
                 i += 1
                 expand = i * 2
@@ -79,4 +79,52 @@ class FaceRecognitionModel(BaseModel):
                         module_info["args"]["c3k"] = True
 
             if module_info["module"] == "GeneralFace":
+                module_info["args"]["embedding_size"] = self.config_manager.loss["embedding_size"]
+        elif name == "ResFaceNet":
+            if scale == "n":
+                if layer == 1 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 2
+                elif layer == 2 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 2
+                elif layer == 3 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 2
+                elif layer == 4 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 2
+            elif scale == "s":
+                if layer == 1 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 3
+                elif layer == 2 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 4
+                elif layer == 3 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 6
+                elif layer == 4 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 3
+            elif scale == "m":
+                if layer == 1 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 3
+                elif layer == 2 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 4
+                elif layer == 3 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 14
+                elif layer == 4 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 3
+            elif scale == "l":
+                if layer == 1 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 3
+                elif layer == 2 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 13
+                elif layer == 3 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 30
+                elif layer == 4 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 3
+            elif scale == "x":
+                if layer == 1 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 6
+                elif layer == 2 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 26
+                elif layer == 3 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 60
+                elif layer == 4 and module_info["type"] == "flow" and module_info["module"] == "ResNetLayer":
+                    module_info["args"]["n"] = 6
+            if module_info["module"] == "GDC":
                 module_info["args"]["embedding_size"] = self.config_manager.loss["embedding_size"]
