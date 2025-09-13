@@ -440,13 +440,6 @@ class BaseTrainer:
         Args:
             world_size (int): 分布式训练中的进程数量。
         """
-
-        # DDP开启AMP不进行检查
-        # if world_size > 1:
-        #     if RANK == 0 and self.amp:
-        #         LOGGER.info("Enabling AMP (Automatic Mixed Precision) for DDP (Distributed Data Parallel) training.")
-        # else:
-        # 单卡情况下检查 AMP 支持
         LOGGER.info(f"Checking AMP...")
 
         if self.amp:
@@ -1346,6 +1339,7 @@ class BaseTrainer:
             # 构建检查点
             checkpoint = {
                 "current_epoch": current_epoch + 1,
+                'model_name': self.config_manager.model["name"],
                 "model": model.state_dict(),
                 "optimizer": self.optimizer.state_dict(),
                 "fitness": self.fitness,
@@ -1397,6 +1391,7 @@ class BaseTrainer:
         model.eval()
 
         checkpoint = {
+            'model_name': self.config_manager.model["name"],
             'model': model.state_dict(),
             "core_args": {k: (v.as_posix() if isinstance(v, Path) else v) for k, v in self.config_manager.core.items()},
             "model_args": {k: (v.as_posix() if isinstance(v, Path) else v) for k, v in self.config_manager.model.items()},

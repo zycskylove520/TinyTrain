@@ -104,6 +104,7 @@ class CombinedMargin(nn.Module):
             cosine, sine = target_logits, (1 - target_logits.square()).clamp(min=0).sqrt()
             phi = cosine * self.cos_m - sine * self.sin_m
             phi = torch.where(cosine > self.th, phi, cosine - self.mm)
+            phi = phi.to(logits.dtype)
             logits[index, labels[index]] = phi
         elif self.m_cos > 0:  # CosFace
             logits[index, labels[index]] = target_logits - self.m_cos

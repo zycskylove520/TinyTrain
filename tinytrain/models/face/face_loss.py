@@ -135,7 +135,7 @@ class PartialFCLoss(nn.Module):
 
         # 收集所有卡的local_embeddings和local_labels
         _gather_embeddings = [
-            torch.zeros((batch_size, self.embedding_size), device=self.device) for _ in range(WORLD_SIZE)
+            torch.zeros((batch_size, self.embedding_size), device=self.device, dtype=local_embeddings.dtype) for _ in range(WORLD_SIZE)
         ]
         _gather_labels = [
             torch.zeros(batch_size, device=self.device).long() for _ in range(WORLD_SIZE)

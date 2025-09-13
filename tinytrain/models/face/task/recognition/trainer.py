@@ -79,6 +79,7 @@ class FaceRecognitionTrainer(BaseTrainer):
             # 构建检查点
             checkpoint = {
                 "current_epoch": current_epoch + 1,
+                'model_name': self.config_manager.model["name"],
                 "model": new_state_dict,
                 "best_threshold": self.best_threshold,
                 "optimizer": self.optimizer.state_dict(),
@@ -132,6 +133,7 @@ class FaceRecognitionTrainer(BaseTrainer):
         new_state_dict.pop("criterion.weight")
 
         checkpoint = {
+            'model_name': self.config_manager.model["name"],
             'model': new_state_dict,
             "best_threshold": self.best_threshold,
             "core_args": {k: (v.as_posix() if isinstance(v, Path) else v) for k, v in self.config_manager.core.items()},
