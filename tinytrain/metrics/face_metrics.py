@@ -27,7 +27,8 @@ class FaceRecognitionMetrics(BaseMetric):
         self._auc = 0.
         self._bal_acc = 0.
         self._tpr_1e3 = 0.  # TPR when FAR = 1e-3
-        self._best_threshold = 0.  # Youden 最大阈值
+        self._tpr_1e4 = 0.  # TPR when FAR = 1e-4
+        self._best_threshold = 0.  # cosine 最大阈值
 
         # ROC 曲线原始数据，供 plot 复用
         self._fpr = None
@@ -41,6 +42,7 @@ class FaceRecognitionMetrics(BaseMetric):
         self._auc = 0.
         self._bal_acc = 0.
         self._tpr_1e3 = 0.
+        self._tpr_1e4 = 0.
         self._best_threshold = 0.
 
         self._fpr = None
@@ -99,6 +101,12 @@ class FaceRecognitionMetrics(BaseMetric):
         else:
             self._tpr_1e3 = np.interp(1e-3, self._fpr, self._tpr)
 
+        # ---- 6. TPR@FAR=1e-4 ---- #
+        if self._fpr[-1] < 1e-4:  # 全程 FAR 都没到 1e-4
+            self._tpr_1e4 = self._tpr[-1]
+        else:
+            self._tpr_1e4 = np.interp(1e-4, self._fpr, self._tpr)
+
     def auc(self):
         return self._auc
 
@@ -107,6 +115,9 @@ class FaceRecognitionMetrics(BaseMetric):
 
     def tpr_1e3(self):
         return self._tpr_1e3
+
+    def tpr_1e4(self):
+        return self._tpr_1e4
 
     def best_threshold(self):
         return self._best_threshold

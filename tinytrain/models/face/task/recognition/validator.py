@@ -42,7 +42,7 @@ class FaceRecognitionValidator(BaseValidator):
         labels = batch_samples.match_tensor.cpu().numpy()
         self.metrics.update(scores, labels)
 
-        desc = f"{'val':^5}|{'Accuracy':^15}|{'AUC':^15}|{'TPR@FAR=1e-3':^15}|{'Best_threshold':^15}|"
+        desc = f"{'val':^5}|{'Accuracy':^15}|{'AUC':^15}|{'TPR@FAR=1e-3':^15}|{'TPR@FAR=1e-4':^15}|{'Best_threshold':^15}|"
         pbar.set_description(desc)
 
     def end_metrics_on_training(self, pbar: TTProgressBar):
@@ -50,12 +50,13 @@ class FaceRecognitionValidator(BaseValidator):
         acc = self.metrics.balanced_accuracy()
         auc = self.metrics.auc()
         tpr_1e3 = self.metrics.tpr_1e3()
+        tpr_1e4 = self.metrics.tpr_1e4()
         best_threshold = self.metrics.best_threshold()
         self.trainer.best_threshold = best_threshold
 
         if RANK in {-1, 0}:
             # log
-            progress_str = f"{'val':^5}|{acc:^15.3f}|{auc:^15.3f}|{tpr_1e3:^15.3f}|{best_threshold:^15.3f}|"
+            progress_str = f"{'val':^5}|{acc:^15.3f}|{auc:^15.3f}|{tpr_1e3:^15.3f}|{tpr_1e4:^15.3f}|{best_threshold:^15.3f}|"
             print(progress_str)
 
             # 写回日志
@@ -63,6 +64,7 @@ class FaceRecognitionValidator(BaseValidator):
                 self.trainer.train_result.add("Accuracy", acc)
                 self.trainer.train_result.add("AUC", auc)
                 self.trainer.train_result.add("TPR@FAR=1e-3", tpr_1e3)
+                self.trainer.train_result.add("TPR@FAR=1e-3", tpr_1e4)
                 self.trainer.train_result.add("best_threshold", best_threshold)
 
     def start_metrics_on_train_completed(self, pbar: TTProgressBar):
@@ -73,7 +75,7 @@ class FaceRecognitionValidator(BaseValidator):
         labels = batch_samples.match_tensor.cpu().numpy()
         self.metrics.update(scores, labels)
 
-        desc = f"{'val':^5}|{'Accuracy':^15}|{'AUC':^15}|{'TPR@FAR=1e-3':^15}|{'Best_threshold':^15}|"
+        desc = f"{'val':^5}|{'Accuracy':^15}|{'AUC':^15}|{'TPR@FAR=1e-3':^15}|{'TPR@FAR=1e-4':^15}|{'Best_threshold':^15}|"
         pbar.set_description(desc)
 
     def end_metrics_on_train_completed(self, pbar: TTProgressBar):
@@ -81,11 +83,12 @@ class FaceRecognitionValidator(BaseValidator):
         acc = self.metrics.balanced_accuracy()
         auc = self.metrics.auc()
         tpr_1e3 = self.metrics.tpr_1e3()
+        tpr_1e4 = self.metrics.tpr_1e4()
         best_threshold = self.metrics.best_threshold()
 
         if RANK in {-1, 0}:
             # log
-            progress_str = f"{'val':^5}|{acc:^15.3f}|{auc:^15.3f}|{tpr_1e3:^15.3f}|{best_threshold:^15.3f}|"
+            progress_str = f"{'val':^5}|{acc:^15.3f}|{auc:^15.3f}|{tpr_1e3:^15.3f}|{tpr_1e4:^15.3f}|{best_threshold:^15.3f}|"
             print(progress_str)
 
             # plot
@@ -96,8 +99,10 @@ class FaceRecognitionValidator(BaseValidator):
         acc = self.metrics.balanced_accuracy()
         auc = self.metrics.auc()
         tpr_1e3 = self.metrics.tpr_1e3()
-        weights = [0.06, 0.04, 0.9]
-        return acc * weights[0] + auc * weights[1] + tpr_1e3 * weights[2]
+        tpr_1e4 = self.metrics.tpr_1e4()
+
+        weights = [0.06, 0.04, 0.3, 0.6]
+        return acc * weights[0] + auc * weights[1] + tpr_1e3 * weights[2] + tpr_1e4 * weights[3]
 
     def get_model_instance(self):
         if self.trainer.ema:
