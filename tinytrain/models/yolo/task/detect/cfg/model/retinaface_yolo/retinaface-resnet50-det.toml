@@ -1,6 +1,8 @@
-# retinaface-resnet50-det model_config.
-name = "Retinaface-resnet50-det"
+# =================================================
+# YOLO目标检测模型: Retinaface-resnet50-det 模型配置文件
+# =================================================
 
+name = "Retinaface-resnet50-det"
 scale = "l"
 
 [scales.l]

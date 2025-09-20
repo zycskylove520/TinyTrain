@@ -88,6 +88,28 @@ def cxcywh_2_lxlywh(x):
     return y
 
 
+def box_iou_torch(box1, box2, eps=1e-7):
+    """
+    Calculate intersection-over-union (IoU) of boxes. Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
+    Based on https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py.
+
+    Args:
+        box1 (torch.Tensor): A tensor of shape (N, 4) representing N bounding boxes.
+        box2 (torch.Tensor): A tensor of shape (M, 4) representing M bounding boxes.
+        eps (float, optional): A small value to avoid division by zero. Defaults to 1e-7.
+
+    Returns:
+        (torch.Tensor): An NxM tensor containing the pairwise IoU values for every element in box1 and box2.
+    """
+    # NOTE: Need .float() to get accurate iou values
+    # inter(N,M) = (rb(N,M,2) - lt(N,M,2)).clamp(0).prod(2)
+    (a1, a2), (b1, b2) = box1.float().unsqueeze(1).chunk(2, 2), box2.float().unsqueeze(0).chunk(2, 2)
+    inter = (torch.min(a2, b2) - torch.max(a1, b1)).clamp_(0).prod(2)
+
+    # IoU = inter / (area1 + area2 - inter)
+    return inter / ((a2 - a1).prod(2) + (b2 - b1).prod(2) - inter + eps)
+
+
 def bbox_iou_torch(box1: torch.Tensor, box2: torch.Tensor, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
     """
     计算 IoU / GIoU / DIoU / CIoU (PyTorch 版)。
@@ -185,6 +207,28 @@ def bbox_iou_numpy(box1, box2, eps=1e-7):
     return inter / union
 
 
+def kpt_iou(kpt1, kpt2, area, sigma, eps=1e-7):
+    """
+    Calculate Object Keypoint Similarity (OKS).
+
+    Args:
+        kpt1 (torch.Tensor): A tensor of shape (N, 17, 3) representing ground truth keypoints.
+        kpt2 (torch.Tensor): A tensor of shape (M, 17, 3) representing predicted keypoints.
+        area (torch.Tensor): A tensor of shape (N,) representing areas from ground truth.
+        sigma (list): A list containing 17 values representing keypoint scales.
+        eps (float, optional): A small value to avoid division by zero. Defaults to 1e-7.
+
+    Returns:
+        (torch.Tensor): A tensor of shape (N, M) representing keypoint similarities.
+    """
+    d = (kpt1[:, None, :, 0] - kpt2[..., 0]).pow(2) + (kpt1[:, None, :, 1] - kpt2[..., 1]).pow(2)  # (N, M, 17)
+    sigma = torch.tensor(sigma, device=kpt1.device, dtype=kpt1.dtype)  # (17, )
+    kpt_mask = kpt1[..., 2] != 0  # (N, 17)
+    e = d / ((2 * sigma).pow(2) * (area[:, None, None] + eps) * 2)  # from cocoeval
+    # e = d / ((area[None, :, None] + eps) * sigma) ** 2 / 2  # from formula
+    return ((-e).exp() * kpt_mask[:, None]).sum(-1) / (kpt_mask.sum(-1)[:, None] + eps)
+
+
 def box_invert_affine_transform(boxes: np.ndarray, affine_matrix: np.ndarray) -> np.ndarray:
     """
     将经过仿射变换的框坐标恢复到原图坐标系。
@@ -238,9 +282,8 @@ def make_anchors(feats: list[torch.Tensor], strides: torch.Tensor, grid_cell_off
 
     anchor_points, stride_tensor = [], []
     dtype, device = feats[0].dtype, feats[0].device
-
     for i in range(strides.shape[0]):
-        stride = strides[i]
+        stride: torch.Tensor = strides[i]
         # Get feature map height and width
         h, w = feats[i].shape[2:] if isinstance(feats, list) else (int(feats[i][0]), int(feats[i][1]))
 
@@ -256,7 +299,7 @@ def make_anchors(feats: list[torch.Tensor], strides: torch.Tensor, grid_cell_off
 
         # Create stride tensor for each anchor point
         # Use broadcasting to fill the tensor more efficiently
-        stride_tensor.append(torch.full((h * w, 1), stride, dtype=dtype, device=device))
+        stride_tensor.append(torch.full((h * w, 1), stride, dtype=dtype, device=device))  # type: ignore[arg-type]
 
     # Concatenate all anchor points and stride tensors
     anchor_points = torch.cat(anchor_points)

@@ -1,5 +1,5 @@
 # ========================
-# YOLO目标检测dataset配置文件
+# YOLO姿态估计dataset配置文件
 # ========================
 
 img_size = 640
@@ -14,14 +14,12 @@ train = "datasets/xxx/images/train"
 val = "datasets/xxx/images/val"
 # 验证集图像路径
 
-test = ""
-# 测试集图像路径，留空表示没有测试集
+keypoint_shape = [17, 3]
+# 关键点的形状，表示每个目标有 17 个关键点，每个关键点有 3 个坐标值（x, y, visibility）
 
-nc = 3
+nc = 1
 # 数据集的类别数量
 
 # 类别名称
 [names]
-0 = "x"
-1 = "y"
-2 = "z"
+0 = "人"

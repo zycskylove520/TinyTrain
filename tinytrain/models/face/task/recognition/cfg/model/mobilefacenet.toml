@@ -1,6 +1,8 @@
-# MobileFaceNet face recognition model_config.
-name = "MobileFaceNet"
+# ===================================
+# 人脸识别模型: MobileFaceNet 模型配置文件
+# ===================================
 
+name = "MobileFaceNet"
 scale = "n"
 
 # model_config compound scaling constants

@@ -1,6 +1,8 @@
-# YOLOv11-rec image classification model_config.
-name="YOLOv11_FaceNet"
+# =====================================
+# 人脸识别模型: YOLOv11_FaceNet 模型配置文件
+# =====================================
 
+name="YOLOv11_FaceNet"
 scale = "n"
 
 # model_config compound scaling constants

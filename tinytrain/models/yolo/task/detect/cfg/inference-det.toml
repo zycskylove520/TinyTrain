@@ -1,5 +1,18 @@
-val_conf_threshold = 0.001  # 验证阶段保留检测框的置信度下限：0.1 % 以上才保留
-val_nms_threshold  = 0.5    # 验证阶段 NMS 的 IoU 阈值：重叠 ≥50 % 的框视为同一目标并抑制
+# ==========================
+# YOLO目标检测inference配置文件
+# ==========================
 
-predict_conf_threshold = 0.25  # 预测阶段保留检测框的置信度下限：25 % 以上才输出
-predict_nms_threshold  = 0.5   # 预测阶段 NMS 的 IoU 阈值： 50 % 重叠即抑制
+val_conf_threshold = 0.001
+# 验证阶段保留检测框的置信度下限：0.1 % 以上才保留
+
+val_nms_threshold  = 0.5
+# 验证阶段 NMS 的 IoU 阈值：重叠 ≥50 % 的框视为同一目标并抑制
+
+val_draw_conf_threshold = 0.25
+# 最终验证阶段绘制验证图片结果的置信度阈值： 25 % 以下则不显示
+
+predict_conf_threshold = 0.25
+# 预测阶段保留检测框的置信度下限：25 % 以上才输出
+
+predict_nms_threshold  = 0.5
+# 预测阶段 NMS 的 IoU 阈值： 50 % 重叠即抑制

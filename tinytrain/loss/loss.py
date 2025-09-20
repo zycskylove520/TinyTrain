@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from torch import nn
 
@@ -8,6 +9,7 @@ from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry, lxlyrxry_2_cxcywh, make
 from tinytrain.utils.tal import TaskAlignedAssigner, dist2bbox
 
 from .subloss import BboxLossWithDFL, KeypointLoss
+
 
 class ClassificationLoss(nn.Module):
     """
@@ -83,36 +85,36 @@ class ClassificationWithFocalLoss(nn.Module):
         """
         target = batch.target
 
-        logp = self.criterion(pred, target)
-        p = torch.exp(-logp)
-        loss = (1 - p) ** self.gamma * logp
-        loss = loss * self.cls_loss_gain
-        loss_items = {"cls_loss": loss.detach()}
-        return loss, loss_items
+        # logp = self.criterion(pred, target)
+        # p = torch.exp(-logp)
+        # loss = (1 - p) ** self.gamma * logp
+        # loss = loss * self.cls_loss_gain
+        # loss_items = {"cls_loss": loss.detach()}
+        # return loss, loss_items
 
-        # # 计算交叉熵损失
-        # ce_loss = self.criterion(pred, target)
-        #
-        # # 计算每个样本的预测概率
-        # probabilities = F.softmax(pred, dim=1)
-        # pt = probabilities.gather(1, target.unsqueeze(1)).squeeze(1)
-        #
-        # # 计算 Focal Loss
-        # focal_term = (1 - pt + self.eps) ** self.gamma
-        # if self.alpha is not None:
-        #     if isinstance(self.alpha, float):
-        #         alpha_t = self.alpha
-        #     elif isinstance(self.alpha, torch.Tensor):
-        #         alpha_t = self.alpha.gather(0, target)
-        #     else:
-        #         raise ValueError("alpha must be a float or a Tensor")
-        #     focal_loss = alpha_t * focal_term * ce_loss
-        # else:
-        #     focal_loss = focal_term * ce_loss
-        #
-        # focal_loss = focal_loss.mean() * self.cls_loss_gain
-        # loss_items = {"cls_loss": focal_loss.detach()}
-        # return focal_loss, loss_items
+        # 计算交叉熵损失
+        ce_loss = self.criterion(pred, target)
+
+        # 计算每个样本的预测概率
+        probabilities = F.softmax(pred, dim=1)
+        pt = probabilities.gather(1, target.unsqueeze(1)).squeeze(1)
+
+        # 计算 Focal Loss
+        focal_term = (1 - pt + self.eps) ** self.gamma
+        if self.alpha is not None:
+            if isinstance(self.alpha, float):
+                alpha_t = self.alpha
+            elif isinstance(self.alpha, torch.Tensor):
+                alpha_t = self.alpha.gather(0, target)
+            else:
+                raise ValueError("alpha must be a float or a Tensor")
+            focal_loss = alpha_t * focal_term * ce_loss
+        else:
+            focal_loss = focal_term * ce_loss
+
+        focal_loss = focal_loss.mean() * self.cls_loss_gain
+        loss_items = {"cls_loss": focal_loss.detach()}
+        return focal_loss, loss_items
 
 
 class YOLOV8DetectionLoss(nn.Module):
@@ -124,7 +126,7 @@ class YOLOV8DetectionLoss(nn.Module):
     使用 Task-Aligned Assigner 进行正负样本匹配。
     """
 
-    def __init__(self, model, imgsz, device, cls_gain=1, box_gain=1, dfl_gain=1, tal_topk=10):
+    def __init__(self, nc, strides, reg_max, imgsz, device, cls_gain=1, box_gain=1, dfl_gain=1, tal_topk=10):
         """
         Args:
             model (nn.Module): 检测模型，用于提取 head 超参数。
@@ -135,11 +137,10 @@ class YOLOV8DetectionLoss(nn.Module):
             tal_topk (int): Task-Aligned Assigner 的 top-k 参数。
         """
         super().__init__()
-        self.device =  device # get model device
-        self.strides = model.strides
-        self.head = model.module_list[-1]
-        self.nc = self.head.nc
-        self.reg_max = self.head.reg_max
+        self.device = device
+        self.strides = strides
+        self.nc = nc
+        self.reg_max = reg_max
         self.output_num = self.nc + self.reg_max * 4
         self.imgsz = list(imgsz) if isinstance(imgsz, (list, tuple)) else [imgsz, imgsz]  # w,h
         self.cls_gain = cls_gain
@@ -283,25 +284,27 @@ class YOLOV8PoseLoss(YOLOV8DetectionLoss):
             / 10.0
     )
 
-    def __init__(self, model, imgsz, cls_gain=1, box_gain=1, dfl_gain=1, pose_gain=1, kobj_gain=1, tal_topk=10):  # model must be de-paralleled
+    def __init__(self, nc, strides, reg_max, imgsz, device, kpt_shape, cls_gain=1, box_gain=1, dfl_gain=1, pose_gain=1, kobj_gain=1, tal_topk=10):  # model must be de-paralleled
         """Initializes v8PoseLoss with model, sets keypoint variables and declares a keypoint loss instance."""
-        super().__init__(model, imgsz, cls_gain, box_gain, dfl_gain, tal_topk)
+        super().__init__(nc, strides, reg_max, imgsz, device, cls_gain, box_gain, dfl_gain, tal_topk)
         self.pose_gain = pose_gain
         self.kobj_gain = kobj_gain
-        self.kpt_shape = self.head.kpt_shape
+        self.kpt_shape = kpt_shape
         self.bce_pose = nn.BCEWithLogitsLoss()
-        is_pose = self.kpt_shape == [17, 3]
+        humanoid_pose = self.kpt_shape == [17, 3]
         nkpt = self.kpt_shape[0]  # number of keypoints
-        sigmas = torch.from_numpy(self.OKS_SIGMA).to(self.device) if is_pose else torch.ones(nkpt, device=self.device) / nkpt
+        sigmas = torch.from_numpy(self.OKS_SIGMA).to(self.device) if humanoid_pose else torch.ones(nkpt, device=self.device) / nkpt
         self.keypoint_loss = KeypointLoss(sigmas=sigmas)
 
-    def __call__(self, preds: list[torch.Tensor], batch: PoseBatchDataInfo):
+    def __call__(self, preds: tuple[list[torch.Tensor], torch.Tensor], batch: PoseBatchDataInfo):
         """Calculate the total loss and detach it."""
-        dtype = preds[1].dtype
-        batch_size = preds[1].shape[0]
 
-        feats, pred_kpts = preds
-        pred_distri, pred_scores = torch.cat([xi.view(batch_size, self.output_num, -1) for xi in feats], 2).split(
+        features: list[torch.Tensor] = preds[0]
+        pred_kpts: torch.Tensor = preds[1]
+        dtype = features[0].dtype
+        batch_size = features[0].shape[0]
+
+        pred_distri, pred_scores = torch.cat([xi.view(batch_size, self.output_num, -1) for xi in features], 2).split(
             (self.reg_max * 4, self.nc), 1
         )
 
@@ -309,7 +312,7 @@ class YOLOV8PoseLoss(YOLOV8DetectionLoss):
         pred_distri = pred_distri.permute(0, 2, 1).contiguous()
         pred_kpts = pred_kpts.permute(0, 2, 1).contiguous()
 
-        anchor_points, stride_tensor = make_anchors(feats, self.strides, 0.5)
+        anchor_points, stride_tensor = make_anchors(features, self.strides, 0.5)
 
         # Targets
         targets = torch.cat((batch.bboxes_idx.view(-1, 1), batch.target.view(-1, 1), batch.bboxes.view(-1, 4)), 1)
@@ -326,7 +329,7 @@ class YOLOV8PoseLoss(YOLOV8DetectionLoss):
 
         _, target_bboxes, target_scores, fg_mask, target_gt_idx = self.assigner(
             pred_scores.detach().sigmoid(),
-            # 乘以stride_tensor将pred_bboxes恢复原图大小，对anchor_points同理
+            # 乘以stride_tensor将pred_bboxes恢复训练图大小，对anchor_points同理
             (pred_bboxes.detach() * stride_tensor).type(gt_bboxes.dtype),
             anchor_points * stride_tensor,
             gt_labels,
@@ -354,8 +357,8 @@ class YOLOV8PoseLoss(YOLOV8DetectionLoss):
                 pred_distri, pred_bboxes, anchor_points, target_bboxes, target_scores, target_scores_sum, fg_mask
             )
 
-            # 把归一化的keypoints放大回原图
-            keypoints = batch.batch_key_points.to(self.device).float().clone()
+            # 把归一化的keypoints放大回训练图
+            keypoints = batch.batch_keypoints.to(self.device).float().clone()
             keypoints[..., 0] *= self.imgsz[0]
             keypoints[..., 1] *= self.imgsz[1]
 

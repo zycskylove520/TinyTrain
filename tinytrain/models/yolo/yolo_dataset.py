@@ -31,6 +31,7 @@ YOLO 通用检测数据集封装类，支持 YOLO 格式（class cx cy w h，归
 ...     # batch: DetectBatchDataInfo
 ...     preds = model(batch.data, batch.bboxes, batch.target)
 """
+from copy import deepcopy
 
 import cv2
 import torch
@@ -87,11 +88,8 @@ class YOLODetectionDataset(TTBaseVisionDataset):
         - 若启用 cache，则通过内存映射读取，避免重复 IO。
         - 返回对象仅浅拷贝外壳，内部 img 字段会被新的 ndarray 覆盖。
         """
-
-        # from copy import deepcopy
-        # sample = deepcopy(self.samples[index]) # 做深拷贝，避免内存常驻img数据
-        sample = self.samples[index]  # 浅拷贝
-        sample = DetectDataInfo(**vars(sample))  # 仅新建外壳，img 字段后面覆盖
+        _sample = deepcopy(self.samples[index])  # 做深拷贝，避免内存常驻img数据, 无负担
+        sample = DetectDataInfo(**vars(_sample))  # 仅新建外壳，img 字段后面覆盖
 
         if self.cache:
             sample.img = load_image_cache_file(sample.img_file)  # BGR 走内存映射（省 RAM + 多进程共享）
@@ -219,9 +217,12 @@ class YOLODetectionDataset(TTBaseVisionDataset):
             # 直接拷贝 numpy -> torch，无额外内存
             images[i] = torch.from_numpy(sample.img.transpose(2, 0, 1))
 
-            bboxes_list.append(torch.from_numpy(sample.bboxes))
-            labels_list.append(torch.from_numpy(sample.label))
-            bbox_idx_list.append(torch.full((sample.bboxes.shape[0],), i, dtype=torch.int32))
+            bboxes = torch.from_numpy(sample.bboxes)
+            labels = torch.from_numpy(sample.label)
+
+            bboxes_list.append(bboxes)
+            labels_list.append(labels)
+            bbox_idx_list.append(torch.full((bboxes.shape[0],), i, dtype=torch.int32))
 
             if not train_mode:
                 origin_shapes[i] = torch.tensor(sample.origin_shape, dtype=torch.int64)
@@ -281,10 +282,8 @@ class YOLOPoseDataset(TTBaseVisionDataset):
         - 返回对象仅浅拷贝外壳，内部 img 字段会被新的 ndarray 覆盖。
         """
 
-        # from copy import deepcopy
-        # sample = deepcopy(self.samples[index]) # 做深拷贝，避免内存常驻img数据
-        sample = self.samples[index]  # 浅拷贝
-        sample = PoseDataInfo(**vars(sample))  # 仅新建外壳，img 字段后面覆盖
+        _sample = deepcopy(self.samples[index])  # 做深拷贝，避免内存常驻img数据，无负担
+        sample = PoseDataInfo(**vars(_sample))  # 仅新建外壳，img 字段后面覆盖
 
         if self.cache:
             sample.img = load_image_cache_file(sample.img_file)  # BGR 走内存映射（省 RAM + 多进程共享）
@@ -300,8 +299,10 @@ class YOLOPoseDataset(TTBaseVisionDataset):
         sample.target_shape = self.img_size
 
         # use transform
-        sample.img = cv2.resize(sample.img, self.img_size, interpolation=cv2.INTER_LINEAR)
-        # sample = self.transform(sample)
+        if self.mode == "train":
+            sample = self.transform.do_augment(sample)
+        else:
+            sample = self.transform.do_transform(sample)
 
         return sample
 
@@ -395,7 +396,7 @@ class YOLOPoseDataset(TTBaseVisionDataset):
         B = len(batch_samples)
         # 获取 dtype 和通道顺序
         first = batch_samples[0].img  # (H, W, C) numpy array
-        C, H, W = first.transpose(2, 0, 1).shape
+        H, W, C = first.shape
         dtype_torch = torch.from_numpy(first).dtype  # 自动匹配 numpy dtype
         images = torch.empty((B, C, H, W), dtype=dtype_torch)
 
@@ -415,10 +416,14 @@ class YOLOPoseDataset(TTBaseVisionDataset):
             # 直接拷贝 numpy -> torch，无额外内存
             images[i] = torch.from_numpy(sample.img.transpose(2, 0, 1))
 
-            bboxes_list.append(torch.from_numpy(sample.bboxes))
-            labels_list.append(torch.from_numpy(sample.label))
-            keypoints_list.append(torch.from_numpy(sample.key_points))
-            bbox_idx_list.append(torch.full((sample.bboxes.shape[0],), i, dtype=torch.int32))
+            bboxes = torch.from_numpy(sample.bboxes)
+            labels = torch.from_numpy(sample.label)
+            keypoints = torch.from_numpy(sample.keypoints)
+
+            bboxes_list.append(bboxes)
+            labels_list.append(labels)
+            keypoints_list.append(keypoints)
+            bbox_idx_list.append(torch.full((bboxes.shape[0],), i, dtype=torch.int32))
 
             if not train_mode:
                 origin_shapes[i] = torch.tensor(sample.origin_shape, dtype=torch.int64)
@@ -427,7 +432,7 @@ class YOLOPoseDataset(TTBaseVisionDataset):
         # ---- 拼接 ----
         bboxes = torch.cat(bboxes_list, dim=0).float()
         labels = torch.cat(labels_list, dim=0).long()
-        keypoints = torch.cat(keypoints_list, dim=0).float()
+        keypoints = torch.cat(keypoints_list, dim=0)  # [B, M, 17, 3]
         bboxes_idx = torch.cat(bbox_idx_list, dim=0)
 
         return PoseBatchDataInfo(
@@ -436,6 +441,6 @@ class YOLOPoseDataset(TTBaseVisionDataset):
             data=images,
             bboxes=bboxes,
             target=labels,
-            batch_key_points=keypoints,
+            batch_keypoints=keypoints,
             bboxes_idx=bboxes_idx
         )

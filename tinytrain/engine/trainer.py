@@ -620,6 +620,9 @@ class BaseTrainer:
         # if world_size > 1:
         #     num_workers = max(0, num_workers // world_size)
 
+        # should pin memory
+        can_pin_memory = self._should_pin_memory(world_size)
+
         # 创建 DataLoader
         dataloader = DataLoader(
             dataset=dataset,
@@ -631,8 +634,8 @@ class BaseTrainer:
             generator=generator,
             persistent_workers=num_workers > 0,
             drop_last=True,
-            pin_memory=self._should_pin_memory(world_size),
-            pin_memory_device=str(self.device),
+            pin_memory=can_pin_memory,
+            pin_memory_device=self.device.type if can_pin_memory else "",
             prefetch_factor=min(4, max(2, os.cpu_count() // max(world_size, 1))) if num_workers > 0 else None,
             multiprocessing_context='spawn' if os.name != 'nt' and num_workers > 0 else None,
         )
@@ -1149,23 +1152,28 @@ class BaseTrainer:
 
             self.callbacks.run_callback(self, "on_train_epoch_end")
 
+            if world_size > 1:
+                dist.barrier()
+
             # stop training
+            stop_flag = False
             if RANK in {-1, 0}:
                 if self.config_manager.core["time"] > 0:
                     current_train_time = (time.time() - train_time_start) / 60
                     if current_train_time >= self.config_manager.core["time"]:
                         LOGGER.warning(f"train cost time already is over {self.config_manager.core['time']} minutes, training stopped.")
-                        self.stop = True
+                        stop_flag = True
                 if self.early_stopping(current_epoch, self.fitness):
                     LOGGER.warning(f"Early stopping training, training stopped.")
-                    self.stop = True
+                    stop_flag = True
                 if current_epoch + 1 == self.epochs:
-                    self.stop = True
+                    stop_flag = True
 
-            stop_tensor = torch.tensor(self.stop, device=self.device) if isinstance(self.stop, bool) else self.stop
-            if RANK > -1 and world_size > 1:
+            # --- 广播 stop 标志 ---
+            stop_tensor = torch.tensor(stop_flag, device=self.device)
+            if world_size > 1:
                 dist.broadcast(stop_tensor, src=0)
-            self.stop = stop_tensor
+            self.stop = stop_tensor.item()
 
             if self.stop:
                 # DDP synchronize

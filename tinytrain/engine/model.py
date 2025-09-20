@@ -148,7 +148,6 @@ class BaseModel(nn.Module):
         Raises:
             RuntimeError: 如果未检测到任何输出。
         """
-
         # 检查输入是否为多输入（list 或 tuple）
         if isinstance(data, (list, tuple)):
             inputs = {index: item for index, item in enumerate(data)}
@@ -401,7 +400,7 @@ class BaseModel(nn.Module):
         scale_info = self.config_manager.model["scales"][scale]
         depth = scale_info["depth"]
         LOGGER.info(f"start parse model...")
-        model_name = self.config_manager.model["name"]
+        model_name = self.config_manager.model.get("name", "")
         _struct_info = f"{model_name} model scale:{scale}, depth:{depth}, struct:"
         print(_struct_info)
         # print(f"{self.__class__.__name__} struct:")

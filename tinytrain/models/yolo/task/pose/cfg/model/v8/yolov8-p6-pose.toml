@@ -1,35 +1,35 @@
-# =======================================
-# YOLO目标检测模型: YOLOv8-p6-det 模型配置文件
-# =======================================
+# ========================================
+# YOLO目标检测模型: YOLOv8-p6-pose 模型配置文件
+# ========================================
 
-name = "YOLOv8-p6-det"
+name = "YOLOv8-p6-pose"
 scale = "n"
 
 # model_config compound scaling constants
 [scales.n]
 depth = 0.33
 width = 0.25
-summary = "434 layers, 5528040 parameters, 5528040 gradients, 8.63 GFLOPs, for a 640×640 input."
+summary = "467 layers, 6150260 parameters, 6150260 gradients, 10.44 GFLOPs, for a 640×640 input."
 
 [scales.s]
 depth = 0.33
 width = 0.50
-summary = "434 layers, 20814520 parameters, 20814520 gradients, 30.27 GFLOPs, for a 640×640 input."
+summary = "467 layers, 21850180 parameters, 21850180 gradients, 33.01 GFLOPs, for a 640×640 input."
 
 [scales.m]
 depth = 0.67
 width = 0.75
-summary = "542 layers, 55136328 parameters, 55136328 gradients, 84.96 GFLOPs, for a 640×640 input."
+summary = "575 layers, 56585428 parameters, 56585428 gradients, 88.62 GFLOPs, for a 640×640 input."
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "743 layers, 131882072 parameters, 131882072 gradients, 207.25 GFLOPs, for a 640×640 input."
+summary = "776 layers, 133744612 parameters, 133744612 gradients, 211.83 GFLOPs, for a 640×640 input."
 
 [scales.x]
 depth = 1.00
 width = 1.25
-summary = "743 layers, 205999400 parameters, 205999400 gradients, 323.39 GFLOPs, for a 640×640 input."
+summary = "776 layers, 208551988 parameters, 208551988 gradients, 329.61 GFLOPs, for a 640×640 input."
 
 # ----------------------------backbone---------------------------------
 [[network]]
@@ -377,9 +377,9 @@ repeat = 1
 from = [23, 27, 31, 35]
 
 [[network]]
-# 37 Detect(P3, P4, P5, P6)
+# 37 Pose(P3, P4, P5, P6)
 type = "head"
-module = "YOLODetect"
+module = "YOLOPose"
 repeat = 1
 from = [-1]
 args.nc = -1

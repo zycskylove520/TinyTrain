@@ -1,12 +1,26 @@
-img_size = 640
-cache = false
+# ========================
+# YOLO目标检测dataset配置文件
+# ========================
 
-path = ""
+img_size = 640
+# 输入图像的尺寸，模型将图像缩放到这个大小进行处理
+
+cache = false
+# 是否使用缓存，设置为 false 表示不使用缓存
+
 train = "datasets/xxx/images/train"
+# 训练集图像路径
+
 val = "datasets/xxx/images/val"
+# 验证集图像路径
+
 test = ""
+# 测试集图像路径，留空表示没有测试集
 
 nc = 3
+# 数据集的类别数量
+
+# 类别名称
 [names]
 0 = "x"
 1 = "y"

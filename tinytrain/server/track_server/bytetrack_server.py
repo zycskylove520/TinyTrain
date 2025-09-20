@@ -73,6 +73,7 @@ class ByteTrackServer(BaseTrackServer):
             当前正在运行的预测器实例，包含最新检测结果。
         """
         detect_info: DetectDataInfo = predictor.postprocess_result
+        assert detect_info.bbox_format == "lxlyrxry"
         bboxes = detect_info.bboxes
         scores = detect_info.scores
 
@@ -118,23 +119,23 @@ class ByteTrackServer(BaseTrackServer):
             LOGGER.info(f"wideo writer release...")
         LOGGER.info("end tracking...")
 
-    def draw_track_results(self, detect_info: DetectDataInfo, track_results):
+    def draw_track_results(self, data_info: DetectDataInfo, track_results):
         """
         在图像上绘制跟踪结果。
 
         Args
         ----
-        detect_info : DetectDataInfo
+        data_info : DetectDataInfo
             当前帧的图像与元信息。
         track_results : dict
             当前帧的跟踪结果，键包含 track_ids、bboxes、scores。
         """
-        img = detect_info.img
+        img = data_info.img
 
         # 图像左上角写 frame_id
-        if detect_info.frame_id is not None:
+        if data_info.frame_id is not None:
             cv2.putText(img,
-                        f'frame:{detect_info.frame_id}',
+                        f'frame:{data_info.frame_id}',
                         org=(10, 30),
                         fontFace=cv2.FONT_HERSHEY_SIMPLEX,
                         fontScale=1,

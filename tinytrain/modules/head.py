@@ -73,6 +73,7 @@ class GeneralFace(nn.Module):
         training模型下返回: [batch, embedding_size]
         eval模式下返回: [batch, embedding_size], embedding_size已做L2正则化
         """
+
     def __init__(self, in_channels, embedding_size):
         super().__init__()
         self.c2l = Conv2Linear(in_channels=in_channels, out_channels=embedding_size, kernel_size=(1, 1), stride=(1, 1))
@@ -185,22 +186,32 @@ class YOLOPose(YOLODetect):
         """Perform forward pass through YOLO model and return predictions."""
         batch_size = x[0].shape[0]  # batch size
         kpt = torch.cat([self.cv4[i](x[i]).view(batch_size, self.nk, -1) for i in range(len(self.from_channels))], -1)  # (batch_size, 17*3, h*w)
+        for i, (cv2_module, cv3_module) in enumerate(zip(self.cv2, self.cv3)):
+            x[i] = torch.cat((cv2_module(x[i]), cv3_module(x[i])), 1)
+
         if self.training:
-            x = super().forward(x)
             return x, kpt
 
-        # 解码锚框,self.stride是在构建模型时添加的属性，详见TinyTrain\models\yolo\detect\model中的__init__函数
-        anchors, strides = make_anchors(x, self.stride)
-        x = super().forward(x)
+        # 解码锚框,self.strides是在构建模型时添加的属性，详见TinyTrain\models\yolo\detect\model中的__init__函数
+        anchors, strides = make_anchors(x, self.strides)
+        x = YOLODetect.inference(self, x)
         pred_kpt = self.kpts_decode(kpt, anchors, strides).permute(0, 2, 1).contiguous()
-        return torch.cat([x, pred_kpt], 1)
+        return torch.cat([x, pred_kpt], -1)
 
     def kpts_decode(self, kpts, anchors, strides):
-        """Decodes keypoints."""
-        ndim = self.kpt_shape[1]
+        """
+        Decodes keypoints.
+        kpts:     [B, 54, 8400]  最后一维是 anchor 维
+        anchors:  [8400, 2]
+        strides:  [8400, 1]
+        """
+        anchors = anchors.to(kpts).permute(1, 0)  # [2, 8400]
+        strides = strides.to(kpts).permute(1, 0)  # [1, 8400]
+
+        ndim = self.kpt_shape[1]  # 每个 key-point 的维度，通常是 2 或 3
         y = kpts.clone()
         if ndim == 3:
             y[:, 2::3] = y[:, 2::3].sigmoid()  # sigmoid (WARNING: inplace .sigmoid_() Apple MPS bug)
-        y[:, 0::ndim] = (y[:, 0::ndim] * 2.0 + (anchors[:, 0] - 0.5)) * strides
-        y[:, 1::ndim] = (y[:, 1::ndim] * 2.0 + (anchors[:, 1] - 0.5)) * strides
+        y[:, 0::ndim] = (y[:, 0::ndim] * 2.0 + (anchors[0] - 0.5)) * strides
+        y[:, 1::ndim] = (y[:, 1::ndim] * 2.0 + (anchors[1] - 0.5)) * strides
         return y

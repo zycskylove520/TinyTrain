@@ -1,6 +1,8 @@
-# YOLOv8-cls image classification model_config.
-name = "YOLOv8-cls"
+# ====================================
+# YOLO图像分类模型: YOLOv8-cls 模型配置文件
+# ====================================
 
+name = "YOLOv8-cls"
 scale = "n"
 
 # model_config compound scaling constants

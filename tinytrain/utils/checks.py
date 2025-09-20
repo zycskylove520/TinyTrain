@@ -190,7 +190,6 @@ def check_amp(trainer):
             a = model_(batch)[0]  # FP32 inference
             with autocast(device_type=device.type, enabled=True):
                 b = model_(batch)[0]  # AMP inference
-        del model_
         if isinstance(a, (list, tuple, set)):
             return a[0].shape == b[0].shape and torch.allclose(a[0], b[0].float(), atol=0.5)
         return a.shape == b.shape and torch.allclose(a, b.float(), atol=0.5)

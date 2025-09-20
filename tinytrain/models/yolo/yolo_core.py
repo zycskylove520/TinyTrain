@@ -48,6 +48,20 @@ detect
   │     └── onnx       -> BaseOnnxInferenceServer
   └── track_server
         └── bytetrack  -> ByteTrackServer
+
+pose
+  ├── model            -> YOLOPoseModel
+  ├── trainer          -> YOLOPoseTrainer
+  ├── validator        -> YOLOPoseValidator
+  ├── tuner            -> YOLOPoseTuner
+  ├── predictor        -> YOLOPosePredictor
+  ├── exporter         -> BaseExporter
+  ├── export_server
+  │     └── onnx       -> BaseOnnxExportServer
+  ├── inference_server
+  │     └── onnx       -> BaseOnnxInferenceServer
+  └── track_server
+        └── bytetrack  -> ByteTrackServer
 """
 
 from tinytrain.engine import Core, BaseExporter
@@ -69,7 +83,10 @@ from tinytrain.models.yolo.task.detect import (
 )
 from tinytrain.models.yolo.task.pose import (
     YOLOPoseModel,
-    YOLOPoseTrainer
+    YOLOPoseTrainer,
+    YOLOPoseValidator,
+    YOLOPosePredictor,
+    YOLOPoseTuner
 )
 from tinytrain.server.export_server import BaseOnnxExportServer
 from tinytrain.server.inference_server import BaseOnnxInferenceServer
@@ -103,3 +120,10 @@ class YOLOCore(Core):
         # ---------- pose ----------
         TTEngineRegistry.register(cls, "pose", "model")(YOLOPoseModel)
         TTEngineRegistry.register(cls, "pose", "trainer")(YOLOPoseTrainer)
+        TTEngineRegistry.register(cls, "pose", "validator")(YOLOPoseValidator)
+        TTEngineRegistry.register(cls, "pose", "tuner")(YOLOPoseTuner)
+        TTEngineRegistry.register(cls, "pose", "predictor")(YOLOPosePredictor)
+        TTEngineRegistry.register(cls, "pose", "inference_server", "onnx")(BaseOnnxInferenceServer)
+        TTEngineRegistry.register(cls, "pose", "exporter")(BaseExporter)
+        TTEngineRegistry.register(cls, "pose", "export_server", "onnx")(BaseOnnxExportServer)
+        TTEngineRegistry.register(cls, "pose", "track_server", "bytetrack")(ByteTrackServer)

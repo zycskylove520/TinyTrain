@@ -8,11 +8,12 @@ from tinytrain.models.yolo.yolo_model import YOLOModel
 
 class YOLODetectionModel(YOLOModel):
     def __init__(self, config_manager: ConfigManager, device, *args, **kwargs):
+        self.reg_max = None
         super().__init__(config_manager, device=device, *args, **kwargs)
         self.initialize_weights()
 
         input_channel = config_manager.model["network"][0]["args"]["in_channels"]
-        m = self.module_list[-1]  # YOLODetectHead()
+        m = self.module_list[-1]  # YOLODetect()
 
         # 初始化 strides
         self.strides = m.strides = self._initialize_stride(input_channel)
@@ -32,12 +33,14 @@ class YOLODetectionModel(YOLOModel):
         return stride_tensor
 
     def init_criterion(self):
-        return YOLOV8DetectionLoss(self,
-                                   self.config_manager.dataset["img_size"],
-                                   self.device,
-                                   self.config_manager.loss["cls_loss_gain"],
-                                   self.config_manager.loss["box_loss_gain"],
-                                   self.config_manager.loss["dfl_loss_gain"]
+        return YOLOV8DetectionLoss(nc=self.config_manager.dataset["nc"],
+                                   strides=self.strides,
+                                   reg_max=self.reg_max,
+                                   imgsz=self.config_manager.dataset["img_size"],
+                                   device=self.device,
+                                   cls_gain=self.config_manager.loss["cls_loss_gain"],
+                                   box_gain=self.config_manager.loss["box_loss_gain"],
+                                   dfl_gain=self.config_manager.loss["dfl_loss_gain"]
                                    )
 
     def loss(self, preds: list[torch.Tensor], batch_samples: BaseBatchDataInfo) -> tuple[float, dict]:
@@ -68,3 +71,4 @@ class YOLODetectionModel(YOLOModel):
 
         if module_info["module"] == "YOLODetect":
             module_info["args"]["from_channels"] = [int(i * width) for i in module_info["args"]["from_channels"]]
+            self.reg_max = module_info["args"].get("reg_max", 16)

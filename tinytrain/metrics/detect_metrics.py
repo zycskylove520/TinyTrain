@@ -19,7 +19,8 @@ from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry
 
 from .base import BaseMetric, BaseImgResult
 
-class BoxMetrics(BaseMetric):
+
+class DetectMetrics(BaseMetric):
     """
     检测任务统一评估指标封装类，基于 torchmetrics.detection.MeanAveragePrecision。
 
@@ -32,18 +33,15 @@ class BoxMetrics(BaseMetric):
     5. 支持缓存与重置，方便训练/验证循环。
     """
 
-    def __init__(self,
-                 class_metrics: bool = False,
-                 class_names: list = None,
-                 ):
+    def __init__(self, class_metrics: bool = False, class_names: dict[int, str] = None):
         """
         Args:
             class_metrics (bool):
                 是否计算类别级指标。
-            class_names (list[str] | None):
+            class_names (dict[int, str] | None):
                 类别名称列表，用于可视化时替换索引。
         """
-        super(BoxMetrics, self).__init__()
+        super(DetectMetrics, self).__init__()
         self.class_metrics = class_metrics
         self.class_names = class_names
 
@@ -96,7 +94,6 @@ class BoxMetrics(BaseMetric):
                 })
 
             if t.shape[0] == 0:
-                print("t is empty")
                 target_list.append({
                     "boxes": torch.empty((0, 4), device=p.device, dtype=torch.float32),
                     "labels": torch.empty(0, device=p.device, dtype=torch.int64),
@@ -259,7 +256,7 @@ class BoxMetrics(BaseMetric):
         if self.class_names is None:
             class_labels = [f'Class {i}' for i in self.classes()]
         else:
-            class_labels = [self.class_names[i] for i in self.classes()]
+            class_labels = [self.class_names[i.item()] for i in self.classes()]
         n_classes = len(class_labels)
 
         # 组装 DataFrame
@@ -318,7 +315,7 @@ class BoxMetrics(BaseMetric):
         plt.xlabel('IoU Threshold')
         plt.ylabel('Recall')
         plt.tight_layout()
-        plt.savefig(save_dir / 'R_Curve.png', dpi=150)
+        plt.savefig(save_dir / '(Detect)R_Curve.png', dpi=150)
         plt.close()
 
     def plot_pr_curve(self, save_dir: Path):
@@ -352,7 +349,7 @@ class BoxMetrics(BaseMetric):
         plt.ylabel('Precision')
         plt.legend(title='IoU')
         plt.tight_layout()
-        plt.savefig(save_dir / 'PR_Curve.png', dpi=150)
+        plt.savefig(save_dir / '(Detect)PR_Curve.png', dpi=150)
         plt.close()
 
     def plot(self, save_dir: Path):
@@ -372,17 +369,17 @@ class DetectConfusionMatrix:
     3. 支持重置、增量更新、绘制原始/归一化矩阵。
     """
 
-    def __init__(self, num_classes: int, class_names: list[str], conf_threshold=0.25, iou_threshold=0.45):
+    def __init__(self, num_classes: int, class_names: dict[int, str], conf_threshold=0.25, iou_threshold=0.45):
         """
         Args:
             num_classes (int): 前景类别数量。
-            class_names (list[str]): 类别名称列表，顺序必须与索引对齐。
+            class_names (dict[int, str]): 类别名称列表，顺序必须与索引对齐。
             conf_threshold (float): 置信度阈值，低于阈值的预测框丢弃。
             iou_threshold (float): IoU 阈值，大于该值视为匹配成功。
         """
         self.num_classes = num_classes
         self.class_names = class_names.copy()
-        self.class_names.append("background")
+        self.class_names[len(self.class_names)] = "background"
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
 
@@ -473,12 +470,13 @@ class DetectConfusionMatrix:
         LOGGER.info(f"plotting confusion matrix...")
         confusion_matrix = self.confusion_matrix.numpy()
 
+        class_names = self.class_names.values()
         # 绘制混淆矩阵
         # 根据标签数量自适应图表宽度
         width = height = self.num_classes + 1
         plt.figure(figsize=(width * 2, height * 2))  # 设置图表大小
         sns.heatmap(confusion_matrix, annot=True, fmt='d', cmap='Blues',
-                    xticklabels=self.class_names, yticklabels=self.class_names)
+                    xticklabels=class_names, yticklabels=class_names)
         plt.xlabel('Predicted')
         plt.ylabel('True')
         plt.title('Confusion Matrix')
@@ -716,7 +714,7 @@ class DetectImgResult(BaseImgResult):
     在图片上画框、写类别与置信度。
     """
 
-    def __init__(self, save_dir: Path, plot_count: int = 4, mode: str = "val", max_sub_len: int = 3, rgb=True, draw_conf_threshold: float = 0.):
+    def __init__(self, save_dir: Path, plot_count: int = 4, mode: str = "val", max_sub_len: int = 3, rgb=True, draw_conf_threshold: float = 0.25):
         super().__init__(save_dir, plot_count, mode, max_sub_len, rgb)
         self.draw_conf_threshold = draw_conf_threshold
 

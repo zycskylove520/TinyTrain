@@ -78,7 +78,6 @@ class BaseValidator:
         Returns:
             float: fitness 值，越大表示模型越好。
         """
-
         # 用于判断训练何时结束
         stop = self.trainer.stop
 
@@ -112,9 +111,6 @@ class BaseValidator:
             else:
                 self.update_metrics_on_training(outputs, batch_samples, pbar)
 
-            if self.world_size > 1:
-                dist.barrier()
-
             self.callbacks.run_callback(self, "on_val_batch_end")
 
         if stop:
@@ -125,6 +121,8 @@ class BaseValidator:
         fitness = self.get_fitness()
         self.callbacks.run_callback(self, "on_val_end")
 
+        if self.world_size > 1:
+            dist.barrier()
         return fitness
 
     def inference(self, model: nn.Module, batch_samples: BaseBatchDataInfo) -> list[torch.Tensor]:
@@ -242,18 +240,18 @@ class BaseValidator:
         if self.trainer.ema:
             model = self.trainer.ema.ema_model
         else:
-            model = self.trainer.model
+            model = self.trainer.model.module if self.world_size > 1 else self.trainer.model
         return model
 
     @classmethod
-    def _all_reduce_tensor(cls, tensor: torch.Tensor, op=dist.ReduceOp.SUM):
+    def all_reduce_tensor(cls, tensor: torch.Tensor, op=dist.ReduceOp.SUM):
         """把 tensor 在所有 rank 上做 all_reduce（原地）"""
         if dist.is_available() and dist.is_initialized():
             dist.all_reduce(tensor, op=op)
 
     @classmethod
-    def _all_reduce_mean(cls, tensor: torch.Tensor):
+    def all_reduce_mean(cls, tensor: torch.Tensor):
         """把 tensor 在所有 rank 上做 all_reduce 并求平均"""
-        cls._all_reduce_tensor(tensor)
+        cls.all_reduce_tensor(tensor)
         if dist.is_available() and dist.is_initialized():
             tensor /= dist.get_world_size()

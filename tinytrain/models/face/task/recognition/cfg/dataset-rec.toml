@@ -1,7 +1,18 @@
+# ====================
+# 人脸识别dataset配置文件
+# ====================
+
 train_img_size = 112
+# 训练输入图像的尺寸，模型将图像缩放到这个大小进行处理
+
 val_img_size = 112
+# 验证输入图像的尺寸，模型将图像缩放到这个大小进行处理
 
 train = "datasets/face_dataset/glint360k"
-val = "datasets/face_dataset/lfw/lfw_test_pair.txt"
+# 训练集图像路径
 
-nc = 360232  # train dataset num classes!
+val = "datasets/face_dataset/lfw/lfw_test_pair.txt"
+# 验证集图像路径
+
+nc = 360232
+# 数据集的类别数量

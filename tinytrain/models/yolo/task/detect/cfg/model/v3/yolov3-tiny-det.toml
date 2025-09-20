@@ -1,6 +1,8 @@
-# YOLOv3-tiny-det model_config.
-name = "YOLOv3-tiny-det"
+# =========================================
+# YOLO目标检测模型: YOLOv3-tiny-det 模型配置文件
+# =========================================
 
+name = "YOLOv3-tiny-det"
 scale = "l"
 
 [scales.l]

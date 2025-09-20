@@ -1,6 +1,8 @@
-# YOLOv3-spp-det model_config.
-name = "YOLOv3-spp-det"
+# ========================================
+# YOLO目标检测模型: YOLOv3-spp-det 模型配置文件
+# ========================================
 
+name = "YOLOv3-spp-det"
 scale = "l"
 
 [scales.l]

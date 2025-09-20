@@ -197,7 +197,7 @@ def detect_nms_with_keypoint(pred: torch.Tensor, keypoint_shape: list[int], conf
        b. 若剩余框数 > `max_nms_num`，采用 `torch.topk` 保留置信度最高的前 `max_nms_num` 个框，避免大规模排序。
        c. 调用 `torchvision.ops.batched_nms`（类别感知 NMS）按 IoU 阈值去重。
        d. 取前 `max_detect_num` 个结果，坐标再转回 cxcywh，并组装 6 列输出。
-    4. 无框时返回空张量 `[0, 6]`。
+    4. 无框时返回空张量 `[0, 6 + keypoint_num*3]`。
 
     Args:
         pred (torch.Tensor):
@@ -219,9 +219,10 @@ def detect_nms_with_keypoint(pred: torch.Tensor, keypoint_shape: list[int], conf
             `[cx, cy, w, h, score, cls_id]`。无目标时 `M = 0`。
     """
     B, N, C = pred.shape
-    k_num = keypoint_shape[0] * keypoint_shape[1]
-    cls_num = C - k_num - 4
-    out = [torch.empty((0, 6 + k_num), device=pred.device, dtype=pred.dtype) for _ in range(B)]
+    k_num = keypoint_shape[0]  # 17
+    total_kpt_cols = k_num * keypoint_shape[1]  # 51
+    cls_num = C - total_kpt_cols - 4
+    out = [torch.empty((0, 6 + total_kpt_cols), device=pred.device, dtype=pred.dtype) for _ in range(B)]
 
     # 1) 置信度掩码一次性计算
     scores_all, cls_all = pred[..., 4:4 + cls_num].max(dim=-1)
@@ -233,35 +234,31 @@ def detect_nms_with_keypoint(pred: torch.Tensor, keypoint_shape: list[int], conf
         if p.numel() == 0:
             continue
 
-        boxes = p[:, :4].clone()  # 保留 cxcywh 供后续使用
-        boxes = cxcywh_2_lxlyrxry(boxes)  # 转 lxlyrxry
-
+        boxes_cxcywh = p[:, :4]
+        boxes_ltrb = cxcywh_2_lxlyrxry(boxes_cxcywh.clone())
         scores = scores_all[i][m]
-        cls = cls_all[i][m].to(dtype=p.dtype, device=pred.device)
-
-        keypoints = p[:, 4 + cls_num:].clone()
+        cls_int = cls_all[i][m].to(torch.int64)  # .to(dtype=p.dtype, device=pred.device)
+        keypoints = p[:, 4 + cls_num:]
 
         # 2) topk 代替 sort + slice，避免同步
         if scores.shape[0] > max_nms_num:
             scores, topk = torch.topk(scores, k=max_nms_num)
-            boxes = boxes[topk]
-            cls = cls[topk]
+            boxes_ltrb = boxes_ltrb[topk]
+            cls_int = cls_int[topk]
+            keypoints = keypoints[topk]
 
         # 3) 一次性 batch_nms
-        keep = torchvision.ops.batched_nms(
-            boxes, scores, cls.to(torch.int64), iou_threshold=nms_threshold
-        )
+        keep = torchvision.ops.batched_nms(boxes_ltrb, scores, cls_int, nms_threshold)
         keep = keep[:max_detect_num]
 
         if keep.shape[0] == 0:
             continue
 
         # 4) 组装输出：cxcywh 直接来自原 boxes
-        res = torch.empty((keep.shape[0], 6 + k_num), device=pred.device, dtype=pred.dtype)
-        res[:, :4] = boxes[keep]
-        res[:, :4] = lxlyrxry_2_cxcywh(res[:, :4])  # 再转回 cxcywh
+        res = torch.empty((keep.shape[0], 6 + total_kpt_cols), device=pred.device, dtype=pred.dtype)
+        res[:, :4] = lxlyrxry_2_cxcywh(boxes_ltrb[keep])
         res[:, 4] = scores[keep]
-        res[:, 5] = cls[keep]
+        res[:, 5] = cls_int[keep].to(pred.dtype)
         res[:, 6:] = keypoints[keep]
         out[i] = res
 

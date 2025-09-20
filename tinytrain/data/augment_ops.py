@@ -6,6 +6,8 @@ import cv2
 
 from typing import TYPE_CHECKING
 
+from tinytrain.utils import LOGGER
+
 from .data_format import BaseDataInfo, ImgDataInfo
 
 # 仅在类型检查阶段导入
@@ -21,12 +23,7 @@ class DynamicFilling:
     纯 OpenCV 实现的动态填充 / 拉伸变换类，仅处理图像.
     """
 
-    def __init__(
-            self,
-            target_size: tuple[int, int],
-            p: float,
-            fill_value: int = 114,
-    ):
+    def __init__(self, target_size: tuple[int, int], p: float, fill_value: int = 114, ):
         """
         Args:
             target_size: (width, height) 目标尺寸
@@ -38,6 +35,7 @@ class DynamicFilling:
         self.target_size = target_size  # (w, h)
         self.p = p
         self.fill_value = fill_value
+        self.M = None  # 归一化→归一化仿射矩阵
 
     def __call__(self, sample: ImgDataInfo):
         """
@@ -50,7 +48,7 @@ class DynamicFilling:
         3. 计算并返回归一化仿射矩阵 `M`，用于后续同步变换标注（如 bbox、关键点等）。
 
         Args:
-            sample (ImgDataInfo): 输入样本，必须包含非空 `img` 字段。
+            sample (ImgDataInfo): 输入样本，必须包含非空 `img` 字段，且为hwc格式
 
         Returns:
             tuple[ImgDataInfo, np.ndarray]:
@@ -60,18 +58,24 @@ class DynamicFilling:
         """
         assert isinstance(sample, ImgDataInfo), "sample must be ImgDataInfo"
         assert sample.img is not None, "sample.img is None"
+        assert sample.img.size > 0, "Empty image array"
 
-        img = sample.img
-        h, w = img.shape[:2]  # 原图尺寸
+        h, w = sample.img.shape[:2]  # 原图尺寸
         tw, th = self.target_size  # 目标尺寸
+
+        # ---------- 短路：尺寸没变 ----------
+        if (w, h) == (tw, th):
+            # 单位仿射矩阵：归一化→归一化仍是自身
+            self.M = np.array([[1., 0., 0.],
+                               [0., 1., 0.]], dtype=np.float32)
+            return
+        # ------------------------------------
 
         # ---------------- 1. 像素级图像变换 ----------------
         if random.random() < self.p:
-            img, M_pixel = self._pad_keep_ratio(img, w, h)  # 2×3
+            sample.img, M_pixel = self._pad_keep_ratio(sample.img, w, h)  # 2×3
         else:
-            img, M_pixel = self._resize_stretch(img, w, h)  # 2×3
-
-        sample.img = img
+            sample.img, M_pixel = self._resize_stretch(sample.img, w, h)  # 2×3
 
         # ---------------- 2. 把 M_pixel → M_norm ----------------
         # 3×3 齐次矩阵：先像素到原图大小 → 仿射变换 → 再归一化到目标图大小
@@ -90,32 +94,35 @@ class DynamicFilling:
         M_norm = S_target @ M_pixel_3x3 @ S_origin
 
         # 去掉最后一行，保留 2×3 以便后续直接乘 [x,y,1]
-        M = M_norm[:2, :]
-        return sample, M
+        self.M = M_norm[:2, :].astype(np.float32)
+        if np.abs(np.linalg.det(self.M[:, :2])) < 1e-6:
+            LOGGER.warning("Near-singular affine matrix detected.")
 
     # -------------------------------------------------
     # 内部实现
     # -------------------------------------------------
-    def _pad_keep_ratio(
-            self, img: np.ndarray, w: int, h: int
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def _pad_keep_ratio(self, img: np.ndarray, w: int, h: int) -> tuple[np.ndarray, np.ndarray]:
         """保持宽高比，缩放后四周均匀填充"""
         tw, th = self.target_size
         scale = min(tw / w, th / h)
         new_w, new_h = int(round(w * scale)), int(round(h * scale))
+        if new_w == 0 or new_h == 0:
+            raise ValueError("Scaled image has zero dimension.")
 
         # 1. 缩放
-        resized = cv2.resize(
-            img, (new_w, new_h), interpolation=cv2.INTER_LINEAR
-        )
+        resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
 
-        # 2. 计算填充
-        pad_x = (tw - new_w) / 2  # 左右
-        pad_y = (th - new_h) / 2  # 上下
+        # 2. 计算填充量（浮点）
+        pad_x = (tw - new_w) / 2  # 左右总留白
+        pad_y = (th - new_h) / 2  # 上下总留白
 
-        # 3. 填充
-        top, bottom = int(round(pad_y - 0.1)), int(round(pad_y + 0.1))
-        left, right = int(round(pad_x - 0.1)), int(round(pad_x + 0.1))
+        # 3. 将留白拆成整数边界（保证居中）
+        top = int(pad_y + 0.5)  # 四舍五入到整像素
+        bottom = th - new_h - top  # 剩余全给下边
+        left = int(pad_x + 0.5)
+        right = tw - new_w - left
+
+        # 4. 填充
         padded = cv2.copyMakeBorder(
             resized,
             top,
@@ -123,9 +130,7 @@ class DynamicFilling:
             left,
             right,
             cv2.BORDER_CONSTANT,
-            value=(self.fill_value,) * img.shape[2]
-            if img.ndim == 3
-            else self.fill_value,
+            value=(self.fill_value,) * img.shape[2] if img.ndim == 3 else self.fill_value,
         )
 
         # 4. 构造仿射矩阵 (2×3)：先缩放，再平移
@@ -136,14 +141,10 @@ class DynamicFilling:
         )
         return padded, M
 
-    def _resize_stretch(
-            self, img: np.ndarray, w: int, h: int
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def _resize_stretch(self, img: np.ndarray, w: int, h: int) -> tuple[np.ndarray, np.ndarray]:
         """直接拉伸到目标尺寸"""
         tw, th = self.target_size
-        stretched = cv2.resize(
-            img, (tw, th), interpolation=cv2.INTER_LINEAR
-        )
+        stretched = cv2.resize(img, (tw, th), interpolation=cv2.INTER_NEAREST)
 
         # 仿射矩阵：Sx = tw/w, Sy = th/h
         M = np.array([
@@ -153,13 +154,228 @@ class DynamicFilling:
         )
         return stretched, M
 
-    @staticmethod
-    def transform_yolo_bboxes_norm(bboxes: np.ndarray,
-                                   M: np.ndarray) -> np.ndarray:
+    def map_norm_coord(self, x_norm: float, y_norm: float):
         """
-        bboxes : [N,4]  (cx,cy,w,h) 归一化
-        M      : [2,3]  DynamicFilling 返回的归一化→归一化仿射矩阵
-        return : [N,4]  变换后仍归一化
+        将**单个**归一化点坐标 (x, y) 映射到经过 DynamicFilling 仿射变换后的归一化坐标。
+
+        参数
+        ----
+        x_norm : float
+            原图中点的归一化 x 坐标，范围通常 [0, 1]
+        y_norm : float
+            原图中点的归一化 y 坐标，范围通常 [0, 1]
+
+        返回
+        ----
+        tuple[float, float]
+            变换后图像上的归一化 (x_out, y_out)
+        """
+        vec = np.array([x_norm, y_norm, 1.0], dtype=np.float32)  # 齐次坐标
+        xy_new = self.M @ vec  # 2×3 · 3×1 → 2×1
+        return float(np.clip(xy_new[0], 0., 1.)), float(np.clip(xy_new[1], 0., 1.))
+
+    def map_norm_cxcywh(self, cx: float, cy: float, w: float, h: float):
+        """
+        将**单个**归一化边界框 (cx, cy, w, h) 映射到变换后图像的归一化框。
+
+        参数
+        ----
+        cx, cy : float
+            原框中心归一化坐标
+        w, h : float
+            原框归一化宽高
+
+        返回
+        ----
+        tuple[float, float, float, float]
+            变换后的归一化 (cx_new, cy_new, w_new, h_new)
+        """
+        # 1. 中心点映射（含平移）
+        pt = np.array([cx, cy, 1.0], dtype=np.float32)
+        cx_new, cy_new = (self.M @ pt).tolist()
+
+        # 2. 宽高只受缩放
+        sx, sy = np.abs(self.M[0, 0]), np.abs(self.M[1, 1])
+        w_new, h_new = w * sx, h * sy
+
+        # clamp
+        cx_new = float(np.clip(cx_new, 0., 1.))
+        cy_new = float(np.clip(cy_new, 0., 1.))
+        w_new = float(np.clip(w_new, 0., 1.))
+        h_new = float(np.clip(h_new, 0., 1.))
+        return cx_new, cy_new, w_new, h_new
+
+    def map_norm_lxlyrxry(self, lx: float, ly: float, rx: float, ry: float):
+        """
+        将**单个**归一化对角框 (lx, ly, rx, ry) 映射到经过 DynamicFilling 仿射变换后的归一化框。
+
+        参数
+        ----
+        lx, ly : float
+            原图左上角归一化坐标，范围 [0,1]
+        rx, ry : float
+            原图右下角归一化坐标，范围 [0,1]
+
+        返回
+        ----
+        tuple[float, float, float, float]
+            变换后的归一化 (new_lx, new_ly, new_rx, new_ry)
+        """
+        # 两个角点分别映射
+        pts = np.array([[lx, ly], [rx, ry]], dtype=np.float32)  # [2,2]
+        homo = np.concatenate([pts, np.ones((2, 1))], axis=1)  # [2,3]
+        new_pts = homo @ self.M.T  # [2,2]
+        xs, ys = new_pts[:, 0], new_pts[:, 1]
+        # clamp
+        xs = np.clip(xs, 0., 1.)
+        ys = np.clip(ys, 0., 1.)
+        return float(xs[0]), float(ys[0]), float(xs[1]), float(ys[1])
+
+    def map_norm_lxlywh(self, lx: float, ly: float, w: float, h: float):
+        """
+        将**单个**归一化左上角-宽高框 (lx, ly, w, h) 映射到经过 DynamicFilling 仿射变换后的归一化框。
+
+        参数
+        ----
+        lx, ly : float
+            原图左上角归一化坐标，范围 [0,1]
+        w, h   : float
+            原图归一化宽高，范围 [0,1]
+
+        返回
+        ----
+        tuple[float, float, float, float]
+            变换后的归一化 (new_lx, new_ly, new_w, new_h)
+        """
+        # 左上角点映射
+        pt = np.array([lx, ly, 1.0], dtype=np.float32)
+        new_lx, new_ly = (self.M @ pt).tolist()
+
+        # 宽高仅受缩放
+        sx, sy = np.abs(self.M[0, 0]), np.abs(self.M[1, 1])
+        new_w, new_h = w * sx, h * sy
+        # clamp
+        new_lx = float(np.clip(new_lx, 0., 1.))
+        new_ly = float(np.clip(new_ly, 0., 1.))
+        new_w = float(np.clip(new_w, 0., 1.))
+        new_h = float(np.clip(new_h, 0., 1.))
+        return new_lx, new_ly, new_w, new_h
+
+    def map_norm_points_batched(self, pts: np.ndarray) -> np.ndarray:
+        """
+        批量将归一化点坐标数组映射到变换后的归一化坐标。
+
+        参数
+        ----
+        pts : np.ndarray
+            任意维度，最后一维必须为 2，例如 [N, 2] 或 [N, K, 2]
+
+        返回
+        ----
+        np.ndarray
+            与输入相同形状的数组，最后一维为映射后的 (x, y)
+        """
+        *lead, two = pts.shape
+        assert two == 2
+        flat = pts.reshape(-1, 2)  # [N*K, 2]
+        homo = np.concatenate([flat, np.ones((flat.shape[0], 1))], axis=1)  # [N*K, 3]
+        new_flat = (homo @ self.M.T).reshape(*lead, 2)  # 广播乘完再 reshape
+        return np.clip(new_flat, 0., 1.)
+
+    def map_norm_cxcywh_batched(self, bboxes: np.ndarray) -> np.ndarray:
+        """
+        批量将归一化边界框数组 [N, 4] 映射到变换后的归一化框。
+
+        参数
+        ----
+        bboxes : np.ndarray, shape=(N, 4), dtype=np.float32
+            每行对应 (cx, cy, w, h) 且已归一化
+
+        返回
+        ----
+        np.ndarray, shape=(N, 4)
+            每行为变换后的归一化 (cx_new, cy_new, w_new, h_new)
+        """
+        cx, cy, w, h = bboxes.T  # 4 个 (N,)
+        pts = np.stack([cx, cy, np.ones_like(cx)], axis=0)  # [3, N]
+        new_cx, new_cy = (self.M @ pts)  # [2, N]
+
+        sx, sy = np.abs(self.M[0, 0]), np.abs(self.M[1, 1])
+        new_w = w * sx
+        new_h = h * sy
+
+        out = np.stack([new_cx, new_cy, new_w, new_h], axis=1)
+        return np.clip(out, 0., 1.)
+
+    def map_norm_lxlyrxry_batched(self, bboxes: np.ndarray) -> np.ndarray:
+        """
+        批量将 [N,4] 归一化对角框数组映射到变换后的归一化框。
+
+        参数
+        ----
+        bboxes : np.ndarray, shape=(N, 4), dtype=np.float32
+            每行对应 (lx, ly, rx, ry)，已归一化
+
+        返回
+        ----
+        np.ndarray, shape=(N, 4)
+            每行对应变换后的归一化 (new_lx, new_ly, new_rx, new_ry)
+        """
+        flat = bboxes.reshape(-1, 2)  # [2N, 2]
+        homo = np.concatenate([flat, np.ones((flat.shape[0], 1))], axis=1)  # [2N,3]
+        new_flat = homo @ self.M.T  # [2N,2]
+        xs = new_flat[:, [0, 2]]
+        ys = new_flat[:, [1, 3]]
+        # clamp
+        new_flat[:, [0, 2]] = np.clip(xs, 0., 1.)
+        new_flat[:, [1, 3]] = np.clip(ys, 0., 1.)
+        return new_flat
+
+    def map_norm_lxlywh_batched(self, bboxes: np.ndarray) -> np.ndarray:
+        """
+        批量将 [N,4] 归一化左上角-宽高框数组映射到变换后的归一化框。
+
+        参数
+        ----
+        bboxes : np.ndarray, shape=(N, 4), dtype=np.float32
+            每行对应 (lx, ly, w, h)，已归一化
+
+        返回
+        ----
+        np.ndarray, shape=(N, 4)
+            每行对应变换后的归一化 (new_lx, new_ly, new_w, new_h)
+        """
+        lx, ly, w, h = bboxes.T  # 4 个 (N,)
+        pts = np.stack([lx, ly, np.ones_like(lx)], axis=0)  # [3,N]
+        new_lx, new_ly = (self.M @ pts)  # [2,N]
+
+        sx, sy = np.abs(self.M[0, 0]), np.abs(self.M[1, 1])
+        new_w = w * sx
+        new_h = h * sy
+        out = np.stack([new_lx, new_ly, new_w, new_h], axis=1)
+        return np.clip(out, 0., 1.)
+
+    def transform_yolo_bboxes_norm(self, bboxes: np.ndarray) -> np.ndarray:
+        """
+        将归一化 YOLO 格式边界框（cx,cy,w,h）经过**含旋转/剪切**的仿射矩阵 self.M 映射到新的归一化框。
+
+        原理
+        ----
+        1. 将 cxcywh 转成 4 个角点坐标；
+        2. 用齐次坐标对 4 个角点批量做仿射变换；
+        3. 取变换后角点的外接矩形（轴对齐），再转回 cxcywh。
+
+        因此输出框**一定是轴对齐**的，且可能比原框稍大。
+
+        参数
+        ----
+        bboxes : np.ndarray, shape=(N, 4), dtype=np.float32
+            每行对应归一化 (cx, cy, w, h)
+
+        返回
+        ----
+        np.ndarray, shape=(N, 4)
+            变换后的归一化 (cx, cy, w, h)
         """
         # 1. 归一化坐标 → 四角点
         cx, cy, w, h = bboxes.T
@@ -176,24 +392,22 @@ class DynamicFilling:
         # 2. 应用仿射矩阵
         ones = np.ones((*corners.shape[:-1], 1))
         corners_h = np.concatenate([corners, ones], axis=-1)  # [N,4,3]
-        new_corners = corners_h @ M.T  # [N,4,2]
+        new_corners = corners_h @ self.M.T  # [N,4,2]
+        xs, ys = new_corners[..., 0], new_corners[..., 1]
+        # 先 clamp 再算外接框
+        xs = np.clip(xs, 0., 1.)
+        ys = np.clip(ys, 0., 1.)
 
-        # 3. 计算新的外接框
-        x_new = new_corners[..., 0]
-        y_new = new_corners[..., 1]
-        x_min = x_new.min(axis=1)
-        y_min = y_new.min(axis=1)
-        x_max = x_new.max(axis=1)
-        y_max = y_new.max(axis=1)
-
-        # 4. 组装回 yolo 格式
-        new_bboxes = np.stack([
-            (x_min + x_max) / 2,
-            (y_min + y_max) / 2,
-            x_max - x_min,
-            y_max - y_min
-        ], axis=1)
-        return new_bboxes
+        x_min = xs.min(axis=1)
+        x_max = xs.max(axis=1)
+        y_min = ys.min(axis=1)
+        y_max = ys.max(axis=1)
+        new_bboxes = np.stack([(x_min + x_max) / 2,
+                               (y_min + y_max) / 2,
+                               x_max - x_min,
+                               y_max - y_min], axis=1)
+        # 宽高再保险 clamp 一次
+        return np.clip(new_bboxes, 0., 1.)
 
 
 class Mosaic:

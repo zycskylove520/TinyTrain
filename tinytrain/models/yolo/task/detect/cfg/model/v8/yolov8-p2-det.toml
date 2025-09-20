@@ -1,6 +1,8 @@
-# YOLOv8-p2-det model_config.
-name = "YOLOv8-p2-det"
+# =======================================
+# YOLO目标检测模型: YOLOv8-p2-det 模型配置文件
+# =======================================
 
+name = "YOLOv8-p2-det"
 scale = "n"
 
 # model_config compound scaling constants

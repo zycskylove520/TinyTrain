@@ -21,5 +21,7 @@ class YOLOPoseTuner(BaseTuner):
                 "cls_loss_gain": {"type": "continuous", "low": 0.1, "high": 10},
                 "box_loss_gain": {"type": "continuous", "low": 0.1, "high": 10},
                 "dfl_loss_gain": {"type": "continuous", "low": 0.1, "high": 10},
+                "pose_loss_gain": {"type": "continuous", "low": 0.1, "high": 20},
+                "kobj_loss_gain": {"type": "continuous", "low": 0.1, "high": 10},
             }
         }

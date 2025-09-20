@@ -327,7 +327,7 @@ class PoseDataInfo(DetectDataInfo):
             key_points (Tensor | None):
                 每个实例的关键点坐标，形状例如: [N, K, 3]（x, y, visible）。
             kpt_shape (list | None):
-                单张图关键点维度信息，如 [17, 3]。
+                单张图关键点维度信息，如 [17, 3]表示17个关键点，每个关键点有x、y、visible三个维度。
             **kwargs: 透传给父类。
         """
         super().__init__(**kwargs)

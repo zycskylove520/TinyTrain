@@ -1,6 +1,8 @@
-# YOLOv8-ghost-det model_config.
-name = "YOLOv8-ghost-det"
+# ==========================================
+# YOLO目标检测模型: YOLOv8-ghost-det 模型配置文件
+# ==========================================
 
+name = "YOLOv8-ghost-det"
 scale = "n"
 
 # model_config compound scaling constants

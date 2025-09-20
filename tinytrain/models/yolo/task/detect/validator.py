@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from tinytrain.data.data_format import DetectBatchDataInfo
 from tinytrain.engine import BaseValidator
 from tinytrain.global_var import RANK
-from tinytrain.metrics.detect_metrics import BoxMetrics, DetectConfusionMatrix, DetectImgResult
+from tinytrain.metrics.detect_metrics import DetectMetrics, DetectConfusionMatrix, DetectImgResult
 from tinytrain.utils.TT_progress_bar import TTProgressBar
 from tinytrain.utils.nms import detect_nms
 
@@ -19,16 +19,19 @@ class YOLODetectionValidator(BaseValidator):
     def __init__(self, trainer: BaseTrainer, world_size: int):
         super().__init__(trainer, world_size)
         self.num_classes = self.config_manager.dataset["nc"]
-        self.class_names = list(self.config_manager.dataset["names"].values())
+        self.class_names = self.config_manager.dataset["names"]
 
-        # box metrics
-        self.box_metrics = BoxMetrics(class_names=self.class_names)
+        # metrics
+        self.detect_metrics = DetectMetrics(class_names=self.class_names)
 
         # confuse matrix
-        self.confuse_matrix = DetectConfusionMatrix(num_classes=self.num_classes,
-                                                    class_names=self.class_names)
+        self.confuse_matrix = DetectConfusionMatrix(num_classes=self.num_classes, class_names=self.class_names)
 
-        self.img_result = DetectImgResult(self.save_dir, mode="val", rgb=self.config_manager.augment["rgb"], draw_conf_threshold=0.25)
+        self.img_result = DetectImgResult(self.save_dir,
+                                          mode="val",
+                                          rgb=self.config_manager.augment["rgb"],
+                                          draw_conf_threshold=self.config_manager.inference["val_draw_conf_threshold"],
+                                          )
 
     def preprocess(self, batch_samples: DetectBatchDataInfo) -> DetectBatchDataInfo:
         # 在这里做归一化速度提升
@@ -48,7 +51,7 @@ class YOLODetectionValidator(BaseValidator):
         return outputs
 
     def start_metrics_on_training(self, pbar: TTProgressBar):
-        self.box_metrics.reset()
+        self.detect_metrics.reset()
 
     def update_metrics_on_training(self, outputs: list[torch.Tensor], batch_samples: DetectBatchDataInfo, pbar: TTProgressBar):
         # 真实框解码
@@ -56,21 +59,21 @@ class YOLODetectionValidator(BaseValidator):
         # 分割样本
         sample_list = self.batch_samples_split(batch_samples)
 
-        self.box_metrics.update(outputs, sample_list)
+        self.detect_metrics.update(outputs, sample_list)
 
-        desc = f"{'val':^5}|{'classes':^15}|{'Precision':^15}|{'Recall':^15}|{'MAR':^15}|{'MAP50':^15}|{'MAP50_95':^15}|{'MAP_Small':^15}|{'MAP_Medium':^15}|{'MAP_Large':^15}|"
+        desc = f"{'val':^5}|{'classes':^15}|{'Precision':^15}|{'Recall':^15}|{'MAR':^15}|{'MAP50':^15}|{'MAP50_95':^15}|{'MAP_S':^15}|{'MAP_M':^15}|{'MAP_L':^15}|"
         pbar.set_description(desc)
 
     def end_metrics_on_training(self, pbar: TTProgressBar):
-        self.box_metrics.compute()
-        precision = self.box_metrics.precision()
-        recall = self.box_metrics.recall()
-        mar_100 = self.box_metrics.mar_100()
-        map50 = self.box_metrics.map50()
-        map50_95 = self.box_metrics.map50_95()
-        map_small = self.box_metrics.map_small()
-        map_medium = self.box_metrics.map_medium()
-        map_large = self.box_metrics.map_large()
+        self.detect_metrics.compute()
+        precision = self.detect_metrics.precision()
+        recall = self.detect_metrics.recall()
+        mar_100 = self.detect_metrics.mar_100()
+        map50 = self.detect_metrics.map50()
+        map50_95 = self.detect_metrics.map50_95()
+        map_small = self.detect_metrics.map_small()
+        map_medium = self.detect_metrics.map_medium()
+        map_large = self.detect_metrics.map_large()
 
         if RANK in {-1, 0}:
             # log
@@ -80,13 +83,17 @@ class YOLODetectionValidator(BaseValidator):
             # metrics result
             if self.trainer.train_result is not None:
                 self.trainer.train_result.add("precision", precision)
+                self.trainer.train_result.add("recall", recall)
                 self.trainer.train_result.add("mar", mar_100)
                 self.trainer.train_result.add("map50", map50)
                 self.trainer.train_result.add("map50_95", map50_95)
+                self.trainer.train_result.add("map_small", map_small)
+                self.trainer.train_result.add("map_medium", map_medium)
+                self.trainer.train_result.add("map_large", map_large)
 
     def start_metrics_on_train_completed(self, pbar: TTProgressBar):
         self.confuse_matrix.reset()
-        self.box_metrics.reset()
+        self.detect_metrics.reset()
 
     def update_metrics_on_train_completed(self, outputs: list[torch.Tensor], batch_samples: DetectBatchDataInfo, pbar: TTProgressBar):
         # 真实框解码
@@ -94,7 +101,7 @@ class YOLODetectionValidator(BaseValidator):
         # 分割样本
         sample_list = self.batch_samples_split(batch_samples)
 
-        self.box_metrics.update(outputs, sample_list)
+        self.detect_metrics.update(outputs, sample_list)
         self.confuse_matrix.update(outputs, sample_list)
 
         # log
@@ -106,12 +113,12 @@ class YOLODetectionValidator(BaseValidator):
             self.img_result.plot(batch_samples=batch_samples, preds=outputs)
 
     def end_metrics_on_train_completed(self, pbar: TTProgressBar):
-        self.box_metrics.compute()
+        self.detect_metrics.compute()
 
         # log
-        precision_per_class = self.box_metrics.per_class_precision().float()  # 每个类别的precision
-        recall_per_class = self.box_metrics.per_class_recall().float()  # 每个类别的recall
-        classes = self.box_metrics.classes().int()  # 类别列表
+        precision_per_class = self.detect_metrics.per_class_precision().float()  # 每个类别的precision
+        recall_per_class = self.detect_metrics.per_class_recall().float()  # 每个类别的recall
+        classes = self.detect_metrics.classes().int()  # 类别列表
 
         if RANK in {-1, 0}:
             print(f"{'val':^5}|{'class_name':^15}|{'Precision':^15}|{'Recall':^15}|")
@@ -121,22 +128,21 @@ class YOLODetectionValidator(BaseValidator):
             pr_table[classes, 1] = recall_per_class
 
             for i, pr in enumerate(pr_table):
-                progress_str = f"{'val':^5}|{self.class_names[i]:^15}|{max(pr[0].item(), 0):^15.3f}|{max(pr[1].item(), 0):^15.3f}|"
+                progress_str = f"{'val':^5}|{self.class_names[i]:^15}|{max(pr[0].item(), 0):^15.3f}|{max(pr[1].item(), 0):^15.3f}|"  # type: ignore[arg-type]
                 lines.append(progress_str)
             print("\n".join(lines))
 
-        # plot
-        if RANK in {-1, 0}:
-            self.box_metrics.plot(self.save_dir)
+            # plot
+            self.detect_metrics.plot(self.save_dir)
             self.confuse_matrix.plot(self.save_dir)
 
     def get_fitness(self) -> float:
-        weights = [0.1, 0.2, 0.2, 0.5]
+        weights = [0.0, 0.0, 0.1, 0.9]
         return (
-                self.box_metrics.precision() * weights[0] +
-                self.box_metrics.mar_100() * weights[1] +
-                self.box_metrics.map50() * weights[2] +
-                self.box_metrics.map50_95() * weights[3]
+                self.detect_metrics.precision() * weights[0] +
+                self.detect_metrics.mar_100() * weights[1] +
+                self.detect_metrics.map50() * weights[2] +
+                self.detect_metrics.map50_95() * weights[3]
         )
 
     def decode_boxes(self, batch_samples: DetectBatchDataInfo):
