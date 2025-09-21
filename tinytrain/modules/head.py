@@ -3,8 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .block import Conv2Linear
-from .conv import Conv, DWConv
+from .block import Conv2Linear, Proto
+from .conv import CBA, DWConv
 from tinytrain.cfg import TTModuleRegistry
 from tinytrain.utils.tal import dist2bbox
 from tinytrain.utils.box_utils import make_anchors
@@ -21,7 +21,7 @@ class Classify(nn.Module):
     def __init__(self, in_channels, nc, hidden_channels=1280, kernel_size=1, stride=1, padding=None, groups=1):
         """Initializes classification head to transform input tensor from (b,c1,20,20) to (b,c2) shape."""
         super().__init__()
-        self.conv = Conv(in_channels, hidden_channels, kernel_size, stride, padding, groups)
+        self.conv = CBA(in_channels, hidden_channels, kernel_size, stride, padding, groups)
         self.pool = nn.AdaptiveAvgPool2d(1)  # to x(batch, hidden_channels, 1, 1)
         self.drop = nn.Dropout(p=0.0, inplace=True)
         self.linear = nn.Linear(hidden_channels, nc)  # to x(batch, out_channels)
@@ -52,8 +52,8 @@ class GDC(nn.Module):
     def __init__(self, in_channels, embedding_size):
         super().__init__()
         self.layers = nn.Sequential(
-            Conv(in_channels=in_channels, out_channels=512, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            Conv(in_channels=512, out_channels=512, groups=512, kernel_size=(7, 7), stride=(1, 1), padding=(0, 0), act=False),
+            CBA(in_channels=in_channels, out_channels=512, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
+            CBA(in_channels=512, out_channels=512, groups=512, kernel_size=(7, 7), stride=(1, 1), padding=(0, 0), act=False),
             nn.Flatten(),
             nn.Linear(512, embedding_size, bias=False),
             nn.BatchNorm1d(embedding_size))
@@ -110,14 +110,14 @@ class YOLODetect(nn.Module):
 
         # cv2用于DFLoss和IOULoss计算
         self.cv2 = nn.ModuleList(
-            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1))
+            nn.Sequential(CBA(x, c2, 3), CBA(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1))
             for x in from_channels
         )
         # cv3用于类别损失计算
         self.cv3 = nn.ModuleList(
             nn.Sequential(
-                nn.Sequential(DWConv(x, x, 3), Conv(x, c3, 1)),
-                nn.Sequential(DWConv(c3, c3, 3), Conv(c3, c3, 1)),
+                nn.Sequential(DWConv(x, x, 3), CBA(x, c3, 1)),
+                nn.Sequential(DWConv(c3, c3, 3), CBA(c3, c3, 1)),
                 nn.Conv2d(c3, self.nc, 1),
             )
             for x in from_channels
@@ -180,7 +180,7 @@ class YOLOPose(YOLODetect):
         self.nk = kpt_shape[0] * kpt_shape[1]  # number of keypoints total
 
         c4 = max(from_channels[0] // 4, self.nk)
-        self.cv4 = nn.ModuleList(nn.Sequential(Conv(x, c4, 3), Conv(c4, c4, 3), nn.Conv2d(c4, self.nk, 1)) for x in from_channels)
+        self.cv4 = nn.ModuleList(nn.Sequential(CBA(x, c4, 3), CBA(c4, c4, 3), nn.Conv2d(c4, self.nk, 1)) for x in from_channels)
 
     def forward(self, x):
         """Perform forward pass through YOLO model and return predictions."""
@@ -215,3 +215,29 @@ class YOLOPose(YOLODetect):
         y[:, 0::ndim] = (y[:, 0::ndim] * 2.0 + (anchors[0] - 0.5)) * strides
         y[:, 1::ndim] = (y[:, 1::ndim] * 2.0 + (anchors[1] - 0.5)) * strides
         return y
+
+
+@TTModuleRegistry.register
+class YOLOSegment(YOLODetect):
+    """YOLO Segment head for segmentation models."""
+
+    def __init__(self, nc, from_channels: list, nm=32, npr=256):
+        """Initialize the YOLO model attributes such as the number of masks, prototypes, and the convolution layers."""
+        super().__init__(nc, from_channels)
+        self.nm = nm  # number of masks
+        self.npr = npr  # number of protos
+        self.proto = Proto(from_channels[0], self.npr, self.nm)  # protos
+
+        c4 = max(from_channels[0] // 4, self.nm)
+        self.cv4 = nn.ModuleList(nn.Sequential(CBA(x, c4, 3), CBA(c4, c4, 3), nn.Conv2d(c4, self.nm, 1)) for x in ch)
+
+    def forward(self, x):
+        """Return model outputs and mask coefficients if training, otherwise return outputs and mask coefficients."""
+        p = self.proto(x[0])  # mask protos
+        bs = p.shape[0]  # batch size
+
+        mc = torch.cat([self.cv4[i](x[i]).view(bs, self.nm, -1) for i in range(self.nl)], 2)  # mask coefficients
+        x = YOLODetect.forward(self, x)
+        if self.training:
+            return x, mc, p
+        return torch.cat([x, mc], 1), p

@@ -35,7 +35,7 @@ summary = "374 layers, 244324738 parameters, 244324738 gradients, 661.66 GFLOPs,
 [[network]]
 # 0-P1/2
 type = "entry"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 3
@@ -46,7 +46,7 @@ args.stride = 2
 [[network]]
 # 1-P1/4
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 64
@@ -57,7 +57,7 @@ args.stride = 2
 [[network]]
 # 2
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 6
 from = [-1]
 args.in_channels = 128
@@ -68,7 +68,7 @@ args.stride = 1
 [[network]]
 # 3-P3/8
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 128
@@ -79,7 +79,7 @@ args.stride = 2
 [[network]]
 # 4
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 12
 from = [-1]
 args.in_channels = 256
@@ -90,7 +90,7 @@ args.stride = 1
 [[network]]
 # 5-P4/16
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 256
@@ -101,7 +101,7 @@ args.stride = 2
 [[network]]
 # 6
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 18
 from = [-1]
 args.in_channels = 512
@@ -112,7 +112,7 @@ args.stride = 1
 [[network]]
 # 7-P5/32
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 512
@@ -123,7 +123,7 @@ args.stride = 2
 [[network]]
 # 8
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 6
 from = [-1]
 args.in_channels = 1024
@@ -145,7 +145,7 @@ args.kernel_size = 5
 [[network]]
 # 10
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 1024
@@ -175,7 +175,7 @@ from = [-1, 6]
 [[network]]
 # 13
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 768
@@ -186,7 +186,7 @@ args.stride = 1
 [[network]]
 # 14
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 9
 from = [-1]
 args.in_channels = 256
@@ -197,7 +197,7 @@ args.stride = 1
 [[network]]
 # 15
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 256
@@ -227,7 +227,7 @@ from = [-1, 4]
 [[network]]
 # 18
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 384
@@ -238,7 +238,7 @@ args.stride = 1
 [[network]]
 # 19
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 9
 from = [-1]
 args.in_channels = 128
@@ -249,7 +249,7 @@ args.stride = 1
 [[network]]
 # 20
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 128
@@ -267,7 +267,7 @@ from = [-1, 15]
 [[network]]
 # 22
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 256
@@ -278,7 +278,7 @@ args.stride = 1
 [[network]]
 # 23
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 9
 from = [-1]
 args.in_channels = 256
@@ -289,7 +289,7 @@ args.stride = 1
 [[network]]
 # 24
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 256
@@ -307,7 +307,7 @@ from = [-1, 10]
 [[network]]
 # 26
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 512
@@ -318,7 +318,7 @@ args.stride = 1
 [[network]]
 # 27
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 9
 from = [-1]
 args.in_channels = 512

@@ -20,7 +20,7 @@ YOLO 系列检测 / 分类模型的统一解析器。
 --------
 network:
   - type: entry      # 第 0 层必须为 entry，且仅出现一次
-    module: Conv     # 模块类名，必须能在 tinytrain.modules 中找到
+    module: CBA     # 模块类名，必须能在 tinytrain.modules 中找到
     from: [-1]       # -1 表示「来自上一层」
     repeat: 1        # 重复次数，flow 层受 depth 增益影响
     args:

@@ -14,7 +14,7 @@ summary = "333 layers, 98482354 parameters, 98482354 gradients, 262.38 GFLOPs, f
 [[network]]
 # 0
 type = "entry"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 3
@@ -25,7 +25,7 @@ args.stride = 1
 [[network]]
 # 1-P1/2
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 32
@@ -45,7 +45,7 @@ args.out_channels = 64
 [[network]]
 # 3-P2/4
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 64
@@ -65,7 +65,7 @@ args.out_channels = 128
 [[network]]
 # 5-P3/8
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 128
@@ -85,7 +85,7 @@ args.out_channels = 256
 [[network]]
 # 7-P4/16
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 256
@@ -105,7 +105,7 @@ args.out_channels = 512
 [[network]]
 # 9-P5/32
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 512
@@ -136,7 +136,7 @@ args.shortcut = false
 [[network]]
 # 12
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 1024
@@ -147,7 +147,7 @@ args.stride = 1
 [[network]]
 # 13
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 512
@@ -158,7 +158,7 @@ args.stride = 1
 [[network]]
 # 14
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 1024
@@ -169,7 +169,7 @@ args.stride = 1
 [[network]]
 # 15 (P5/32-large)
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 512
@@ -180,7 +180,7 @@ args.stride = 1
 [[network]]
 # 16
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [14]
 args.in_channels = 512
@@ -227,7 +227,7 @@ args.shortcut = false
 [[network]]
 # 21
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 512
@@ -238,7 +238,7 @@ args.stride = 1
 [[network]]
 # 22 (P4/16-medium)
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 256
@@ -249,7 +249,7 @@ args.stride = 1
 [[network]]
 # 23
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [21]
 args.in_channels = 256

@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch
 
 from tinytrain.cfg import TTModuleRegistry
+from tinytrain.engine import BaseModel
 
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -15,17 +16,24 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 
 @TTModuleRegistry.register
-class Conv(nn.Module):
+class CBA(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
 
-    default_act = nn.SiLU()  # default activation
-
-    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=None, groups=1, dilation=1, act=True):
-        """Initialize Conv layer with given arguments including activation."""
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=None, groups=1, dilation=1, act: bool | str | nn.Module = True):
+        """Initialize CBA layer with given arguments including activation."""
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, autopad(kernel_size, padding, dilation), groups=groups, dilation=dilation, bias=False)
         self.bn = nn.BatchNorm2d(out_channels)
-        self.act = self.default_act if act is True else act if isinstance(act, nn.Module) else nn.Identity()
+
+        if act is True:
+            self.act = nn.SiLU()
+        elif isinstance(act, nn.Module):
+            self.act = act
+        elif act is str:
+            self.act = BaseModel._get_layer(act)
+        else:
+            self.act = nn.Identity()
+        # self.act = self.default_act if act is True else BaseModel._get_layer(act) if isinstance(act, nn.Module) else nn.Identity()
 
     def forward(self, x):
         """Apply convolution, batch normalization and activation to input tensor."""
@@ -36,12 +44,13 @@ class Conv(nn.Module):
 
 
 @TTModuleRegistry.register
-class DWConv(Conv):
+class DWConv(CBA):
     """Depth-wise convolution."""
 
     def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, dilation=1, act=True):  # ch_in, ch_out, kernel, stride, dilation, activation
         """Initialize Depth-wise convolution with given parameters."""
         super().__init__(in_channels, out_channels, kernel_size, stride, groups=math.gcd(in_channels, out_channels), dilation=dilation, act=act)
+
 
 @TTModuleRegistry.register
 class GhostConv(nn.Module):
@@ -51,8 +60,8 @@ class GhostConv(nn.Module):
         """Initializes Ghost Convolution module with primary and cheap operations for efficient feature learning."""
         super().__init__()
         c_ = out_channels // 2  # hidden channels
-        self.cv1 = Conv(in_channels, c_, kernel_size, stride, None, groups, act=act)
-        self.cv2 = Conv(c_, c_, 5, 1, None, c_, act=act)
+        self.cv1 = CBA(in_channels, c_, kernel_size, stride, None, groups, act=act)
+        self.cv2 = CBA(c_, c_, 5, 1, None, c_, act=act)
 
     def forward(self, x):
         """Forward propagation through a Ghost Bottleneck layer with skip connection."""

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .conv import Conv, DWConv, GhostConv
+from .conv import CBA, DWConv, GhostConv
 
 from tinytrain.cfg import TTModuleRegistry
 
@@ -15,8 +15,8 @@ class C2(nn.Module):
         """Initializes a CSP Bottleneck with 2 convolutions and optional shortcut connection."""
         super().__init__()
         self.c = int(out_channels * e)  # hidden channels
-        self.cv1 = Conv(in_channels, 2 * self.c, 1, 1)
-        self.cv2 = Conv(2 * self.c, out_channels, 1)  # optional act=FReLU(out_channels)
+        self.cv1 = CBA(in_channels, 2 * self.c, 1, 1)
+        self.cv2 = CBA(2 * self.c, out_channels, 1)  # optional act=FReLU(out_channels)
         # self.attention = ChannelAttention(2 * self.c)  # or SpatialAttention()
         self.m = nn.Sequential(*(Bottleneck(self.c, self.c, shortcut, groups, kernel_size=((3, 3), (3, 3)), hidden_channels=1.0) for _ in range(n)))
 
@@ -34,8 +34,8 @@ class C2f(nn.Module):
         """Initializes a CSP bottleneck with 2 convolutions and n Bottleneck blocks for faster processing."""
         super().__init__()
         self.c = int(out_channels * hidden_channels)  # hidden channels
-        self.cv1 = Conv(in_channels, 2 * self.c, 1, 1)
-        self.cv2 = Conv((2 + n) * self.c, out_channels, 1)  # optional act=FReLU(out_channels)
+        self.cv1 = CBA(in_channels, 2 * self.c, 1, 1)
+        self.cv2 = CBA((2 + n) * self.c, out_channels, 1)  # optional act=FReLU(out_channels)
         self.m = nn.ModuleList(Bottleneck(self.c, self.c, shortcut, groups, kernel_size=((3, 3), (3, 3)), hidden_channels=1.0) for _ in range(n))
 
     def forward(self, x):
@@ -53,9 +53,9 @@ class C3(nn.Module):
         """Initialize the CSP Bottleneck with given channels, number, shortcut, groups, and expansion values."""
         super().__init__()
         c_ = int(out_channels * hidden_channels)  # hidden channels
-        self.cv1 = Conv(in_channels, c_, 1, 1)
-        self.cv2 = Conv(in_channels, c_, 1, 1)
-        self.cv3 = Conv(2 * c_, out_channels, 1)  # optional act=FReLU(out_channels)
+        self.cv1 = CBA(in_channels, c_, 1, 1)
+        self.cv2 = CBA(in_channels, c_, 1, 1)
+        self.cv3 = CBA(2 * c_, out_channels, 1)  # optional act=FReLU(out_channels)
         self.m = nn.Sequential(*(Bottleneck(c_, c_, shortcut, groups, kernel_size=((1, 1), (3, 3)), hidden_channels=1.0) for _ in range(n)))
 
     def forward(self, x):
@@ -88,7 +88,7 @@ class GhostBottleneck(nn.Module):
             GhostConv(c_, out_channels, 1, 1, act=False),  # pw-linear
         )
         self.shortcut = (
-            nn.Sequential(DWConv(in_channels, in_channels, kernel_size, stride, act=False), Conv(in_channels, out_channels, 1, 1, act=False)) if stride == 2 else nn.Identity()
+            nn.Sequential(DWConv(in_channels, in_channels, kernel_size, stride, act=False), CBA(in_channels, out_channels, 1, 1, act=False)) if stride == 2 else nn.Identity()
         )
 
     def forward(self, x):
@@ -104,8 +104,8 @@ class Bottleneck(nn.Module):
         """Initializes a standard bottleneck module with optional shortcut connection and configurable parameters."""
         super().__init__()
         c_ = int(out_channels * hidden_channels)  # hidden channels
-        self.cv1 = Conv(in_channels, c_, kernel_size[0], 1)
-        self.cv2 = Conv(c_, out_channels, kernel_size[1], 1, groups=groups)
+        self.cv1 = CBA(in_channels, c_, kernel_size[0], 1)
+        self.cv2 = CBA(c_, out_channels, kernel_size[1], 1, groups=groups)
         self.add = shortcut and in_channels == out_channels
 
     def forward(self, x):
@@ -121,10 +121,10 @@ class ResNetBlock(nn.Module):
         """Initialize convolution with given parameters."""
         super().__init__()
         c3 = e * out_channels
-        self.cv1 = Conv(in_channels, out_channels, kernel_size=1, stride=1, act=True)
-        self.cv2 = Conv(out_channels, out_channels, kernel_size=3, stride=stride, padding=1, act=True)
-        self.cv3 = Conv(out_channels, c3, kernel_size=1, act=False)
-        self.shortcut = nn.Sequential(Conv(in_channels, c3, kernel_size=1, stride=stride, act=False)) if stride != 1 or in_channels != c3 else nn.Identity()
+        self.cv1 = CBA(in_channels, out_channels, kernel_size=1, stride=1, act=True)
+        self.cv2 = CBA(out_channels, out_channels, kernel_size=3, stride=stride, padding=1, act=True)
+        self.cv3 = CBA(out_channels, c3, kernel_size=1, act=False)
+        self.shortcut = nn.Sequential(CBA(in_channels, c3, kernel_size=1, stride=stride, act=False)) if stride != 1 or in_channels != c3 else nn.Identity()
 
     def forward(self, x):
         """Forward pass through the ResNet block."""
@@ -142,7 +142,7 @@ class ResNetLayer(nn.Module):
 
         if self.is_first:
             self.layer = nn.Sequential(
-                Conv(in_channels, out_channels, kernel_size=7, stride=2, padding=3, act=True), nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+                CBA(in_channels, out_channels, kernel_size=7, stride=2, padding=3, act=True), nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
             )
         else:
             blocks = [ResNetBlock(in_channels, out_channels, stride, e=e)]
@@ -188,8 +188,8 @@ class C2PSA(nn.Module):
 
     Attributes:
         c (int): Number of hidden channels.
-        cv1 (Conv): 1x1 convolution layer to reduce the number of input channels to 2*c.
-        cv2 (Conv): 1x1 convolution layer to reduce the number of output channels to c.
+        cv1 (CBA): 1x1 convolution layer to reduce the number of input channels to 2*c.
+        cv2 (CBA): 1x1 convolution layer to reduce the number of output channels to c.
         m (nn.Sequential): Sequential container of PSABlock modules for attention and feed-forward operations.
 
     Methods:
@@ -204,8 +204,8 @@ class C2PSA(nn.Module):
         super().__init__()
         assert in_channels == out_channels
         self.c = int(in_channels * hidden_channels)
-        self.cv1 = Conv(in_channels, 2 * self.c, 1, 1)
-        self.cv2 = Conv(2 * self.c, in_channels, 1)
+        self.cv1 = CBA(in_channels, 2 * self.c, 1, 1)
+        self.cv2 = CBA(2 * self.c, in_channels, 1)
 
         self.m = nn.Sequential(*(PSABlock(self.c, attn_ratio=0.5, num_heads=self.c // 64) for _ in range(n)))
 
@@ -244,7 +244,7 @@ class PSABlock(nn.Module):
         super().__init__()
 
         self.attn = Attention(c, attn_ratio=attn_ratio, num_heads=num_heads)
-        self.ffn = nn.Sequential(Conv(c, c * 2, 1), Conv(c * 2, c, 1, act=False))
+        self.ffn = nn.Sequential(CBA(c, c * 2, 1), CBA(c * 2, c, 1, act=False))
         self.add = shortcut
 
     def forward(self, x):
@@ -269,9 +269,9 @@ class Attention(nn.Module):
         head_dim (int): The dimension of each attention head.
         key_dim (int): The dimension of the attention key.
         scale (float): The scaling factor for the attention scores.
-        qkv (Conv): Convolutional layer for computing the query, key, and value.
-        proj (Conv): Convolutional layer for projecting the attended values.
-        pe (Conv): Convolutional layer for positional encoding.
+        qkv (CBA): Convolutional layer for computing the query, key, and value.
+        proj (CBA): Convolutional layer for projecting the attended values.
+        pe (CBA): Convolutional layer for positional encoding.
     """
 
     def __init__(self, dim, num_heads=8, attn_ratio=0.5):
@@ -283,9 +283,9 @@ class Attention(nn.Module):
         self.scale = self.key_dim ** -0.5
         nh_kd = self.key_dim * num_heads
         h = dim + nh_kd * 2
-        self.qkv = Conv(dim, h, 1, act=False)
-        self.proj = Conv(dim, dim, 1, act=False)
-        self.pe = Conv(dim, dim, 3, 1, groups=dim, act=False)
+        self.qkv = CBA(dim, h, 1, act=False)
+        self.proj = CBA(dim, dim, 1, act=False)
+        self.pe = CBA(dim, dim, 3, 1, groups=dim, act=False)
 
     def forward(self, x):
         """
@@ -319,8 +319,8 @@ class SPP(nn.Module):
         """Initialize the SPP layer with input/output channels and pooling kernel sizes."""
         super().__init__()
         c_ = in_channels // 2  # hidden channels
-        self.cv1 = Conv(in_channels, c_, 1, 1)
-        self.cv2 = Conv(c_ * (len(kernel_size) + 1), out_channels, 1, 1)
+        self.cv1 = CBA(in_channels, c_, 1, 1)
+        self.cv2 = CBA(c_ * (len(kernel_size) + 1), out_channels, 1, 1)
         self.m = nn.ModuleList([nn.MaxPool2d(kernel_size=x, stride=1, padding=x // 2) for x in kernel_size])
 
     def forward(self, x):
@@ -341,8 +341,8 @@ class SPPF(nn.Module):
         """
         super().__init__()
         c_ = in_channels // 2  # hidden channels
-        self.cv1 = Conv(in_channels, c_, 1, 1)
-        self.cv2 = Conv(c_ * 4, out_channels, 1, 1)
+        self.cv1 = CBA(in_channels, c_, 1, 1)
+        self.cv2 = CBA(c_ * 4, out_channels, 1, 1)
         self.m = nn.MaxPool2d(kernel_size=kernel_size, stride=1, padding=kernel_size // 2)
 
     def forward(self, x):
@@ -364,9 +364,9 @@ class AAttn(nn.Module):
         area (int): Number of areas the feature map is divided.
         num_heads (int): Number of heads into which the attention mechanism is divided.
         head_dim (int): Dimension of each attention head.
-        qkv (Conv): Convolution layer for computing query, key and value tensors.
-        proj (Conv): Projection convolution layer.
-        pe (Conv): Position encoding convolution layer.
+        qkv (CBA): Convolution layer for computing query, key and value tensors.
+        proj (CBA): Projection convolution layer.
+        pe (CBA): Position encoding convolution layer.
 
     Methods:
         forward: Applies area-attention to input tensor.
@@ -395,9 +395,9 @@ class AAttn(nn.Module):
         self.head_dim = head_dim = dim // num_heads
         all_head_dim = head_dim * self.num_heads
 
-        self.qkv = Conv(dim, all_head_dim * 3, 1, act=False)
-        self.proj = Conv(all_head_dim, dim, 1, act=False)
-        self.pe = Conv(all_head_dim, dim, 7, 1, 3, groups=dim, act=False)
+        self.qkv = CBA(dim, all_head_dim * 3, 1, act=False)
+        self.proj = CBA(all_head_dim, dim, 1, act=False)
+        self.pe = CBA(all_head_dim, dim, 7, 1, 3, groups=dim, act=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -478,7 +478,7 @@ class ABlock(nn.Module):
 
         self.attn = AAttn(dim, num_heads=num_heads, area=area)
         mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = nn.Sequential(Conv(dim, mlp_hidden_dim, 1), Conv(mlp_hidden_dim, dim, 1, act=False))
+        self.mlp = nn.Sequential(CBA(dim, mlp_hidden_dim, 1), CBA(mlp_hidden_dim, dim, 1, act=False))
 
         self.apply(self._init_weights)
 
@@ -517,8 +517,8 @@ class A2C2f(nn.Module):
     processing. It supports both area-attention and standard convolution modes.
 
     Attributes:
-        cv1 (Conv): Initial 1x1 convolution layer that reduces input channels to hidden channels.
-        cv2 (Conv): Final 1x1 convolution layer that processes concatenated features.
+        cv1 (CBA): Initial 1x1 convolution layer that reduces input channels to hidden channels.
+        cv2 (CBA): Final 1x1 convolution layer that processes concatenated features.
         gamma (nn.Parameter | None): Learnable parameter for residual scaling when using area attention.
         m (nn.ModuleList): List of either ABlock or C3k modules for feature processing.
 
@@ -565,8 +565,8 @@ class A2C2f(nn.Module):
         c_ = int(out_channels * e)  # hidden channels
         assert c_ % 32 == 0, "Dimension of ABlock be a multiple of 32."
 
-        self.cv1 = Conv(in_channels, c_, 1, 1)
-        self.cv2 = Conv((1 + n) * c_, out_channels, 1)
+        self.cv1 = CBA(in_channels, c_, 1, 1)
+        self.cv2 = CBA((1 + n) * c_, out_channels, 1)
 
         self.gamma = nn.Parameter(0.01 * torch.ones(out_channels), requires_grad=True) if a2 and residual else None
         self.m = nn.ModuleList(
@@ -620,12 +620,12 @@ class DFL(nn.Module):
 class FPN(nn.Module):
     def __init__(self, in_channels_list, out_channels):
         super(FPN, self).__init__()
-        self.output1 = Conv(in_channels=in_channels_list[0], out_channels=out_channels)
-        self.output2 = Conv(in_channels=in_channels_list[1], out_channels=out_channels)
-        self.output3 = Conv(in_channels=in_channels_list[2], out_channels=out_channels)
+        self.output1 = CBA(in_channels=in_channels_list[0], out_channels=out_channels)
+        self.output2 = CBA(in_channels=in_channels_list[1], out_channels=out_channels)
+        self.output3 = CBA(in_channels=in_channels_list[2], out_channels=out_channels)
 
-        self.merge1 = Conv(in_channels=out_channels, out_channels=out_channels, kernel_size=3, padding=1)
-        self.merge2 = Conv(in_channels=out_channels, out_channels=out_channels, kernel_size=3, padding=1)
+        self.merge1 = CBA(in_channels=out_channels, out_channels=out_channels, kernel_size=3, padding=1)
+        self.merge2 = CBA(in_channels=out_channels, out_channels=out_channels, kernel_size=3, padding=1)
 
     def forward(self, x: list[torch.Tensor]):
         output1 = self.output1(x[0])
@@ -649,13 +649,13 @@ class SSH(nn.Module):
     def __init__(self, in_channel, out_channel):
         super(SSH, self).__init__()
         assert out_channel % 4 == 0
-        self.conv3X3 = Conv(in_channels=in_channel, out_channels=out_channel // 2, kernel_size=3, act=False)
+        self.conv3X3 = CBA(in_channels=in_channel, out_channels=out_channel // 2, kernel_size=3, act=False)
 
-        self.conv5X5_1 = Conv(in_channels=in_channel, out_channels=out_channel // 4, kernel_size=3)
-        self.conv5X5_2 = Conv(in_channels=out_channel // 4, out_channels=out_channel // 4, kernel_size=3, act=False)
+        self.conv5X5_1 = CBA(in_channels=in_channel, out_channels=out_channel // 4, kernel_size=3)
+        self.conv5X5_2 = CBA(in_channels=out_channel // 4, out_channels=out_channel // 4, kernel_size=3, act=False)
 
-        self.conv7X7_2 = Conv(in_channels=out_channel // 4, out_channels=out_channel // 4, kernel_size=3)
-        self.conv7x7_3 = Conv(in_channels=out_channel // 4, out_channels=out_channel // 4, kernel_size=3, act=False)
+        self.conv7X7_2 = CBA(in_channels=out_channel // 4, out_channels=out_channel // 4, kernel_size=3)
+        self.conv7x7_3 = CBA(in_channels=out_channel // 4, out_channels=out_channel // 4, kernel_size=3, act=False)
 
     def forward(self, x):
         conv3X3 = self.conv3X3(x)
@@ -693,11 +693,10 @@ class DWBlock(nn.Module):
         super().__init__()
         self.residual = residual
         self.conv = nn.Sequential(
-            Conv(in_channels=in_channels, out_channels=groups, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            Conv(in_channels=groups, out_channels=groups, groups=groups, kernel_size=kernel_size, stride=stride, padding=padding),
-            Conv(in_channels=groups, out_channels=out_channels, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0), act=False)
+            CBA(in_channels=in_channels, out_channels=groups, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
+            CBA(in_channels=groups, out_channels=groups, groups=groups, kernel_size=kernel_size, stride=stride, padding=padding),
+            CBA(in_channels=groups, out_channels=out_channels, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0), act=False)
         )
-
 
     def forward(self, x):
         if self.residual:
@@ -710,7 +709,7 @@ class DWBlock(nn.Module):
 class Conv2Linear(nn.Module):
     def __init__(self, in_channels, out_channels, hidden_channels=512, kernel_size=1, stride=1, padding=None, groups=1, bias=False):
         super().__init__()
-        self.conv = Conv(in_channels, hidden_channels, kernel_size, stride, padding, groups)
+        self.conv = CBA(in_channels, hidden_channels, kernel_size, stride, padding, groups)
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.linear = nn.Linear(hidden_channels, out_channels, bias=bias)
         self.bn = nn.BatchNorm1d(out_channels)
@@ -722,3 +721,24 @@ class Conv2Linear(nn.Module):
         x = self.bn(x)
 
         return x
+
+
+@TTModuleRegistry.register
+class Proto(nn.Module):
+    """YOLOv8 mask Proto module for segmentation models."""
+
+    def __init__(self, c1, c_=256, c2=32):
+        """
+        Initializes the YOLOv8 mask Proto module with specified number of protos and masks.
+
+        Input arguments are ch_in, number of protos, number of masks.
+        """
+        super().__init__()
+        self.cv1 = CBA(c1, c_, k=3)
+        self.upsample = nn.ConvTranspose2d(c_, c_, 2, 2, 0, bias=True)  # nn.Upsample(scale_factor=2, mode='nearest')
+        self.cv2 = CBA(c_, c_, k=3)
+        self.cv3 = CBA(c_, c2)
+
+    def forward(self, x):
+        """Performs a forward pass through layers using an upsampled input image."""
+        return self.cv3(self.cv2(self.upsample(self.cv1(x))))

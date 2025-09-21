@@ -24,6 +24,6 @@ setproctitle
 tabulate
 tensorboard
 toml
-torch==2.5.1+cu124
+torch
 torchmetrics[detection]
-torchvision==0.20.1+cu124
+torchvision

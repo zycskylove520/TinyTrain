@@ -35,7 +35,7 @@ summary = "597 layers, 135547371 parameters, 135547371 gradients, 332.64 GFLOPs,
 [[network]]
 # 0-P1/2
 type = "entry"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 3
@@ -46,7 +46,7 @@ args.stride = 2
 [[network]]
 # 1-P2/4
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 64
@@ -67,7 +67,7 @@ args.shortcut = true
 [[network]]
 # 3-P3/8
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 128
@@ -88,7 +88,7 @@ args.shortcut = true
 [[network]]
 # 5-P4/16
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 256
@@ -109,7 +109,7 @@ args.shortcut = true
 [[network]]
 # 7-P5/32
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 512
@@ -209,7 +209,7 @@ args.out_channels = 256
 [[network]]
 # 18
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 256
@@ -245,7 +245,7 @@ args.out_channels = 512
 [[network]]
 # 22
 type = "flow"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 512

@@ -35,7 +35,7 @@ summary = "1076 layers, 50004270 parameters, 50004270 gradients, 120.95 GFLOPs, 
 [[network]]
 # 0-P1/2
 type = "entry"
-module = "Conv"
+module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 3
