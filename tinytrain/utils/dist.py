@@ -141,7 +141,7 @@ class AllGatherWithGradFunc(torch.autograd.Function):
             _op.wait()
 
         grad_out *= len(grad_list)  # cooperate with distributed loss function
-        return (grad_out, *[None for _ in range(len(grad_list))])
+        return grad_out, *[None for _ in range(len(grad_list))]
 
 
 def all_gather_with_grad(tensor, *gather_list):

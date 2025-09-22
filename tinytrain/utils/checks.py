@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 
 from tinytrain.global_var import ROOT, IMG_FORMATS, VID_FORMATS
 from tinytrain.utils import LOGGER
+from tinytrain.utils.segment_utils import segments2boxes, resample_segments
 
 
 def exif_size(img: Image.Image) -> tuple[int, int]:
@@ -260,40 +261,56 @@ def check_image(img_file: Path, *args):
 
 def check_image_and_label(img_file: Path | str, label_paths: Path | list[Path]):
     """
-    检查图片及对应标签是否存在；若标签不存在/空，则标记为背景图。
+    同时检查图像与对应标签是否存在。
+    若标签文件缺失或大小为 0，则把该图像标记为背景图（is_bg=True）。
 
-    Args:
-        img_file: 图片路径
-        label_paths: 标签目录或目录列表
+    参数
+    ----
+    img_file : Path | str
+        单张图像路径。
+    label_paths : Path | list[Path]
+        标签目录或目录列表，函数会依次查找 `{img_stem}.txt`。
 
-    Returns:
+    返回
+    ----
+    tuple
         (bg_img_file, img_file, label_file, is_bg, good, bad, message)
+        bg_img_file : str/None   若被标记为背景图，则返回原图路径；否则 None
+        img_file    : str        校验后的图像路径（check_image 可能修正后缀）
+        label_file  : Path/None  实际找到的标签路径；未找到则为 None
+        is_bg       : bool       是否被判定为背景图
+        good        : int        图像检查通过计数（0/1）
+        bad         : int        图像检查失败计数（0/1）
+        message     : str        背景图原因或其它警告信息；正常为空串
     """
     # 初始化返回值
     bg_img_file, is_bg, good, bad, message, label_file = None, False, 0, 0, "", None
 
-    # 验证图片
+    # 1. 先做图像级检查（good/bad 计数）
     img_file, good, bad, message, *_ = check_image(img_file)
 
-    # 获取图像文件的名称（不带扩展名）
+    # 2. 构造标签文件名
     img_stem = Path(img_file).stem
     label_file_name = f"{img_stem}.txt"
 
-    # 遍历所有可能的标签路径
+    # 3. 统一成列表遍历
     if isinstance(label_paths, list):
         label_paths = [Path(path) for path in label_paths]
     else:
         label_paths = [Path(label_paths)]
 
+    # 4. 只要任一目录下找到标签就停止
     for label_path in label_paths:
         label_file = label_path / label_file_name
         if label_file.exists():
+            # 4.1 文件存在但空 → 背景图
             if os.path.getsize(label_file) == 0:
                 is_bg = True
                 bg_img_file = img_file
                 message = f"Dataset WARNING ⚠️ {img_file}: {label_file} has zero size and has been set as the background image."
             break
         else:
+            # 4.2 文件不存在 → 背景图
             is_bg = True
             bg_img_file = img_file
             message = f"Dataset WARNING ⚠️ {img_file}: {label_file} does not exist and has been set as the background image."
@@ -304,15 +321,27 @@ def check_image_and_label(img_file: Path | str, label_paths: Path | list[Path]):
 
 def check_detect_yolo_label(img_file, npy_file=None, label_file=None):
     """
-    验证 YOLO 目标检测标签文件合法性：每行 5 个元素，cls ≥ 0，xywh ∈ [0,1]。
+    验证 YOLO 目标检测格式标签文件（*.txt）合法性：
+        每行 5 列：cls, x_center, y_center, width, height
+        cls ≥ 0 且 xywh 均归一化到 [0,1]。
 
-    Args:
-        img_file:   图像路径
-        npy_file:   NumPy 文件路径（可选）
-        label_file: txt 标签路径（可选）
+    参数
+    ----
+    img_file   : str      图像路径，仅透传返回
+    npy_file   : str/None 附加 .npy 路径，仅透传返回
+    label_file : str/None 待校验的 YOLO 标签路径；为 None 时返回空数组
 
-    Returns:
+    返回
+    ----
+    tuple
         (img_file, npy_file, message, cls, boxes)
+        message : str/None   空文件提示；非法内容直接抛 ValueError
+        cls     : ndarray(N,)      类别 id
+        boxes   : ndarray(N,4)     归一化 xywh
+
+    异常
+    ----
+    ValueError : 行列数不符、类别为负、坐标越界
     """
     message = None
     labels_arr = np.zeros((0, 5), dtype=np.float32)  # 初始化为空数组
@@ -321,7 +350,7 @@ def check_detect_yolo_label(img_file, npy_file=None, label_file=None):
         try:
             # 读取标签文件
             with open(label_file, "r") as f:
-                lb = [x.split() for x in f.read().strip().splitlines() if x]
+                lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
 
             # 检查标签文件是否为空
             if len(lb) == 0:
@@ -351,155 +380,28 @@ def check_detect_yolo_label(img_file, npy_file=None, label_file=None):
     return img_file, npy_file, message, cls, boxes
 
 
-def check_detect_voc_label(img_file: str, npy_file: str = None, label_file: str = None):
-    """
-    验证 PASCAL VOC 目标检测标签文件合法性：
-        每框包含：cls≥0，xyxy 有效且位于图像内。
-    返回的 boxes 为 [xmin, ymin, xmax, ymax]（绝对像素）。
-
-    Args / Returns 同 check_detect_yolo_label
-    """
-    import xml.etree.ElementTree as ET
-    message = None
-    labels_arr = np.zeros((0, 5), dtype=np.float32)
-
-    if label_file is None:
-        return img_file, npy_file, message, labels_arr[:, 0], labels_arr[:, 1:]
-
-    if not os.path.exists(label_file):
-        raise ValueError(f"VOC label file not found: {label_file}")
-
-    try:
-        tree = ET.parse(label_file)
-        root = tree.getroot()
-
-        # 拿图像宽高
-        size = root.find("size")
-        img_w = int(size.findtext("width", 0)) if size is not None else 0
-        img_h = int(size.findtext("height", 0)) if size is not None else 0
-        if img_w == 0 or img_h == 0:
-            with Image.open(img_file) as im:
-                img_w, img_h = im.size
-
-        objs = root.findall("object")
-        if not objs:
-            message = f"VOC label file: {label_file} has zero objects."
-        else:
-            records = []
-            for obj in objs:
-                name = obj.findtext("name")
-                if name is None:
-                    raise ValueError("Missing <name> in VOC object")
-                bndbox = obj.find("bndbox")
-                if bndbox is None:
-                    raise ValueError("Missing <bndbox> in VOC object")
-
-                xmin = float(bndbox.findtext("xmin", 0))
-                ymin = float(bndbox.findtext("ymin", 0))
-                xmax = float(bndbox.findtext("xmax", 0))
-                ymax = float(bndbox.findtext("ymax", 0))
-
-                if not (0 <= xmin <= xmax <= img_w and 0 <= ymin <= ymax <= img_h):
-                    raise ValueError(
-                        f"Invalid bbox in VOC label: ({xmin},{ymin},{xmax},{ymax}) "
-                        f"with image size ({img_w},{img_h})"
-                    )
-
-                cls_id = int(name)  # 若 name 是字符串请先做映射
-                if cls_id < 0:
-                    raise ValueError(f"Negative class id: {cls_id}")
-
-                records.append([cls_id, xmin, ymin, xmax, ymax])
-
-            labels_arr = np.array(records, dtype=np.float32)
-
-    except ET.ParseError as e:
-        raise ValueError(f"VOC label file: {label_file} XML parse error: {e}")
-
-    cls = labels_arr[:, 0]
-    boxes = labels_arr[:, 1:]  # (N,4) [xmin,ymin,xmax,ymax]
-    return img_file, npy_file, message, cls, boxes
-
-
-def check_detect_coco_label(img_file: str, npy_file: str = None, label_file: str = None):
-    """
-    验证 COCO 目标检测标签文件合法性：
-        每框包含：cls≥0，bbox[x,y,w,h] 绝对像素坐标。
-    返回的 boxes 为 [x, y, w, h]（绝对像素）。
-
-    Args / Returns 同 check_detect_yolo_label
-    """
-    import json
-    message = None
-    labels_arr = np.zeros((0, 5), dtype=np.float32)
-
-    if label_file is None:
-        return img_file, npy_file, message, labels_arr[:, 0], labels_arr[:, 1:]
-
-    if not os.path.exists(label_file):
-        raise ValueError(f"COCO label file not found: {label_file}")
-
-    try:
-        with open(label_file, "r", encoding="utf-8") as f:
-            coco = json.load(f)
-
-        # 建立 img_id → (w,h) 映射
-        id2size = {img["id"]: (img["width"], img["height"])
-                   for img in coco.get("images", [])}
-
-        # 从图片路径反推文件名，再匹配 image_id
-        img_name = os.path.basename(img_file)
-        img_entry = next((img for img in coco.get("images", [])
-                          if img["file_name"] == img_name), None)
-        if img_entry is None:
-            raise ValueError(f"Image {img_name} not found in COCO json")
-        img_id = img_entry["id"]
-        img_w, img_h = img_entry["width"], img_entry["height"]
-
-        anns = [ann for ann in coco.get("annotations", []) if ann["image_id"] == img_id]
-        if not anns:
-            message = f"COCO label file: {label_file} has zero objects for image {img_name}."
-        else:
-            records = []
-            for ann in anns:
-                cls_id = int(ann["category_id"])
-                if cls_id < 0:
-                    raise ValueError(f"Negative class id: {cls_id}")
-
-                x, y, w, h = ann["bbox"]
-                x, y, w, h = float(x), float(y), float(w), float(h)
-                if w <= 0 or h <= 0:
-                    raise ValueError(f"Invalid bbox size (w,h)=({w},{h})")
-                if not (0 <= x <= img_w and 0 <= y <= img_h and
-                        0 <= x + w <= img_w and 0 <= y + h <= img_h):
-                    raise ValueError(
-                        f"Invalid bbox in COCO label: ({x},{y},{w},{h}) "
-                        f"with image size ({img_w},{img_h})"
-                    )
-
-                records.append([cls_id, x, y, w, h])
-
-            labels_arr = np.array(records, dtype=np.float32)
-
-    except json.JSONDecodeError as e:
-        raise ValueError(f"COCO label file: {label_file} JSON decode error: {e}")
-
-    cls = labels_arr[:, 0]
-    boxes = labels_arr[:, 1:]  # (N,4) [x,y,w,h] 绝对像素
-    return img_file, npy_file, message, cls, boxes
-
-
 def check_pose_yolo_label(img_file, keypoint_shape, npy_file=None, label_file=None):
     """
-    验证 YOLO 姿态估计标签文件合法性：每行 5 个元素，cls ≥ 0，xywh ∈ [0,1]。
+    验证 YOLO 姿态估计格式标签文件合法性：
+        每行 5 + keypoint_num*keypoint_dim 个数值：
+        cls, xywh, 关键点坐标(可选 visibility)
+        cls ≥ 0，xywh ∈ [0,1]，关键点坐标按需补全 visibility。
 
-    Args:
-        img_file:   图像路径
-        npy_file:   NumPy 文件路径（可选）
-        label_file: txt 标签路径（可选）
+    参数
+    ----
+    img_file      : str            图像路径，仅透传返回
+    keypoint_shape: tuple(int,int) (关键点数量, 维度) 如 (17,2)
+    npy_file      : str/None       附加 .npy 路径，仅透传返回
+    label_file    : str/None       待校验标签路径；为 None 时返回空数组
 
-    Returns:
-        (img_file, npy_file, message, cls, boxes, key_points)
+    返回
+    ----
+    tuple
+        (img_file, npy_file, message, cls, boxes, keypoints)
+        message   : str/None   空文件提示；非法内容直接抛 ValueError
+        cls       : ndarray(N,)
+        boxes     : ndarray(N,4)        归一化 xywh
+        keypoints : ndarray(N,n_kpt,3)  最后一维为 visibility（自动补全）
     """
     keypoint_num = keypoint_shape[0]
     keypoint_dim = keypoint_shape[1]
@@ -512,7 +414,7 @@ def check_pose_yolo_label(img_file, keypoint_shape, npy_file=None, label_file=No
         try:
             # 读取标签文件
             with open(label_file, "r") as f:
-                lb = [x.split() for x in f.read().strip().splitlines() if x]
+                lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
 
             # 检查标签文件是否为空
             if len(lb) == 0:
@@ -526,6 +428,8 @@ def check_pose_yolo_label(img_file, keypoint_shape, npy_file=None, label_file=No
                 lb = np.array(lb, dtype=np.float32)
                 labels_arr = lb[:, :5]
                 keypoints = lb[:, 5:].reshape(-1, keypoint_num, keypoint_dim)
+
+                # 若只有 (x,y) 无 visibility，则根据坐标是否<0 生成 visibility
                 if keypoint_dim == 2:
                     # 如果关键点是2维的，没有visibility值，就补上这个值
                     kpt_mask = np.where((keypoints[..., 0] < 0) | (keypoints[..., 1] < 0), 0.0, 1.0).astype(np.float32)
@@ -546,3 +450,85 @@ def check_pose_yolo_label(img_file, keypoint_shape, npy_file=None, label_file=No
     boxes = labels_arr[:, 1:]
 
     return img_file, npy_file, message, cls, boxes, keypoints
+
+
+def check_segment_yolo_label(img_file, segment_resamples=1000, npy_file=None, label_file=None):
+    """
+    验证 YOLO 分割标签文件合法性，并返回图像路径、npy 路径、异常信息、类别数组、
+    归一化边界框数组以及重采样后的分割点。
+
+    校验规则：
+        1. 标签文件不能为空；
+        2. 每行至少 7 个数字（cls + 至少 3 组 x y 坐标，即 1 + 3*2 = 7）；
+        3. 类别必须为非负整数；
+        4. 所有坐标值必须在 [0,1] 区间内。
+
+    参数
+    ----
+    img_file : str
+        图像文件路径，仅作透传返回，函数内不做任何处理。
+    segment_resamples : int, default 1000
+        对每条多边形分割点进行重采样的点数。
+    npy_file : str, optional
+        对应的 .npy 文件路径，仅作透传返回，函数内不做任何处理。
+    label_file : str, optional
+        YOLO 分割标签文件（*.txt），若提供则进行合法性检查。
+
+    返回
+    ----
+    tuple
+        (img_file, npy_file, message, cls, boxes, segments)
+        img_file  : str               输入的图像路径
+        npy_file  : str/None          输入的 npy 路径
+        message   : str/None          若标签文件为空，给出提示；否则为 None
+        cls       : ndarray(float32)  形状 (N,)   每条框的类别
+        boxes     : ndarray(float32)  形状 (N,4)  每条框的归一化 xywh
+        segments  : ndarray(float32)  形状 (N, segment_resamples, 2)
+                                      重采样后的多边形坐标，若输入无分割则返回空数组
+    """
+    message = None
+    labels_arr = np.zeros((0, 5), dtype=np.float32)  # 预留 (cls, xywh)
+    segments = []  # 原始分割点列表
+
+    if label_file is not None:
+        # 1. 读取并解析标签文件
+        with open(label_file, "r") as f:
+            lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
+
+        # 2. 空文件检查
+        if len(lb) == 0:
+            message = f"Label file: {label_file} is an empty txt file!"
+        else:
+            # 3. 每行至少 7 个数值（cls + 3 组 x y）
+            if any(len(x) < 7 for x in lb):
+                raise ValueError(f"Label file: {label_file} has a line that does not contain 7 elements: cls and 3 pair xy points. "
+                                 f"Please correct the label file.")
+
+            # 4. 提取类别
+            classes = np.array([x[0] for x in lb], dtype=np.float32)
+
+            # 5. 提取原始多边形分割点
+            segments = [np.array(x[1:], dtype=np.float32).reshape(-1, 2) for x in lb]
+
+            # 6. 使用多边形构建box，并转换成 (cls, xywh) 格式
+            labels_arr = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
+
+            # 7. 类别非负检查
+            if not np.all(labels_arr[:, 0] >= 0):
+                raise ValueError(f"Label file: {label_file} contains invalid class index. Class index must be a non-negative integer.")
+
+            # 8. 坐标 [0,1] 检查
+            if not np.all((labels_arr[:, 1:] >= 0) & (labels_arr[:, 1:] <= 1)):
+                raise ValueError(f"Label file: {label_file} contains invalid bounding box coordinates. Coordinates must be within the range [0, 1].")
+
+    # 9. 拆分结果
+    cls = labels_arr[:, 0]
+    boxes = labels_arr[:, 1:]
+
+    # 10. 对分割点做重采样
+    if len(segments) > 0:
+        segments = np.stack(resample_segments(segments, n=segment_resamples), axis=0)
+    else:
+        segments = np.zeros((0, segment_resamples, 2), dtype=np.float32)
+
+    return img_file, npy_file, message, cls, boxes, segments

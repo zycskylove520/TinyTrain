@@ -1,19 +1,19 @@
 import torch
 
 from tinytrain.cfg.config_manager import ConfigManager
-from tinytrain.data.data_format import BaseBatchDataInfo
-from tinytrain.loss.loss import YOLOV8PoseLoss
+from tinytrain.data.data_format import SegmentBatchDataInfo
+from tinytrain.loss import YOLOV8SegmentLoss
 from tinytrain.models.yolo.yolo_model import YOLOModel
 
 
-class YOLOPoseModel(YOLOModel):
+class YOLOSegmentModel(YOLOModel):
     def __init__(self, config_manager: ConfigManager, device, *args, **kwargs):
         self.reg_max = None
         super().__init__(config_manager=config_manager, device=device, *args, **kwargs)
         self.initialize_weights()
 
         input_channel = config_manager.model["network"][0]["args"]["in_channels"]
-        m = self.module_list[-1]  # YOLOPose()
+        m = self.module_list[-1]  # YOLOSegment()
 
         # 初始化 stride
         self.strides = m.strides = self._initialize_stride(input_channel)
@@ -34,20 +34,19 @@ class YOLOPoseModel(YOLOModel):
         return stride_tensor
 
     def init_criterion(self):
-        return YOLOV8PoseLoss(nc=self.config_manager.dataset["nc"],
-                              strides=self.strides,
-                              reg_max=self.reg_max,
-                              imgsz=self.config_manager.dataset["img_size"],
-                              device=self.device,
-                              kpt_shape=self.config_manager.dataset["keypoint_shape"],
-                              cls_gain=self.config_manager.loss["cls_loss_gain"],
-                              box_gain=self.config_manager.loss["box_loss_gain"],
-                              dfl_gain=self.config_manager.loss["dfl_loss_gain"],
-                              pose_gain=self.config_manager.loss["pose_loss_gain"],
-                              kobj_gain=self.config_manager.loss["kobj_loss_gain"],
-                              )
+        return YOLOV8SegmentLoss(nc=self.config_manager.dataset["nc"],
+                                 strides=self.strides,
+                                 reg_max=self.reg_max,
+                                 imgsz=self.config_manager.dataset["img_size"],
+                                 device=self.device,
+                                 overlap_mask=self.config_manager.dataset["overlap_mask"],
+                                 cls_gain=self.config_manager.loss["cls_loss_gain"],
+                                 box_gain=self.config_manager.loss["box_loss_gain"],
+                                 dfl_gain=self.config_manager.loss["dfl_loss_gain"],
+                                 seg_gain=self.config_manager.loss["seg_loss_gain"]
+                                 )
 
-    def loss(self, preds: list[torch.Tensor], batch_samples: BaseBatchDataInfo) -> tuple[float, dict]:
+    def loss(self, preds: list[torch.Tensor], batch_samples: SegmentBatchDataInfo) -> tuple[float, dict]:
         return self.criterion(preds[0], batch_samples)
 
     def custom_parse_model(self, level, module_info):
@@ -64,7 +63,6 @@ class YOLOPoseModel(YOLOModel):
             if scale in {"m", "l", "x"}:
                 module_info["args"]["c3k"] = True
 
-        if module_info["module"] == "YOLOPose":
+        if module_info["module"] == "YOLOSegment":
             module_info["args"]["from_channels"] = [int(i * width) for i in module_info["args"]["from_channels"]]
-            module_info["args"]["kpt_shape"] = self.config_manager.dataset["keypoint_shape"]
             self.reg_max = module_info["args"].get("reg_max", 16)

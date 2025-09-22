@@ -169,7 +169,6 @@ type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 6]
-args.dimension = 1
 
 [[network]]
 # 13
@@ -197,7 +196,6 @@ type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 4]
-args.dimension = 1
 
 [[network]]
 # 16 (P3/8-small)
@@ -227,7 +225,6 @@ type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 13]
-args.dimension = 1
 
 [[network]]
 # 19 (P4/16-medium)
@@ -257,7 +254,6 @@ type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 10]
-args.dimension = 1
 
 [[network]]
 # 22 (P5/32-large)

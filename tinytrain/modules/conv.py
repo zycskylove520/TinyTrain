@@ -30,10 +30,9 @@ class CBA(nn.Module):
         elif isinstance(act, nn.Module):
             self.act = act
         elif act is str:
-            self.act = BaseModel._get_layer(act)
+            self.act = BaseModel.get_layer(act)
         else:
             self.act = nn.Identity()
-        # self.act = self.default_act if act is True else BaseModel._get_layer(act) if isinstance(act, nn.Module) else nn.Identity()
 
     def forward(self, x):
         """Apply convolution, batch normalization and activation to input tensor."""

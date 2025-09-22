@@ -104,21 +104,24 @@ class YOLOModel(BaseModel):
             _from: list = _info["from"]
             _module: str = _info["module"]
             _repeat: int = _info["repeat"]
+            _allow_repeat: bool = _info.get("allow_repeat", False)  # 针对那些repeat次数为1，但希望能通过width进行repeat的模块
             _args: dict = _info.get("args", {})
 
             # check network
             assert _type in {"entry", "flow", "head"}, f"level_{level}: {_module} 'type' must be 'entry', 'flow', or 'head'"
             assert len(_from) > 0, f"level_{level}: {_module} 'from' list length must greater than 0!"
             assert _repeat > 0, "level_{level}: {_module} 'repeat' must greater than 0!"
+            assert not ask_set or level > max(ask_set), f"layer_{level} depends on future layer (max dependency: {max(ask_set)})."
 
             # 限制第0层必须为entry层，且entry层只能出现在第0层
             if level == 0:
                 assert _type == "entry", f"level_0: {_module} 'type' must be 'entry'"
-                _from = [-1]
-            else:
-                assert _type != "entry", f"level_{level}: {_module} 'type' cannot be 'entry'"
+                if not (len(_from) == 1 and _from[0] == -1):
+                    LOGGER.warning(f"level_0 'from' is not [-1], auto-correct to [-1].")
+                    _from = [-1]
 
             if _type == "entry":  # entry层
+                assert -1 in _from, f"entry layer_{level} must depend on from index: -1."
                 # assert "in_channels" in _args, f"level_{level}: {_module} 'in_channels' must exist!"
                 # set model entry channels
                 if _args.get("in_channels", None) is not None:
@@ -139,7 +142,7 @@ class YOLOModel(BaseModel):
             if _type == "flow":
                 if _args.get("in_channels", None) is not None and _args.get("out_channels", None) is not None:
                     if _args["in_channels"] == _args["out_channels"]:
-                        _repeat = max(round(_repeat * depth), 1) if _repeat > 1 else _repeat
+                        _repeat = max(round(_repeat * depth), 1) if _repeat > 1 or _allow_repeat else _repeat
                     else:
                         if _repeat > 1:
                             _repeat = 1
@@ -165,13 +168,8 @@ class YOLOModel(BaseModel):
             self.custom_parse_model(level, _info)
 
             # 构造网络模块
-            try:
-                layer = self._get_layer(_module)
-                layer.config_manager = self.config_manager
-            except (NameError, AttributeError) as e:
-                raise ValueError(f"Failed to get module {_module}: {e}")
-
-            layer = nn.Sequential(*(layer(**_args) for _ in range(_repeat))) if _repeat > 1 else layer(**_args)
+            _layer = self.get_layer(_module)
+            layer = nn.Sequential(*(_layer(**_args) for _ in range(_repeat))) if _repeat > 1 else _layer(**_args)
             layers.append(layer)
 
             record_list.append({
@@ -185,8 +183,7 @@ class YOLOModel(BaseModel):
             ask_set.update([f for f in _from if f != -1])
 
             log_info.append(_info)
-
-        return layers, record_list, ask_set, log_info
+        return layers, record_list, sorted(ask_set), log_info
 
     def _model_log(self):
         """

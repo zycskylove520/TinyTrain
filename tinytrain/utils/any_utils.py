@@ -185,8 +185,7 @@ def _get_free_shm_mb() -> float:
     return shutil.disk_usage(shm_path).free / 1024 / 1024
 
 
-def maybe_limit_num_workers(requested_workers: int,
-                            safe_threshold_mb: int = 2048) -> int:
+def maybe_limit_num_workers(requested_workers: int, safe_threshold_mb: int = 2048) -> int:
     """
     根据 /dev/shm 剩余空间决定是否要降低 num_workers。
     如果可用共享内存 < safe_threshold_mb，就把 num_workers 降到 0。

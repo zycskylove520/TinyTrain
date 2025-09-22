@@ -1,8 +1,8 @@
-# ======================================
-# YOLO目标检测模型: YOLOv11-pose 模型配置文件
-# ======================================
+# =====================================
+# YOLO实例分割模型: YOLOv11-seg 模型配置文件
+# =====================================
 
-name="YOLOv11-pose"
+name = "YOLOv11-seg"
 scale = "n"
 
 # model_config compound scaling constants
@@ -31,7 +31,7 @@ depth = 1.00
 width = 1.50
 summary = "655 layers, 111203067 parameters, 111203067 gradients, 246.97 GFLOPs, for a 640×640 input."
 
-# YOLO11n-det backbone
+# ----------------------------backbone---------------------------------
 [[network]]
 # 0-P1/2
 type = "entry"
@@ -55,6 +55,7 @@ args.kernel_size = 3
 args.stride = 2
 
 [[network]]
+# 2
 type = "flow"
 module = "C3k2"
 repeat = 1
@@ -65,7 +66,6 @@ args.n = 2
 args.c3k = false
 args.hidden_channels = 0.25
 
-# ----------------------------backbone---------------------------------
 [[network]]
 # 3-P3/8
 type = "flow"
@@ -78,6 +78,7 @@ args.kernel_size = 3
 args.stride = 2
 
 [[network]]
+# 4
 type = "flow"
 module = "C3k2"
 repeat = 1
@@ -89,8 +90,8 @@ args.c3k = false
 args.hidden_channels = 0.25
 
 [[network]]
-type = "flow"
 # 5-P4/16
+type = "flow"
 module = "CBA"
 repeat = 1
 from = [-1]
@@ -100,6 +101,7 @@ args.kernel_size = 3
 args.stride = 2
 
 [[network]]
+# 6
 type = "flow"
 module = "C3k2"
 repeat = 1
@@ -110,8 +112,8 @@ args.n = 2
 args.c3k = true
 
 [[network]]
-type = "flow"
 # 7-P5/32
+type = "flow"
 module = "CBA"
 repeat = 1
 from = [-1]
@@ -121,6 +123,7 @@ args.kernel_size = 3
 args.stride = 2
 
 [[network]]
+# 8
 type = "flow"
 module = "C3k2"
 repeat = 1
@@ -152,6 +155,7 @@ args.n = 2
 
 # ----------------------------------head--------------------------------------
 [[network]]
+# 11
 type = "flow"
 module = "torch.nn.Upsample"
 repeat = 1
@@ -160,13 +164,14 @@ args.scale_factor = 2
 args.mode = "nearest"
 
 [[network]]
+# 12
 type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 6]
-args.dimension = 1
 
 [[network]]
+# 13
 type = "flow"
 module = "C3k2"
 repeat = 1
@@ -177,6 +182,7 @@ args.n = 2
 args.c3k = false
 
 [[network]]
+# 14
 type = "flow"
 module = "torch.nn.Upsample"
 repeat = 1
@@ -185,13 +191,14 @@ args.scale_factor = 2
 args.mode = "nearest"
 
 [[network]]
+# 15  cat backbone P3
 type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 4]
-args.dimension = 1
 
 [[network]]
+# 16 (P3/8-small)
 type = "flow"
 module = "C3k2"
 repeat = 1
@@ -202,6 +209,7 @@ args.n = 2
 args.c3k = false
 
 [[network]]
+# 17
 type = "flow"
 module = "CBA"
 repeat = 1
@@ -212,13 +220,14 @@ args.kernel_size = 3
 args.stride = 2
 
 [[network]]
+# 18 cat head P4
 type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 13]
-args.dimension = 1
 
 [[network]]
+# 19 (P4/16-medium)
 type = "flow"
 module = "C3k2"
 repeat = 1
@@ -229,6 +238,7 @@ args.n = 2
 args.c3k = false
 
 [[network]]
+# 20
 type = "flow"
 module = "CBA"
 repeat = 1
@@ -239,13 +249,14 @@ args.kernel_size = 3
 args.stride = 2
 
 [[network]]
+# 21 cat head P5
 type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 10]
-args.dimension = 1
 
 [[network]]
+# 22 (P5/32-large)
 type = "flow"
 module = "C3k2"
 repeat = 1
@@ -256,14 +267,16 @@ args.n = 2
 args.c3k = false
 
 [[network]]
+# 23
 type = "flow"
 module = "Combine"
 repeat = 1
 from = [16, 19, 22]
 
 [[network]]
+# 24 Segment(P3, P4, P5)
 type = "head"
-module = "YOLOPose"
+module = "YOLOSegment"
 repeat = 1
 from = [-1]
 args.nc = -1

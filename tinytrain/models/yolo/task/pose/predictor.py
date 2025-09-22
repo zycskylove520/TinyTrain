@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import TYPE_CHECKING
 
-from tinytrain.data.augment_ops import DynamicFilling
 from tinytrain.data.data_format import ImgDataInfo, PoseDataInfo
 from tinytrain.engine.predictor import BasePredictor
 from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry
@@ -16,9 +14,9 @@ if TYPE_CHECKING:
 
 class YOLOPosePredictor(BasePredictor):
     """
-    检测预测器（兼容通用 BasePredictor）
+    YOLO姿态估计预测器
     输入：图片/视频/目录等
-    输出：DetectDataInfo（含 img + bboxes）
+    输出：PoseDataInfo（含 img + bboxes + keypoints）
     """
 
     def __init__(self,
@@ -97,7 +95,7 @@ class YOLOPosePredictor(BasePredictor):
             decode_keypoints[i, :, 1] = keypoints[i, :, 1] / target_h * origin_h
             decode_keypoints[i, :, 2] = keypoints[i, :, 2]
 
-        # 构建 DetectDataInfo
+        # 构建 PoseDataInfo
         pose_info = PoseDataInfo(
             **data_info.__dict__,
             scores=scores,

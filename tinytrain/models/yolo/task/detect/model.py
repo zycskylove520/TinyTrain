@@ -17,6 +17,7 @@ class YOLODetectionModel(YOLOModel):
 
         # 初始化 strides
         self.strides = m.strides = self._initialize_stride(input_channel)
+        m.bias_init(self.strides)
 
     def _initialize_stride(self, input_channel):
         """

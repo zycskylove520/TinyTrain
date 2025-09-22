@@ -88,6 +88,10 @@ from tinytrain.models.yolo.task.pose import (
     YOLOPosePredictor,
     YOLOPoseTuner
 )
+from tinytrain.models.yolo.task.segment import (
+    YOLOSegmentModel,
+    YOLOSegmentTrainer
+)
 from tinytrain.server.export_server import BaseOnnxExportServer
 from tinytrain.server.inference_server import BaseOnnxInferenceServer
 from tinytrain.server.track_server import ByteTrackServer
@@ -127,3 +131,7 @@ class YOLOCore(Core):
         TTEngineRegistry.register(cls, "pose", "exporter")(BaseExporter)
         TTEngineRegistry.register(cls, "pose", "export_server", "onnx")(BaseOnnxExportServer)
         TTEngineRegistry.register(cls, "pose", "track_server", "bytetrack")(ByteTrackServer)
+
+        # ---------- segment ----------
+        TTEngineRegistry.register(cls, "segment", "model")(YOLOSegmentModel)
+        TTEngineRegistry.register(cls, "segment", "trainer")(YOLOSegmentTrainer)

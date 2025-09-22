@@ -13,6 +13,11 @@ class Concat(nn.Module):
     Args:
         dimension (int): The dimension along which the tensors will be concatenated. Default is 1.
 
+    Raises:
+        TypeError: If ``x`` is not an iterable of ``torch.Tensor``.
+        ValueError: If ``x`` is empty or tensor shapes mismatch
+                     (non-concat dimensions must be identical).
+
     Example:
         >>> concat_module = Concat(dimension=1)
         >>> tensor1 = torch.randn(2, 3)
@@ -22,74 +27,123 @@ class Concat(nn.Module):
         torch.Size([2, 7])
     """
 
-    def __init__(self, dimension: int = 1):
-        """
-        Initializes the Concat module.
-
-        Args:
-            dimension (int): The dimension along which the tensors will be concatenated.
-        """
+    def __init__(self, dim: int = 1):
         super().__init__()
-        self.d = dimension
+        self.d = dim
 
-    def forward(self, x: list[Tensor]) -> Tensor:
-        """
-        Concatenates a list of tensors along the specified dimension.
+    def forward(self, x: list[Tensor] | tuple[Tensor, ...]) -> Tensor:
+        """Perform concatenation.
 
         Args:
-            x (List[Tensor]): A list of tensors to be concatenated.
+            x: Sequence (list or tuple) of tensors to concatenate.
 
         Returns:
-            Tensor: The concatenated tensor.
-
-        Raises:
-            TypeError: If the input is not a list of tensors.
-            ValueError: If the input list is empty.
+            Concatenated tensor.
         """
-        # Check if the input is a list of tensors
-        if not isinstance(x, list) or not all(isinstance(item, torch.Tensor) for item in x):
-            raise TypeError("Input must be a list of tensors.")
-
-        # Check if the input list is empty
-        if len(x) == 0:
-            raise ValueError("Input list cannot be empty.")
+        if not x:  # 空序列
+            raise ValueError("Concat needs at least one tensor.")
+        if not all(isinstance(t, Tensor) for t in x):
+            raise TypeError("All elements must be torch.Tensor.")
 
         return torch.cat(x, dim=self.d)
 
 
 @TTModuleRegistry.register
 class Add(nn.Module):
-    """
-    将任意多个输入tensor进行element-wise加法操作
+    """Element-wise addition of an arbitrary number of tensors.
+
+    Raises:
+        TypeError: If ``x`` is not an iterable of ``torch.Tensor``.
+        ValueError: If ``x`` is empty or tensor shapes do not match.
+
+    Example::
+        >>> add = Add()
+        >>> a = torch.randn(2, 3)
+        >>> b = torch.randn(2, 3)
+        >>> out = add([a, b])
+        >>> out.shape
+        torch.Size([2, 3])
     """
 
     def __init__(self):
         super().__init__()
 
-    def forward(self, x: list[Tensor]) -> Tensor:
+    def forward(self, x: list[Tensor] | tuple[Tensor, ...]) -> Tensor:
+        """Perform element-wise addition.
+
+        Args:
+            x: Sequence (list or tuple) of tensors to add.
+
+        Returns:
+            Sum tensor.
+        """
+        if not x:
+            raise ValueError("Add needs at least one tensor.")
+        if not all(isinstance(t, Tensor) for t in x):
+            raise TypeError("All elements must be torch.Tensor.")
+
         return torch.sum(torch.stack(x, dim=0), dim=0)
 
 
 @TTModuleRegistry.register
 class Combine(nn.Module):
-    """
-    将任意多个输入tensor作为列表返回
+    """Identity module that returns the input tensor list unchanged.
+
+    Typically used as a placeholder to keep the graph structure when
+    multiple tensors need to be passed downstream as a list.
+
+    Raises:
+        TypeError: If any element of ``x`` is not a ``torch.Tensor``.
+
+    Example::
+        >>> combine = Combine()
+        >>> tensors = [torch.randn(2, 3), torch.randn(2, 4)]
+        >>> out = combine(tensors)
+        >>> len(out), out[0].shape, out[1].shape
+        (2, torch.Size([2, 3]), torch.Size([2, 4]))
     """
 
     def __init__(self):
         super().__init__()
 
-    def forward(self, x: list[Tensor]) -> list[Tensor]:
-        # 检查输入是否为tensor列表
-        if not all(isinstance(item, torch.Tensor) for item in x):
-            raise TypeError("All elements in the input list must be torch.Tensor.")
-        return x
+    def forward(self, x: list[Tensor] | tuple[Tensor, ...]) -> list[Tensor]:
+        """Return the input sequence of tensors as a list.
+
+        Args:
+            x: Sequence (list or tuple) of tensors.
+
+        Returns:
+            The same sequence converted to a list.
+        """
+        if not all(isinstance(t, Tensor) for t in x):
+            raise TypeError("All elements must be torch.Tensor.")
+        return list(x)
 
 
 @TTModuleRegistry.register
 class Flatten(nn.Module):
+    """Flatten all dimensions except the batch (first) dimension.
+
+    Equivalent to ``x.view(x.size(0), -1)``.
+
+    Example::
+        >>> flat = Flatten()
+        >>> x = torch.randn(3, 4, 5, 6)
+        >>> out = flat(x)
+        >>> out.shape
+        torch.Size([3, 120])
+    """
+
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
-        return x.reshape(x.shape[0], -1)
+    def forward(self, x: Tensor) -> Tensor:
+        """Flatten the tensor.
+
+        Args:
+            x: Input tensor of any shape.
+
+        Returns:
+            2-D tensor with shape ``(x.size(0), -1)``.
+        """
+        return x.flatten(start_dim=1)

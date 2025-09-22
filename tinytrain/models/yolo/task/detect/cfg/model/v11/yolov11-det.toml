@@ -79,6 +79,7 @@ args.kernel_size = 3
 args.stride = 2
 
 [[network]]
+# 4
 type = "flow"
 module = "C3k2"
 repeat = 1
@@ -90,8 +91,8 @@ args.c3k = false
 args.hidden_channels = 0.25
 
 [[network]]
-type = "flow"
 # 5-P4/16
+type = "flow"
 module = "CBA"
 repeat = 1
 from = [-1]
@@ -112,8 +113,8 @@ args.n = 2
 args.c3k = true
 
 [[network]]
-type = "flow"
 # 7-P5/32
+type = "flow"
 module = "CBA"
 repeat = 1
 from = [-1]
@@ -164,12 +165,11 @@ args.scale_factor = 2
 args.mode = "nearest"
 
 [[network]]
-# 12 cat backbone P4
+# 12
 type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 6]
-args.dimension = 1
 
 [[network]]
 # 13
@@ -192,12 +192,11 @@ args.scale_factor = 2
 args.mode = "nearest"
 
 [[network]]
-# 15 cat backbone P3
+# 15  cat backbone P3
 type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 4]
-args.dimension = 1
 
 [[network]]
 # 16 (P3/8-small)
@@ -227,7 +226,6 @@ type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 13]
-args.dimension = 1
 
 [[network]]
 # 19 (P4/16-medium)
@@ -257,7 +255,6 @@ type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 10]
-args.dimension = 1
 
 [[network]]
 # 22 (P5/32-large)
@@ -268,7 +265,7 @@ from = [-1]
 args.in_channels = 1536
 args.out_channels = 1024
 args.n = 2
-args.c3k = true
+args.c3k = false
 
 [[network]]
 # 23

@@ -2,7 +2,8 @@ import numpy as np
 
 from tinytrain.data.data_format import PoseBatchDataInfo, PoseDataInfo
 from tinytrain.global_var import RANK
-from tinytrain.metrics.detect_metrics import LabelInfo
+from tinytrain.metrics.classify_metrics import ClassesLabelHistogram
+from tinytrain.metrics.detect_metrics import DetectLabelInfo
 from tinytrain.models.yolo.yolo_dataset import YOLOPoseDataset
 from tinytrain.models.yolo.yolo_trainer import YOLOTrainer
 from tinytrain.utils import LOGGER
@@ -38,7 +39,11 @@ class YOLOPoseTrainer(YOLOTrainer):
         """
         绘制标签统计信息图
         """
+        class_names = list(self.config_manager.dataset["names"].values())
+        nc = self.config_manager.dataset["nc"]
+
         if RANK in {-1, 0}:
+            # train dataset plot
             LOGGER.info(f"Start plotting label Statistics information before training...")
             train_samples: list[PoseDataInfo] = self.train_dataloader.dataset.samples
             labels = []
@@ -48,7 +53,26 @@ class YOLOPoseTrainer(YOLOTrainer):
                 bboxes.append(sample.bboxes)
             labels = np.concatenate(labels, axis=0)
             bboxes = np.concatenate(bboxes, axis=0)
-            class_names = list(self.config_manager.dataset["names"].values())
 
-            label_info = LabelInfo(num_classes=self.config_manager.dataset["nc"], class_names=class_names, labels=labels, bboxes=bboxes, max_samples=1000)
+            label_histogram = ClassesLabelHistogram(num_classes=nc, class_names=class_names, labels=labels, prefix="train")
+            label_histogram.plot(self.save_dir)
+
+            label_info = DetectLabelInfo(num_classes=nc, class_names=class_names, labels=labels, bboxes=bboxes, max_samples=300, prefix="train")
+            label_info.plot(self.save_dir)
+
+        if RANK in {-1, 0}:
+            # validation dataset plot
+            val_samples: list[PoseDataInfo] = self.val_dataloader.dataset.samples
+            labels = []
+            bboxes = []
+            for sample in val_samples:
+                labels.append(sample.label)
+                bboxes.append(sample.bboxes)
+            labels = np.concatenate(labels, axis=0)
+            bboxes = np.concatenate(bboxes, axis=0)
+
+            label_histogram = ClassesLabelHistogram(num_classes=nc, class_names=class_names, labels=labels, prefix="val")
+            label_histogram.plot(self.save_dir)
+
+            label_info = DetectLabelInfo(num_classes=nc, class_names=class_names, labels=labels, bboxes=bboxes, max_samples=300, prefix="val")
             label_info.plot(self.save_dir)

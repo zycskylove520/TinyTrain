@@ -139,8 +139,20 @@ class BaseModel(nn.Module):
         推理模式前向传播。
 
         Args:
-            data (torch.Tensor | list[torch.Tensor]): 输入张量或多输入列表。
-            extra_data Dict[str, Dict[str,Any]]: 传递给模型的额外参数.
+            data (torch.Tensor | list[torch.Tensor]): 模型输入。
+                单输入时可直接传入 ``torch.Tensor``；
+                多输入时请传入 ``list[torch.Tensor]``，列表顺序需与模型配置中 ``entry`` 层的顺序一一对应。
+            extra_data (dict[str, dict[str, Any]] | None, optional): **按模块名** 精准投递的额外关键字参数。
+                外层字典的 key 为目标模块的注册名（注册的自定义模块或第三方模块），
+                内层字典即为该模块 ``forward`` 接收的额外关键字参数。例如：
+                    >>> mask_tensor = torch.ones(3, 3)
+                    >>> embed_tensor = torch.ones(2)
+                    >>> extra_data = {
+                    >>>     "MyModule1": {"scale": 1.5, "mask": mask_tensor},  # 仅 MyModule1的forward函数会收到 scale 和 mask参数
+                    >>>     "MyModule2": {"embed": embed_tensor},               # 仅 MyModule2的forward函数会收到 embed参数
+                    >>> }
+                若某模块在 ``extra_data`` 中没有对应条目，则调用时不会传入任何额外参数。
+                默认值为 ``None``，表示不向任何模块投递额外参数。
 
         Returns:
             list[torch.Tensor]: 模型输出列表（每个 head 对应一个输出）。
@@ -149,90 +161,54 @@ class BaseModel(nn.Module):
             RuntimeError: 如果未检测到任何输出。
         """
         # 检查输入是否为多输入（list 或 tuple）
-        if isinstance(data, (list, tuple)):
-            inputs = {index: item for index, item in enumerate(data)}
+        if not isinstance(data, (list, tuple)):
+            inputs = [data]
         else:
-            inputs = {0: data}
-        inputs_idx = 0
-        entry_idx_mapping = dict()
-
+            inputs = data
         outputs: list = []  # 存放模型推理最终的输出
+
+        inputs_idx = 0
+        current_data = None
+
         for i, layer in enumerate(self.module_list):
             try:
-                current_data = data
-
-                # 拿到第i层的info
                 record_info = self.record_list[i]
                 module_type: str = record_info["type"]
                 module_name: str = record_info["module"]
-                num_from: int = len(record_info["from"])
+                frm: list[int] = record_info["from"]
+                num_from: int = len(frm)
 
                 # entry层特殊部分
                 if module_type == "entry":
-                    try:
-                        entry_idx_mapping[i] = inputs_idx
-                    except KeyError:
-                        LOGGER.error(f"model input num != entry num, inputs num: {len(inputs)}, entry num: {inputs_idx}")
-                        raise
+                    if num_from == 1:
+                        current_data = inputs[inputs_idx]
+                    else:
+                        current_data = tuple(inputs[inputs_idx] if rf == -1 else self.record_list[rf]["data"] for rf in frm)
                     inputs_idx += 1
-
+                elif module_type == "flow" or module_type == "head":
                     if num_from == 1:
-                        rf = record_info["from"][0]
-                        assert rf == -1, f"if entry type from_list only have one element, must be -1."
-                        # 拿对应的input的输入数据
-                        current_data = inputs[entry_idx_mapping[i]]
-                    elif num_from > 1:
-                        rfs = record_info["from"]
-                        for rf in [j for j in rfs if j != -1]:
-                            assert rf in self.ask_set, f"from index {rf} not found in ask_set {sorted(self.ask_set)}"
-                        temp_list: list = []
-                        for rf in rfs:
-                            if rf != -1:
-                                temp_list.append(self.record_list[rf]["data"])
-                            else:
-                                temp_list.append(inputs[entry_idx_mapping[i]])
-                        current_data = temp_list
-                    else:
-                        raise ValueError(f"from length must >=1.")
-                else:
-                    if num_from == 1:
-                        rf = record_info["from"][0]
-                        if rf == -1:
-                            pass
-                        else:
-                            assert rf in self.ask_set, f"from index {rf} not found in ask_set {sorted(self.ask_set)}"
+                        rf = frm[0]
+                        if rf != -1:
                             current_data = self.record_list[rf]["data"]
-                    elif num_from > 1:
-                        rfs = record_info["from"]
-                        for rf in [j for j in rfs if j != -1]:
-                            assert rf in self.ask_set, f"from index {rf} not found in ask_set {sorted(self.ask_set)}"
-
-                        temp_list: list = []
-                        for rf in rfs:
-                            if rf != -1:
-                                temp_list.append(self.record_list[rf]["data"])
-                            else:
-                                temp_list.append(data)
-                        current_data = temp_list
                     else:
-                        raise ValueError(f"from length must >=1.")
+                        current_data = tuple(current_data if rf == -1 else self.record_list[rf]["data"] for rf in frm)
 
                 if extra_data:
-                    data = layer(current_data, **extra_data.get(module_name, {}))
+                    current_data = layer(current_data, **extra_data.get(module_name, {}))
                 else:
-                    data = layer(current_data)
+                    current_data = layer(current_data)
 
                 if module_type == "head":
-                    outputs.append(data)
+                    outputs.append(current_data)
 
                 if i in self.ask_set:
-                    self.record_list[i]["data"] = data  # add new key-value to record_list
+                    self.record_list[i]["data"] = current_data
             except Exception as e:
                 LOGGER.error(f"inference error: {e}, in layer: {i}.")
                 raise
 
         if len(outputs) == 0:
-            raise RuntimeError("Model no output!")
+            raise RuntimeError("Model no output, 'model.toml' need head module!")
         return outputs
 
     # ------------------------------------------------------------------
@@ -274,16 +250,19 @@ class BaseModel(nn.Module):
                 # check network
                 assert _type in {"entry", "flow", "head"}, f"level_{level}: {_module} 'type' must be 'entry', 'flow', or 'head'"
                 assert len(_from) > 0, f"level_{level}: {_module} 'from' list length must greater than 0!"
-                assert _repeat > 0, "level_{level}: {_module} 'repeat' must greater than 0!"
+                assert _repeat > 0, f"level_{level}: {_module} 'repeat' must greater than 0!"
+                assert not ask_set or level > max(ask_set), f"layer_{level} depends on future layer (max dependency: {max(ask_set)})."
 
                 # 限制第0层必须为entry层,且只能第0层为entry层
                 if level == 0:
                     assert _type == "entry", f"level_0: {_module} 'type' must be 'entry'"
-                    _from = [-1]
+                    if not (len(_from) == 1 and _from[0] == -1):
+                        LOGGER.warning(f"level_0 'from' is not [-1], auto-correct to [-1].")
+                        _from = [-1]
 
                 if _type == "entry":  # entry层
+                    assert -1 in _from, f"entry layer_{level} must depend on from index: -1."
                     # 子类可定制
-                    pass
                 elif _type == "flow":  # flow层
                     # 子类可定制
                     pass
@@ -300,13 +279,8 @@ class BaseModel(nn.Module):
                 self.custom_parse_model(level, _info)
 
                 # 构造网络模块
-                try:
-                    layer = self._get_layer(_module)
-                    layer.config_manager = self.config_manager
-                except (NameError, AttributeError) as e:
-                    raise ValueError(f"Failed to get module {_module}: {e}")
-
-                layer = torch.nn.Sequential(*(layer(**_args) for _ in range(_repeat))) if _repeat > 1 else layer(**_args)
+                _layer = self.get_layer(_module)
+                layer = nn.Sequential(*(_layer(**_args) for _ in range(_repeat))) if _repeat > 1 else _layer(**_args)
                 layers.append(layer)
 
                 record_list.append({
@@ -323,11 +297,10 @@ class BaseModel(nn.Module):
             except Exception as e:
                 LOGGER.error(f"parse_model error: {e}, in layer:{level}.")
                 raise e
-
-        return layers, record_list, ask_set, log_info
+        return layers, record_list, sorted(ask_set), log_info
 
     @staticmethod
-    def _get_layer(module_str: str):
+    def get_layer(module_str: str):
         import importlib
         module_str = module_str.strip()
 

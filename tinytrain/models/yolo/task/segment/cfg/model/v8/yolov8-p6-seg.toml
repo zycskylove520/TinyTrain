@@ -1,35 +1,35 @@
-# =====================================
-# YOLO姿态估计模型: YOLOv8-pose 模型配置文件
-# =====================================
+# =======================================
+# YOLO实例分割模型: YOLOv8-p6-seg 模型配置文件
+# =======================================
 
-name = "YOLOv8-pose"
+name = "YOLOv8-p6-seg"
 scale = "n"
 
 # model_config compound scaling constants
 [scales.n]
 depth = 0.33
 width = 0.25
-summary = "351 layers, 3899275 parameters, 3899275 gradients, 10.43 GFLOPs, for a 640×640 input."
+summary = "467 layers, 6150260 parameters, 6150260 gradients, 10.44 GFLOPs, for a 640×640 input."
 
 [scales.s]
 depth = 0.33
 width = 0.50
-summary = "351 layers, 13616027 parameters, 13616027 gradients, 33.02 GFLOPs, for a 640×640 input."
+summary = "467 layers, 21850180 parameters, 21850180 gradients, 33.01 GFLOPs, for a 640×640 input."
 
 [scales.m]
 depth = 0.67
 width = 0.75
-summary = "443 layers, 36216555 parameters, 36216555 gradients, 89.29 GFLOPs, for a 640×640 input."
+summary = "575 layers, 56585428 parameters, 56585428 gradients, 88.62 GFLOPs, for a 640×640 input."
 
 [scales.l]
 depth = 1.00
 width = 1.00
-summary = "597 layers, 86942651 parameters, 86942651 gradients, 213.76 GFLOPs, for a 640×640 input."
+summary = "776 layers, 133744612 parameters, 133744612 gradients, 211.83 GFLOPs, for a 640×640 input."
 
 [scales.x]
 depth = 1.00
 width = 1.25
-summary = "597 layers, 135547371 parameters, 135547371 gradients, 332.64 GFLOPs, for a 640×640 input."
+summary = "776 layers, 208551988 parameters, 208551988 gradients, 329.61 GFLOPs, for a 640×640 input."
 
 # ----------------------------backbone---------------------------------
 [[network]]
@@ -113,7 +113,7 @@ module = "CBA"
 repeat = 1
 from = [-1]
 args.in_channels = 512
-args.out_channels = 1024
+args.out_channels = 768
 args.kernel_size = 3
 args.stride = 2
 
@@ -123,12 +123,33 @@ type = "flow"
 module = "C2f"
 repeat = 3
 from = [-1]
+args.in_channels = 768
+args.out_channels = 768
+args.shortcut = true
+
+[[network]]
+# 9-P6/64
+type = "flow"
+module = "CBA"
+repeat = 1
+from = [-1]
+args.in_channels = 768
+args.out_channels = 1024
+args.kernel_size = 3
+args.stride = 2
+
+[[network]]
+# 10
+type = "flow"
+module = "C2f"
+repeat = 3
+from = [-1]
 args.in_channels = 1024
 args.out_channels = 1024
 args.shortcut = true
 
 [[network]]
-# 9
+# 11
 type = "flow"
 module = "SPPF"
 repeat = 1
@@ -139,7 +160,7 @@ args.kernel_size = 5
 
 # ----------------------------------head--------------------------------------
 [[network]]
-# 10
+# 12
 type = "flow"
 module = "torch.nn.Upsample"
 repeat = 1
@@ -148,32 +169,66 @@ args.scale_factor = 2
 args.mode = "nearest"
 
 [[network]]
-# 11 cat backbone P4
+# 13 cat backbone P5
+type = "flow"
+module = "Concat"
+repeat = 1
+from = [-1, 8]
+
+[[network]]
+# 14
+type = "flow"
+module = "C2"
+repeat = 1
+from = [-1]
+args.in_channels = 1792
+args.out_channels = 768
+
+[[network]]
+# 15
+type = "flow"
+module = "C2"
+repeat = 2
+from = [-1]
+args.in_channels = 768
+args.out_channels = 768
+
+[[network]]
+# 16
+type = "flow"
+module = "torch.nn.Upsample"
+repeat = 1
+from = [-1]
+args.scale_factor = 2
+args.mode = "nearest"
+
+[[network]]
+# 17 cat backbone P4
 type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 6]
 
 [[network]]
-# 12
+# 18
 type = "flow"
-module = "C2f"
+module = "C2"
 repeat = 1
 from = [-1]
-args.in_channels = 1536
+args.in_channels = 1280
 args.out_channels = 512
 
 [[network]]
-# 13
+# 19
 type = "flow"
-module = "C2f"
+module = "C2"
 repeat = 2
 from = [-1]
 args.in_channels = 512
 args.out_channels = 512
 
 [[network]]
-# 14
+# 20
 type = "flow"
 module = "torch.nn.Upsample"
 repeat = 1
@@ -182,114 +237,150 @@ args.scale_factor = 2
 args.mode = "nearest"
 
 [[network]]
-# 15 cat backbone P3
+# 21 cat backbone P3
 type = "flow"
 module = "Concat"
 repeat = 1
 from = [-1, 4]
 
 [[network]]
-# 16
-type = "flow"
-module = "C2f"
-repeat = 1
-from = [-1]
-args.in_channels = 768
-args.out_channels = 256
-
-[[network]]
-# 17 (P3/8-small)
-type = "flow"
-module = "C2f"
-repeat = 2
-from = [-1]
-args.in_channels = 256
-args.out_channels = 256
-
-[[network]]
-# 18
-type = "flow"
-module = "CBA"
-repeat = 1
-from = [-1]
-args.in_channels = 256
-args.out_channels = 256
-args.kernel_size = 3
-args.stride = 2
-
-[[network]]
-# 19 cat head P4
-type = "flow"
-module = "Concat"
-repeat = 1
-from = [-1, 13]
-
-[[network]]
-# 20
-type = "flow"
-module = "C2f"
-repeat = 1
-from = [-1]
-args.in_channels = 768
-args.out_channels = 512
-
-[[network]]
-# 21 (P4/16-medium)
-type = "flow"
-module = "C2f"
-repeat = 2
-from = [-1]
-args.in_channels = 512
-args.out_channels = 512
-
-[[network]]
 # 22
 type = "flow"
-module = "CBA"
+module = "C2"
 repeat = 1
 from = [-1]
-args.in_channels = 512
-args.out_channels = 512
-args.kernel_size = 3
-args.stride = 2
+args.in_channels = 768
+args.out_channels = 256
 
 [[network]]
-# 23 cat head P5
+# 23 (P3/8-small)
 type = "flow"
-module = "Concat"
-repeat = 1
-from = [-1, 9]
+module = "C2"
+repeat = 2
+from = [-1]
+args.in_channels = 256
+args.out_channels = 256
 
 [[network]]
 # 24
 type = "flow"
-module = "C2f"
+module = "CBA"
 repeat = 1
 from = [-1]
-args.in_channels = 1536
+args.in_channels = 256
+args.out_channels = 256
+args.kernel_size = 3
+args.stride = 2
+
+[[network]]
+# 25 cat head P4
+type = "flow"
+module = "Concat"
+repeat = 1
+from = [-1, 19]
+
+[[network]]
+# 26
+type = "flow"
+module = "C2"
+repeat = 1
+from = [-1]
+args.in_channels = 768
+args.out_channels = 512
+
+[[network]]
+# 27 (P4/16-medium)
+type = "flow"
+module = "C2"
+repeat = 2
+from = [-1]
+args.in_channels = 512
+args.out_channels = 512
+
+[[network]]
+# 28
+type = "flow"
+module = "CBA"
+repeat = 1
+from = [-1]
+args.in_channels = 512
+args.out_channels = 512
+args.kernel_size = 3
+args.stride = 2
+
+[[network]]
+# 29 cat head P5
+type = "flow"
+module = "Concat"
+repeat = 1
+from = [-1, 15]
+
+[[network]]
+# 30
+type = "flow"
+module = "C2"
+repeat = 1
+from = [-1]
+args.in_channels = 1280
+args.out_channels = 768
+
+[[network]]
+# 31 (P5/32-large)
+type = "flow"
+module = "C2"
+repeat = 2
+from = [-1]
+args.in_channels = 768
+args.out_channels = 768
+
+[[network]]
+# 32
+type = "flow"
+module = "CBA"
+repeat = 1
+from = [-1]
+args.in_channels = 768
+args.out_channels = 768
+args.kernel_size = 3
+args.stride = 2
+
+[[network]]
+# 33 cat head P6
+type = "flow"
+module = "Concat"
+repeat = 1
+from = [-1, 11]
+
+[[network]]
+# 34
+type = "flow"
+module = "C2"
+repeat = 1
+from = [-1]
+args.in_channels = 1792
 args.out_channels = 1024
 
 [[network]]
-# 25 (P5/32-large)
+# 35 (P6/64-xlarge)
 type = "flow"
-module = "C2f"
+module = "C2"
 repeat = 2
 from = [-1]
 args.in_channels = 1024
 args.out_channels = 1024
 
 [[network]]
-# 26
+# 36
 type = "flow"
 module = "Combine"
 repeat = 1
-from = [17, 21, 25]
+from = [23, 27, 31, 35]
 
 [[network]]
-# 27 Pose(P3, P4, P5)
+# 37 Segment(P3, P4, P5, P6)
 type = "head"
-module = "YOLOPose"
+module = "YOLOSegment"
 repeat = 1
 from = [-1]
 args.nc = -1
-args.from_channels = [256, 512, 1024]
+args.from_channels = [256, 512, 768, 1024]

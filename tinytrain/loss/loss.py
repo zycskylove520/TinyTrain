@@ -4,9 +4,10 @@ import torch.nn.functional as F
 
 from torch import nn
 
-from tinytrain.data.data_format import ClassifyBatchDataInfo, DetectBatchDataInfo, PoseBatchDataInfo
+from tinytrain.data.data_format import ClassifyBatchDataInfo, DetectBatchDataInfo, PoseBatchDataInfo, SegmentBatchDataInfo
 from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry, lxlyrxry_2_cxcywh, make_anchors
 from tinytrain.utils.tal import TaskAlignedAssigner, dist2bbox
+from tinytrain.utils.segment_utils import crop_mask
 
 from .subloss import BboxLossWithDFL, KeypointLoss
 
@@ -129,7 +130,6 @@ class YOLOV8DetectionLoss(nn.Module):
     def __init__(self, nc, strides, reg_max, imgsz, device, cls_gain=1, box_gain=1, dfl_gain=1, tal_topk=10):
         """
         Args:
-            model (nn.Module): 检测模型，用于提取 head 超参数。
             imgsz (int | list[int] | tuple[int, int]): 训练输入分辨率 (W, H)。
             cls_gain (float): 分类损失权重。
             box_gain (float): 框回归损失权重。
@@ -179,7 +179,7 @@ class YOLOV8DetectionLoss(nn.Module):
             for j in range(batch_size):
                 matches = i == j
                 # 获取第j张图片有多少个目标
-                n = matches.sum()
+                n = matches.sum()  # type: ignore[arg-type]
                 if n:
                     # 把第j张图片的前n个目标设置上对应的目标
                     out[j, :n] = targets[matches, 1:]
@@ -455,3 +455,189 @@ class YOLOV8PoseLoss(YOLOV8DetectionLoss):
                 kpts_obj_loss = self.bce_pose(pred_kpt[..., 2], kpt_mask.float())  # keypoint obj loss
 
         return kpts_loss, kpts_obj_loss
+
+
+class YOLOV8SegmentLoss(YOLOV8DetectionLoss):
+    """Criterion class for computing training losses."""
+
+    def __init__(self, nc, strides, reg_max, imgsz, device, overlap_mask, cls_gain=1, box_gain=1, dfl_gain=1, seg_gain=1, tal_topk=10):  # model must be de-paralleled
+        """Initializes v8PoseLoss with model, sets keypoint variables and declares a keypoint loss instance."""
+        super().__init__(nc, strides, reg_max, imgsz, device, cls_gain, box_gain, dfl_gain, tal_topk)
+        self.seg_gain = seg_gain
+        self.overlap = overlap_mask
+
+    def __call__(self, preds: tuple[list[torch.Tensor], torch.Tensor, torch.Tensor], batch: SegmentBatchDataInfo):
+        """Calculate the total loss and detach it."""
+
+        features, pred_masks, proto = preds
+        dtype = features[0].dtype
+        batch_size, _, mask_h, mask_w = proto.shape
+
+        pred_distri, pred_scores = torch.cat([xi.view(batch_size, self.output_num, -1) for xi in features], 2).split(
+            (self.reg_max * 4, self.nc), 1
+        )
+
+        pred_scores = pred_scores.permute(0, 2, 1).contiguous()
+        pred_distri = pred_distri.permute(0, 2, 1).contiguous()
+        pred_masks = pred_masks.permute(0, 2, 1).contiguous()
+
+        anchor_points, stride_tensor = make_anchors(features, self.strides, 0.5)
+
+        # Targets
+        targets = torch.cat((batch.bboxes_idx.view(-1, 1), batch.target.view(-1, 1), batch.bboxes.view(-1, 4)), 1)
+        targets = self.preprocess(targets, batch_size, torch.tensor(self.imgsz)[[0, 1, 0, 1]].to(self.device))
+
+        # 获得真实类别标签和真实bboxes
+        gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
+        # 通过对gt_bboxes进行sum操作来找出正样本的边界框，再通过gt_来获取非0的边界框的bool矩阵
+        mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0.0)
+
+        # 解码后的preds的bbox，此时的坐标值为lxlyrxry
+        pred_bboxes = self.bbox_decode(anchor_points, pred_distri)  # xyxy, (b, h*w, 4)
+
+        _, target_bboxes, target_scores, fg_mask, target_gt_idx = self.assigner(
+            pred_scores.detach().sigmoid(),
+            # 乘以stride_tensor将pred_bboxes恢复训练图大小，对anchor_points同理
+            (pred_bboxes.detach() * stride_tensor).type(gt_bboxes.dtype),
+            anchor_points * stride_tensor,
+            gt_labels,
+            gt_bboxes,
+            mask_gt,
+        )
+
+        """开始计算loss"""
+        cls_loss = torch.tensor(0., dtype=dtype)
+        box_loss = torch.tensor(0., dtype=dtype)
+        dfl_loss = torch.tensor(0., dtype=dtype)
+        seg_loss = torch.tensor(0., dtype=dtype)
+
+        # cls loss
+        # 这里限制target_scores_sum最小必须为1
+        target_scores_sum = max(target_scores.sum(), 1)
+        cls_loss = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
+
+        # Bbox loss & DFL loss & Segment loss
+        # fg_mask.sum()保证一定有锚框有真实边界框对应
+        if fg_mask.sum():
+            box_loss, dfl_loss = self.bbox_loss(
+                pred_distri,
+                pred_bboxes,
+                anchor_points,
+                target_bboxes / stride_tensor,
+                target_scores,
+                target_scores_sum,
+                fg_mask
+            )
+
+            masks = batch.batch_masks.to(self.device).float()
+            if tuple(masks.shape[-2:]) != (mask_h, mask_w):  # downsample
+                masks = F.interpolate(masks[None], (mask_h, mask_w), mode="nearest")[0]
+
+            seg_loss = self.calculate_segmentation_loss(
+                fg_mask, masks, target_gt_idx, target_bboxes, batch.bboxes_idx.view(-1, 1), proto, pred_masks, torch.tensor(self.imgsz)[[1, 0]], self.overlap
+            )
+
+        cls_loss *= self.cls_gain  # cls gain
+        box_loss *= self.box_gain  # box gain
+        dfl_loss *= self.dfl_gain  # dfl gain
+        seg_loss *= self.seg_gain  # segment_gain
+        total_loss = (cls_loss + box_loss + dfl_loss + seg_loss) * batch_size
+        loss_items = {
+            "cls_loss": cls_loss.detach(),
+            "box_loss": box_loss.detach(),
+            "dfl_loss": dfl_loss.detach(),
+            "seg_loss": seg_loss.detach()
+        }
+
+        return total_loss, loss_items
+
+    @staticmethod
+    def single_mask_loss(
+            gt_mask: torch.Tensor, pred: torch.Tensor, proto: torch.Tensor, xyxy: torch.Tensor, area: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Compute the instance segmentation loss for a single image.
+
+        Args:
+            gt_mask (torch.Tensor): Ground truth mask of shape (n, H, W), where n is the number of objects.
+            pred (torch.Tensor): Predicted mask coefficients of shape (n, 32).
+            proto (torch.Tensor): Prototype masks of shape (32, H, W).
+            xyxy (torch.Tensor): Ground truth bounding boxes in xyxy format, normalized to [0, 1], of shape (n, 4).
+            area (torch.Tensor): Area of each ground truth bounding box of shape (n,).
+
+        Returns:
+            (torch.Tensor): The calculated mask loss for a single image.
+
+        Notes:
+            The function uses the equation pred_mask = torch.einsum('in,nhw->ihw', pred, proto) to produce the
+            predicted masks from the prototype masks and predicted mask coefficients.
+        """
+        pred_mask = torch.einsum("in,nhw->ihw", pred, proto)  # (n, 32) @ (32, 80, 80) -> (n, 80, 80)
+        loss = F.binary_cross_entropy_with_logits(pred_mask, gt_mask, reduction="none")
+        return (crop_mask(loss, xyxy).mean(dim=(1, 2)) / area).sum()
+
+    def calculate_segmentation_loss(
+            self,
+            fg_mask: torch.Tensor,
+            masks: torch.Tensor,
+            target_gt_idx: torch.Tensor,
+            target_bboxes: torch.Tensor,
+            batch_idx: torch.Tensor,
+            proto: torch.Tensor,
+            pred_masks: torch.Tensor,
+            imgsz: torch.Tensor,
+            overlap: bool,
+    ) -> torch.Tensor:
+        """
+        Calculate the loss for instance segmentation.
+
+        Args:
+            fg_mask (torch.Tensor): A binary tensor of shape (BS, N_anchors) indicating which anchors are positive.
+            masks (torch.Tensor): Ground truth masks of shape (BS, H, W) if `overlap` is False, otherwise (BS, ?, H, W).
+            target_gt_idx (torch.Tensor): Indexes of ground truth objects for each anchor of shape (BS, N_anchors).
+            target_bboxes (torch.Tensor): Ground truth bounding boxes for each anchor of shape (BS, N_anchors, 4).
+            batch_idx (torch.Tensor): Batch indices of shape (N_labels_in_batch, 1).
+            proto (torch.Tensor): Prototype masks of shape (BS, 32, H, W).
+            pred_masks (torch.Tensor): Predicted masks for each anchor of shape (BS, N_anchors, 32).
+            imgsz (torch.Tensor): Size of the input image as a tensor of shape (2), i.e., (H, W).
+            overlap (bool): Whether the masks in `masks` tensor overlap.
+
+        Returns:
+            (torch.Tensor): The calculated loss for instance segmentation.
+
+        Notes:
+            The batch loss can be computed for improved speed at higher memory usage.
+            For example, pred_mask can be computed as follows:
+                pred_mask = torch.einsum('in,nhw->ihw', pred, proto)  # (i, 32) @ (32, 160, 160) -> (i, 160, 160)
+        """
+        _, _, mask_h, mask_w = proto.shape
+        loss = 0
+
+        # Normalize to 0-1
+        target_bboxes_normalized = target_bboxes / imgsz[[1, 0, 1, 0]].to(self.device)
+
+        # Areas of target bboxes
+        marea = lxlyrxry_2_cxcywh(target_bboxes_normalized)[..., 2:].prod(2)
+
+        # Normalize to mask size
+        mxyxy = target_bboxes_normalized * torch.tensor([mask_w, mask_h, mask_w, mask_h], device=proto.device)
+
+        for i, single_i in enumerate(zip(fg_mask, target_gt_idx, pred_masks, proto, mxyxy, marea, masks)):
+            fg_mask_i, target_gt_idx_i, pred_masks_i, proto_i, mxyxy_i, marea_i, masks_i = single_i
+            if fg_mask_i.any():
+                mask_idx = target_gt_idx_i[fg_mask_i]
+                if overlap:
+                    gt_mask = masks_i == (mask_idx + 1).view(-1, 1, 1)
+                    gt_mask = gt_mask.float()  # type: ignore[arg-type]
+                else:
+                    gt_mask = masks[batch_idx.view(-1) == i][mask_idx]
+
+                loss += self.single_mask_loss(
+                    gt_mask, pred_masks_i[fg_mask_i], proto_i, mxyxy_i[fg_mask_i], marea_i[fg_mask_i]
+                )
+
+            # WARNING: lines below prevents Multi-GPU DDP 'unused gradient' PyTorch errors, do not remove
+            else:
+                loss += (proto * 0).sum() + (pred_masks * 0).sum()  # inf sums may lead to nan loss
+
+        return loss / fg_mask.sum()

@@ -734,9 +734,9 @@ class Proto(nn.Module):
         Input arguments are ch_in, number of protos, number of masks.
         """
         super().__init__()
-        self.cv1 = CBA(c1, c_, k=3)
+        self.cv1 = CBA(c1, c_, kernel_size=3)
         self.upsample = nn.ConvTranspose2d(c_, c_, 2, 2, 0, bias=True)  # nn.Upsample(scale_factor=2, mode='nearest')
-        self.cv2 = CBA(c_, c_, k=3)
+        self.cv2 = CBA(c_, c_, kernel_size=3)
         self.cv3 = CBA(c_, c2)
 
     def forward(self, x):

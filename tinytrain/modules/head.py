@@ -123,7 +123,7 @@ class YOLODetect(nn.Module):
             for x in from_channels
         )
 
-        self.bias_init()
+        # self.bias_init()
 
     def forward(self, x: list[torch.Tensor]):
         """
@@ -155,12 +155,12 @@ class YOLODetect(nn.Module):
         # decode_box为cxcywh格式
         return torch.cat((decode_box, cls.sigmoid()), -1)
 
-    def bias_init(self):
+    def bias_init(self, strides):
         """Initialize Detect() biases, WARNING: requires stride availability."""
         # 如果不做bias初始化，输出的cls loss会非常大，这会导致反向传播让权重参数迅速归0的问题
         # cf = torch.bincount(torch.tensor(np.concatenate(dataset.labels, 0)[:, 0]).long(), minlength=nc) + 1
         # ncf = math.log(0.6 / (m.nc - 0.999999)) if cf is None else torch.log(cf / cf.sum())  # nominal class frequency
-        for a, b, s in zip(self.cv2, self.cv3, [8, 16, 32]):  # from
+        for a, b, s in zip(self.cv2, self.cv3, strides):  # from
             a[-1].bias.data[:] = 1.0  # box
             b[-1].bias.data[: self.nc] = math.log(5 / self.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
 
@@ -229,14 +229,14 @@ class YOLOSegment(YOLODetect):
         self.proto = Proto(from_channels[0], self.npr, self.nm)  # protos
 
         c4 = max(from_channels[0] // 4, self.nm)
-        self.cv4 = nn.ModuleList(nn.Sequential(CBA(x, c4, 3), CBA(c4, c4, 3), nn.Conv2d(c4, self.nm, 1)) for x in ch)
+        self.cv4 = nn.ModuleList(nn.Sequential(CBA(x, c4, 3), CBA(c4, c4, 3), nn.Conv2d(c4, self.nm, 1)) for x in from_channels)
 
     def forward(self, x):
         """Return model outputs and mask coefficients if training, otherwise return outputs and mask coefficients."""
         p = self.proto(x[0])  # mask protos
         bs = p.shape[0]  # batch size
 
-        mc = torch.cat([self.cv4[i](x[i]).view(bs, self.nm, -1) for i in range(self.nl)], 2)  # mask coefficients
+        mc = torch.cat([self.cv4[i](x[i]).view(bs, self.nm, -1) for i in range(len(self.from_channels))], 2)  # mask coefficients
         x = YOLODetect.forward(self, x)
         if self.training:
             return x, mc, p

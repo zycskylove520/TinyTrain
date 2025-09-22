@@ -299,17 +299,17 @@ class SegmentDataInfo(DetectDataInfo):
     """
 
     def __init__(self,
-                 segments: list | None = None,
+                 masks: torch.Tensor | None = None,
                  **kwargs
                  ) -> None:
         """
         Args:
-            segments (list | None):
-                每个实例的多边形或 RLE 掩码列表，长度等于 bbox 数。
+            masks (torch.Tensor | None):
+                每个实例的多边形xy坐标构成的tensor。
             **kwargs: 透传给父类。
         """
         super().__init__(**kwargs)
-        self.segments = segments
+        self.masks = masks
 
 
 class PoseDataInfo(DetectDataInfo):
@@ -429,6 +429,7 @@ class SegmentBatchDataInfo(DetectBatchDataInfo):
     """分割 batch 容器，目前与检测保持一致，未来可拓展 segments 字段。"""
 
     def __init__(self,
+                 batch_masks: torch.Tensor | None = None,
                  **kwargs
                  ) -> None:
         """
@@ -437,6 +438,7 @@ class SegmentBatchDataInfo(DetectBatchDataInfo):
         :param kwargs: 其他关键字参数（传递给父类）
         """
         super().__init__(**kwargs)
+        self.batch_masks = batch_masks
 
 
 class PoseBatchDataInfo(DetectBatchDataInfo):

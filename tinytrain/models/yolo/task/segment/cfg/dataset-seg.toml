@@ -1,0 +1,27 @@
+# ========================
+# YOLO姿态估计dataset配置文件
+# ========================
+
+img_size = 640
+# 输入图像的尺寸，模型将图像缩放到这个大小进行处理
+
+cache = false
+# 是否使用缓存，设置为 false 表示不使用缓存
+
+train = "datasets/xxx/images/train"
+# 训练集图像路径
+
+val = "datasets/xxx/images/val"
+# 验证集图像路径
+
+segment_resamples = 1000
+# 关键点的形状，表示每个目标有 17 个关键点，每个关键点有 3 个坐标值（x, y, visibility）
+overlap_mask = true
+mask_ratio = 4
+
+nc = 1
+# 数据集的类别数量
+
+# 类别名称
+[names]
+0 = "人"
