@@ -7,7 +7,36 @@ from tinytrain.models.yolo.yolo_model import YOLOModel
 
 
 class YOLODetectionModel(YOLOModel):
+    """
+    YOLODetectionModel
+
+    专为目标检测任务设计的 YOLO 子类，继承自 YOLOModel。
+
+    设计要点
+    --------
+    1. 在构造阶段即完成 stride 的自动推算，避免后续训练/推理阶段重复计算。
+    2. 采用 YOLOV8DetectionLoss，支持 cls / box / dfl 三项损失加权。
+    3. 通过 custom_parse_model 对 C3k2 / A2C2f / YOLODetect 进行宽度&深度增益缩放，
+       并依据尺度 {n, s, m, l, x} 开启不同高级分支（c3k、residual、mlp_ratio）。
+    4. 对外保持 BaseModel 统一接口：forward(data) 自动返回 loss 或推理结果。
+    """
+
     def __init__(self, config_manager: ConfigManager, device, *args, **kwargs):
+        """
+        初始化检测模型。
+
+        额外完成：
+        - 推算并保存三个检测头的输出步长 strides；
+        - 对 YOLODetect 头进行 bias 初始化；
+        - 主动调用 initialize_weights()，确保 Conv / BN / Act 参数处于最佳初始分布。
+
+        Args
+        ----
+        config_manager : ConfigManager
+            必须包含 dataset.nc / dataset.img_size / loss.* 等字段。
+        device : torch.device
+            模型所在设备。
+        """
         self.reg_max = None
         super().__init__(config_manager, device=device, *args, **kwargs)
         self.initialize_weights()
@@ -21,7 +50,17 @@ class YOLODetectionModel(YOLOModel):
 
     def _initialize_stride(self, input_channel):
         """
-        初始化 stride，避免在初始化阶段调用 forward 方法。
+        通过一次 dummy forward 推算三个检测头的输出步长，避免在后续训练阶段反复计算。
+
+        Args
+        ----
+        input_channel : int
+            输入图片的通道数（通常为 3）。
+
+        Returns
+        -------
+        torch.Tensor
+            长度 = 检测头数量，每项对应该头输出的步长（下采样倍数）。
         """
         stride = 256  # 2x min stride
         with torch.no_grad():  # 确保不会改变模型状态
@@ -34,6 +73,15 @@ class YOLODetectionModel(YOLOModel):
         return stride_tensor
 
     def init_criterion(self):
+        """
+        构建检测专用损失实例。
+
+        Returns
+        -------
+        YOLOV8DetectionLoss
+            已内置 strides / reg_max / imgsz / device 等信息，
+            可直接前向计算 cls_loss / box_loss / dfl_loss。
+        """
         return YOLOV8DetectionLoss(nc=self.config_manager.dataset["nc"],
                                    strides=self.strides,
                                    reg_max=self.reg_max,
@@ -45,9 +93,47 @@ class YOLODetectionModel(YOLOModel):
                                    )
 
     def loss(self, preds: list[torch.Tensor], batch_samples: BaseBatchDataInfo) -> tuple[float, dict]:
+        """
+        训练模式：计算检测损失。
+
+        Args
+        ----
+        preds : list[torch.Tensor]
+            仅使用 preds[0]（YOLODetect 输出列表）。
+        batch_samples : BaseBatchDataInfo
+            必须包含 .bboxes / .labels / .masks(可选) 等字段。
+
+        Returns
+        -------
+        tuple[float, dict]
+            (总损失, 详细分量字典)，
+            字典固定包含 keys = {"cls_loss", "box_loss", "dfl_loss"}。
+        """
         return self.criterion(preds[0], batch_samples)
 
     def custom_parse_model(self, level, module_info):
+        """
+        检测任务专属解析逻辑，在通用解析完成后、模块实例化前调用。
+
+        调整策略
+        --------
+        1. C3k2：
+           - 按 depth 增益重算 n；
+           - 仅当 scale ∈ {m, l, x} 时开启 c3k 分支。
+        2. A2C2f：
+           - 同样按 depth 缩放 n；
+           - 在 l/x 尺度额外开启 residual 与 mlp_ratio=1.2。
+        3. YOLODetect：
+           - 按 width 增益缩放 from_channels；
+           - 保存 reg_max 供损失函数使用。
+
+        Args
+        ----
+        level : int
+            当前正在解析的层序号。
+        module_info : dict
+            当前层原始配置，函数内直接原地修改。
+        """
         scale = self.config_manager.model["scale"]
 
         width = self.WIDTH_GAIN

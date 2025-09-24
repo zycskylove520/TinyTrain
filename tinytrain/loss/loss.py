@@ -15,13 +15,13 @@ from .subloss import BboxLossWithDFL, KeypointLoss
 class ClassificationLoss(nn.Module):
     """
     通用分类损失封装，默认使用 CrossEntropyLoss。
-    支持通过 cls_loss_gain 进行损失缩放。
+    可通过 cls_loss_gain 对最终损失进行缩放。
     """
 
     def __init__(self, cls_loss_gain: float):
         """
         Args:
-            cls_loss_gain (float): 分类损失权重系数。
+            cls_loss_gain: 分类损失整体权重系数。
         """
         super().__init__()
         self.cls_loss_gain = cls_loss_gain
@@ -32,13 +32,12 @@ class ClassificationLoss(nn.Module):
         计算分类损失。
 
         Args:
-            pred (torch.Tensor): 模型输出，通常只含一个 (B, C) 张量。
-            batch (ClassifyBatchDataInfo): 批数据，包含 `target` 标签，形状为 (B,)，值为类别索引。
+            pred: 模型输出 logits，形状 (B, C)。
+            batch: 批数据，需包含 `.target` 字段，形状 (B,)，值为类别索引。
 
         Returns:
-            tuple:
-                - loss (torch.Tensor): 标量损失值。
-                - loss_items (dict): 各分量损失，便于日志记录。
+            loss: 标量损失。
+            loss_items: dict，记录各分量，便于日志打印。
         """
         loss = self.criterion(pred, batch.target) * self.cls_loss_gain
         loss_items = {"cls_loss": loss.detach()}
@@ -47,22 +46,17 @@ class ClassificationLoss(nn.Module):
 
 class ClassificationWithFocalLoss(nn.Module):
     """
-    Focal Loss，一种改进的分类损失函数，用于解决类别不平衡问题。
-    Focal Loss 在 CrossEntropyLoss 的基础上，对易分类样本的损失进行加权降低，
-    从而让模型更关注难分类的样本，有助于提高模型在不平衡数据集上的性能。
-    支持通过 gamma 参数调整对易分类样本的惩罚程度，并通过 alpha 参数对不同类别进行加权。
+    Focal Loss，用于缓解类别不平衡问题。
+    在 CE 基础上加入 (1-pt)^γ 调制因子，并可指定类别权重 alpha。
     """
 
     def __init__(self, cls_loss_gain: float, alpha=None, gamma=0, eps=1e-7):
         """
-        初始化 ClassificationWithFocalLoss。
-
         Args:
-            cls_loss_gain (float): 分类损失权重系数。
-            alpha (float or Tensor, optional): 类别权重。如果为标量，则所有类别共享相同的权重；
-                                               如果为 Tensor，则应与类别数量相同。默认为 None。
-            gamma (float, optional): 聚焦参数，控制对易分类样本的惩罚程度。gamma 越大，对易分类样本的损失惩罚越小。默认为 0。
-            eps (float, optional): 数值稳定性参数，避免 log(0) 等数值问题。默认为 1e-7。
+            cls_loss_gain: 损失权重系数。
+            alpha: 类别权重，可为 float 或长度=C 的 Tensor。
+            gamma: 聚焦参数，越大则“易分样本”权重越低。
+            eps: 数值保护小量，防止 log(0)。
         """
         super().__init__()
         self.cls_loss_gain = cls_loss_gain
@@ -73,16 +67,15 @@ class ClassificationWithFocalLoss(nn.Module):
 
     def forward(self, pred: torch.Tensor, batch: ClassifyBatchDataInfo):
         """
-        计算 Loss。
+        计算 Focal Loss。
 
         Args:
-            pred (torch.Tensor): 模型输出的 logits，形状为 (B, C)，其中 B 是批次大小，C 是类别数。
-            batch (ClassifyBatchDataInfo): 批数据，包含 `target` 标签，形状为 (B,)，值为类别索引。
+            pred: 模型输出 logits，(B, C)。
+            batch: 批数据，含 `.target`，(B,)。
 
         Returns:
-            tuple:
-                - torch.Tensor: Focal Loss 的标量值。
-                - loss_items (dict): 各分量损失，便于日志记录。
+            loss: 标量。
+            loss_items: dict。
         """
         target = batch.target
 
@@ -120,21 +113,24 @@ class ClassificationWithFocalLoss(nn.Module):
 
 class YOLOV8DetectionLoss(nn.Module):
     """
-    YOLOv8检测损失，包括：
-    - 分类损失（cls_loss）—— BCEWithLogitsLoss
-    - 框回归损失（box_loss）—— IoU + DFL
-    - DFL 损失（dfl_loss）—— Distribution Focal Loss
-    使用 Task-Aligned Assigner 进行正负样本匹配。
+    YOLOv8 检测头损失，包含：
+        1. 分类损失 (BCE)
+        2. 框回归损失 (CIoU + DFL)
+    使用 Task-Aligned Assigner 完成正负样本分配。
     """
 
     def __init__(self, nc, strides, reg_max, imgsz, device, cls_gain=1, box_gain=1, dfl_gain=1, tal_topk=10):
         """
         Args:
-            imgsz (int | list[int] | tuple[int, int]): 训练输入分辨率 (W, H)。
-            cls_gain (float): 分类损失权重。
-            box_gain (float): 框回归损失权重。
-            dfl_gain (float): DFL 损失权重。
-            tal_topk (int): Task-Aligned Assigner 的 top-k 参数。
+            nc: 类别数。
+            strides: 各检测层下采样步长，如 [8,16,32]。
+            reg_max: DFL 分支离散区间数，>1 时启用 DFL。
+            imgsz: 训练输入分辨率 (W,H) 或单值。
+            device: 运行设备。
+            cls_gain: 分类损失权重。
+            box_gain: 框回归权重。
+            dfl_gain: DFL 损失权重。
+            tal_topk: Assigner 的 top-k 参数。
         """
         super().__init__()
         self.device = device
@@ -156,15 +152,15 @@ class YOLOV8DetectionLoss(nn.Module):
 
     def preprocess(self, targets, batch_size, scale_tensor):
         """
-        将原始 targets 整理为 (B, max_n, 5) 格式，并缩放到输入分辨率。
+        将输入 targets 整理成 (B, max_obj, 5) 并缩放到输入分辨率。
 
         Args:
-            targets (Tensor): [N, 6] 格式（img_idx, cls, cx, cy, w, h）。
-            batch_size (int): 批大小。
-            scale_tensor (Tensor): [4] (W, H, W, H) 用于缩放 bbox。
+            targets: [N,6] (img_idx, cls, cx, cy, w, h)
+            batch_size: 批大小
+            scale_tensor: [4] (W,H,W,H) 用于乘以归一化坐标
 
         Returns:
-            Tensor: [B, max_n, 5] 格式 (cls, lx, ly, rx, ry)。
+            Tensor: (B, max_obj, 5) (cls, lx, ly, rx, ry)
         """
         nl, ne = targets.shape
         if nl == 0:
@@ -189,14 +185,14 @@ class YOLOV8DetectionLoss(nn.Module):
 
     def bbox_decode(self, anchor_points, pred_dist):
         """
-        将锚点 + 分布解码为边界框坐标。
+        将锚点 + DFL 分布解码为框坐标。
 
         Args:
-            anchor_points (Tensor): [H*W, 2] 锚点中心。
-            pred_dist (Tensor): [B, H*W, 4*reg_max] 分布预测。
+            anchor_points: [H*W, 2] 锚点中心
+            pred_dist: [B, H*W, 4*reg_max]
 
         Returns:
-            Tensor: [B, H*W, 4] (lx, ly, rx, ry)。
+            [B, H*W, 4] (lx,ly,rx,ry)
         """
         if self.use_dfl:
             b, a, c = pred_dist.shape  # batch, anchors, channels
@@ -206,16 +202,15 @@ class YOLOV8DetectionLoss(nn.Module):
 
     def forward(self, preds: list[torch.Tensor], batch: DetectBatchDataInfo):
         """
-        计算检测三件套损失。
+        计算检测损失。
 
         Args:
-            preds (torch.Tensor): 单 head 输出 [B, C+4*reg_max, H*W]。
-            batch (DetectBatchDataInfo): 批数据，含 bboxes、labels、bboxes_idx。
+            preds: 三个特征层输出，每个 [B, C+4*reg_max, Hi, Wi]
+            batch: 批数据，含 bboxes / target / bboxes_idx
 
         Returns:
-            tuple:
-                - total_loss (Tensor): 标量。
-                - loss_items (dict): 各分量损失。
+            total_loss: 标量
+            loss_items: dict
         """
         dtype = preds[0].dtype
         batch_size = preds[0].shape[0]
@@ -252,7 +247,9 @@ class YOLOV8DetectionLoss(nn.Module):
         )
 
         """开始计算loss"""
-        cls_loss, box_loss, dfl_loss = torch.tensor(0., dtype=dtype), torch.tensor(0., dtype=dtype), torch.tensor(0., dtype=dtype)
+        cls_loss = torch.tensor(0., dtype=dtype).to(self.device)
+        box_loss = torch.tensor(0., dtype=dtype).to(self.device)
+        dfl_loss = torch.tensor(0., dtype=dtype).to(self.device)
 
         # cls loss
         # 这里限制target_scores_sum最小必须为1
@@ -278,14 +275,23 @@ class YOLOV8DetectionLoss(nn.Module):
 
 
 class YOLOV8PoseLoss(YOLOV8DetectionLoss):
-    """Criterion class for computing training losses."""
+    """
+    YOLOv8 姿态估计头损失,在检测损失基础上增加：
+        4. 关键点回归损失 (OKS)
+        5. 关键点可见性 loss (BCE)
+    """
     OKS_SIGMA = (
             np.array([0.26, 0.25, 0.25, 0.35, 0.35, 0.79, 0.79, 0.72, 0.72, 0.62, 0.62, 1.07, 1.07, 0.87, 0.87, 0.89, 0.89])
             / 10.0
     )
 
     def __init__(self, nc, strides, reg_max, imgsz, device, kpt_shape, cls_gain=1, box_gain=1, dfl_gain=1, pose_gain=1, kobj_gain=1, tal_topk=10):  # model must be de-paralleled
-        """Initializes v8PoseLoss with model, sets keypoint variables and declares a keypoint loss instance."""
+        """
+        Args:
+            kpt_shape: 关键点维度, 如 [17,3] 表示 17 个点, 每个点 x,y,visible
+            pose_gain: 关键点回归 loss 权重
+            kobj_gain: 关键点可见性 loss 权重
+        """
         super().__init__(nc, strides, reg_max, imgsz, device, cls_gain, box_gain, dfl_gain, tal_topk)
         self.pose_gain = pose_gain
         self.kobj_gain = kobj_gain
@@ -296,9 +302,15 @@ class YOLOV8PoseLoss(YOLOV8DetectionLoss):
         sigmas = torch.from_numpy(self.OKS_SIGMA).to(self.device) if humanoid_pose else torch.ones(nkpt, device=self.device) / nkpt
         self.keypoint_loss = KeypointLoss(sigmas=sigmas)
 
-    def __call__(self, preds: tuple[list[torch.Tensor], torch.Tensor], batch: PoseBatchDataInfo):
-        """Calculate the total loss and detach it."""
+    def forward(self, preds: tuple[list[torch.Tensor], torch.Tensor], batch: PoseBatchDataInfo):
+        """
+        Args:
+            preds[0]: 三个检测层输出
+            preds[1]: 关键点头输出 [B, nkpt*dim, Hi, Wi]
 
+        Returns:
+            total_loss, loss_items
+        """
         features: list[torch.Tensor] = preds[0]
         pred_kpts: torch.Tensor = preds[1]
         dtype = features[0].dtype
@@ -338,11 +350,11 @@ class YOLOV8PoseLoss(YOLOV8DetectionLoss):
         )
 
         """开始计算loss"""
-        cls_loss = torch.tensor(0., dtype=dtype)
-        box_loss = torch.tensor(0., dtype=dtype)
-        dfl_loss = torch.tensor(0., dtype=dtype)
-        pose_loss = torch.tensor(0., dtype=dtype)
-        kobj_loss = torch.tensor(0., dtype=dtype)
+        cls_loss = torch.tensor(0., dtype=dtype).to(self.device)
+        box_loss = torch.tensor(0., dtype=dtype).to(self.device)
+        dfl_loss = torch.tensor(0., dtype=dtype).to(self.device)
+        pose_loss = torch.tensor(0., dtype=dtype).to(self.device)
+        kobj_loss = torch.tensor(0., dtype=dtype).to(self.device)
 
         # cls loss
         # 这里限制target_scores_sum最小必须为1
@@ -384,35 +396,38 @@ class YOLOV8PoseLoss(YOLOV8DetectionLoss):
 
     @staticmethod
     def kpts_decode(anchor_points, pred_kpts):
-        """Decodes predicted keypoints to image coordinates."""
+        """
+        将关键点头输出解码为坐标。
+
+        Args:
+            anchor_points: [H*W,2]
+            pred_kpts: [B,H*W,nkpt,3]
+
+        Returns:
+            [B,H*W,nkpt,3] x,y 已加上 anchor 坐标
+        """
         y = pred_kpts.clone()
         y[..., :2] *= 2.0
         y[..., 0] += anchor_points[:, [0]] - 0.5
         y[..., 1] += anchor_points[:, [1]] - 0.5
         return y
 
-    def calculate_keypoints_loss(
-            self, masks, target_gt_idx, keypoints, batch_idx, stride_tensor, target_bboxes, pred_kpts
-    ):
+    def calculate_keypoints_loss(self, masks, target_gt_idx, keypoints, batch_idx, stride_tensor, target_bboxes, pred_kpts):
         """
-        Calculate the keypoints loss for the model.
-
-        This function calculates the keypoints loss and keypoints object loss for a given batch. The keypoints loss is
-        based on the difference between the predicted keypoints and ground truth keypoints. The keypoints object loss is
-        a binary classification loss that classifies whether a keypoint is present or not.
+        计算关键点回归损失与可见性损失。
 
         Args:
-            masks (torch.Tensor): Binary mask tensor indicating object presence, shape (BS, N_anchors).
-            target_gt_idx (torch.Tensor): Index tensor mapping anchors to ground truth objects, shape (BS, N_anchors).
-            keypoints (torch.Tensor): Ground truth keypoints, shape (N_kpts_in_batch, N_kpts_per_object, kpts_dim).
-            batch_idx (torch.Tensor): Batch index tensor for keypoints, shape (N_kpts_in_batch, 1).
-            stride_tensor (torch.Tensor): Stride tensor for anchors, shape (N_anchors, 1).
-            target_bboxes (torch.Tensor): Ground truth boxes in (x1, y1, x2, y2) format, shape (BS, N_anchors, 4).
-            pred_kpts (torch.Tensor): Predicted keypoints, shape (BS, N_anchors, N_kpts_per_object, kpts_dim).
+            fg_mask: [B,H*W] 正样本锚框 mask
+            target_gt_idx: [B,H*W] 每个正锚框对应哪个 gt
+            keypoints: [N_gt,nkpt,3] 归一化 gt 关键点
+            batch_idx: [N_gt,1] 每张关键点所属 batch 索引
+            stride_tensor: [H*W,1] 特征层 stride
+            target_bboxes: [B,H*W,4] 分配后的 gt 框（已除以 stride）
+            pred_kpts: [B,H*W,nkpt,3] 预测关键点
 
         Returns:
-            kpts_loss (torch.Tensor): The keypoints loss.
-            kpts_obj_loss (torch.Tensor): The keypoints object loss.
+            pose_loss: 关键点回归 loss
+            kobj_loss: 可见性 loss
         """
         batch_idx = batch_idx.flatten()
         batch_size = len(masks)
@@ -458,17 +473,30 @@ class YOLOV8PoseLoss(YOLOV8DetectionLoss):
 
 
 class YOLOV8SegmentLoss(YOLOV8DetectionLoss):
-    """Criterion class for computing training losses."""
-
+    """
+    YOLOv8 实例分割头损失,在检测损失基础上增加：
+        6. 实例分割 mask 损失
+    """
     def __init__(self, nc, strides, reg_max, imgsz, device, overlap_mask, cls_gain=1, box_gain=1, dfl_gain=1, seg_gain=1, tal_topk=10):  # model must be de-paralleled
-        """Initializes v8PoseLoss with model, sets keypoint variables and declares a keypoint loss instance."""
+        """
+        Args:
+            overlap_mask: 数据集是否采用重叠 mask（COCO 式）
+            seg_gain: mask 损失权重
+        """
         super().__init__(nc, strides, reg_max, imgsz, device, cls_gain, box_gain, dfl_gain, tal_topk)
         self.seg_gain = seg_gain
         self.overlap = overlap_mask
 
-    def __call__(self, preds: tuple[list[torch.Tensor], torch.Tensor, torch.Tensor], batch: SegmentBatchDataInfo):
-        """Calculate the total loss and detach it."""
+    def forward(self, preds: tuple[list[torch.Tensor], torch.Tensor, torch.Tensor], batch: SegmentBatchDataInfo):
+        """
+        Args:
+            preds[0]: 检测层输出
+            preds[1]: mask 系数头 [B, nm, Hi, Wi]
+            preds[2]: proto mask [B, nm, Hp, Wp]
 
+        Returns:
+            total_loss, loss_items
+        """
         features, pred_masks, proto = preds
         dtype = features[0].dtype
         batch_size, _, mask_h, mask_w = proto.shape
@@ -506,10 +534,10 @@ class YOLOV8SegmentLoss(YOLOV8DetectionLoss):
         )
 
         """开始计算loss"""
-        cls_loss = torch.tensor(0., dtype=dtype)
-        box_loss = torch.tensor(0., dtype=dtype)
-        dfl_loss = torch.tensor(0., dtype=dtype)
-        seg_loss = torch.tensor(0., dtype=dtype)
+        cls_loss = torch.tensor(0., dtype=dtype).to(self.device)
+        box_loss = torch.tensor(0., dtype=dtype).to(self.device)
+        dfl_loss = torch.tensor(0., dtype=dtype).to(self.device)
+        seg_loss = torch.tensor(0., dtype=dtype).to(self.device)
 
         # cls loss
         # 这里限制target_scores_sum最小必须为1
@@ -536,11 +564,13 @@ class YOLOV8SegmentLoss(YOLOV8DetectionLoss):
             seg_loss = self.calculate_segmentation_loss(
                 fg_mask, masks, target_gt_idx, target_bboxes, batch.bboxes_idx.view(-1, 1), proto, pred_masks, torch.tensor(self.imgsz)[[1, 0]], self.overlap
             )
+        else:
+            seg_loss += (proto * 0).sum() + (pred_masks * 0).sum()  # inf sums may lead to nan loss
 
         cls_loss *= self.cls_gain  # cls gain
         box_loss *= self.box_gain  # box gain
         dfl_loss *= self.dfl_gain  # dfl gain
-        seg_loss *= self.seg_gain  # segment_gain
+        seg_loss *= self.seg_gain  # segment gain
         total_loss = (cls_loss + box_loss + dfl_loss + seg_loss) * batch_size
         loss_items = {
             "cls_loss": cls_loss.detach(),
@@ -552,32 +582,25 @@ class YOLOV8SegmentLoss(YOLOV8DetectionLoss):
         return total_loss, loss_items
 
     @staticmethod
-    def single_mask_loss(
-            gt_mask: torch.Tensor, pred: torch.Tensor, proto: torch.Tensor, xyxy: torch.Tensor, area: torch.Tensor
-    ) -> torch.Tensor:
+    def single_mask_loss(gt_mask: torch.Tensor, pred: torch.Tensor, proto: torch.Tensor, xyxy: torch.Tensor, area: torch.Tensor) -> torch.Tensor:
         """
-        Compute the instance segmentation loss for a single image.
+        单张图片的实例分割损失。
 
         Args:
-            gt_mask (torch.Tensor): Ground truth mask of shape (n, H, W), where n is the number of objects.
-            pred (torch.Tensor): Predicted mask coefficients of shape (n, 32).
-            proto (torch.Tensor): Prototype masks of shape (32, H, W).
-            xyxy (torch.Tensor): Ground truth bounding boxes in xyxy format, normalized to [0, 1], of shape (n, 4).
-            area (torch.Tensor): Area of each ground truth bounding box of shape (n,).
+            gt_mask: [n, Hp, Wp] 对应 n 个正样本的 gt
+            pred: [n, nm] mask 系数
+            proto: [nm, Hp, Wp] 原型 mask
+            xyxy: [n,4] 归一化 gt 框
+            area: [n] 框面积
 
         Returns:
-            (torch.Tensor): The calculated mask loss for a single image.
-
-        Notes:
-            The function uses the equation pred_mask = torch.einsum('in,nhw->ihw', pred, proto) to produce the
-            predicted masks from the prototype masks and predicted mask coefficients.
+            mask 损失标量
         """
         pred_mask = torch.einsum("in,nhw->ihw", pred, proto)  # (n, 32) @ (32, 80, 80) -> (n, 80, 80)
         loss = F.binary_cross_entropy_with_logits(pred_mask, gt_mask, reduction="none")
         return (crop_mask(loss, xyxy).mean(dim=(1, 2)) / area).sum()
 
-    def calculate_segmentation_loss(
-            self,
+    def calculate_segmentation_loss(self,
             fg_mask: torch.Tensor,
             masks: torch.Tensor,
             target_gt_idx: torch.Tensor,
@@ -589,26 +612,21 @@ class YOLOV8SegmentLoss(YOLOV8DetectionLoss):
             overlap: bool,
     ) -> torch.Tensor:
         """
-        Calculate the loss for instance segmentation.
+        计算整批分割损失。
 
         Args:
-            fg_mask (torch.Tensor): A binary tensor of shape (BS, N_anchors) indicating which anchors are positive.
-            masks (torch.Tensor): Ground truth masks of shape (BS, H, W) if `overlap` is False, otherwise (BS, ?, H, W).
-            target_gt_idx (torch.Tensor): Indexes of ground truth objects for each anchor of shape (BS, N_anchors).
-            target_bboxes (torch.Tensor): Ground truth bounding boxes for each anchor of shape (BS, N_anchors, 4).
-            batch_idx (torch.Tensor): Batch indices of shape (N_labels_in_batch, 1).
-            proto (torch.Tensor): Prototype masks of shape (BS, 32, H, W).
-            pred_masks (torch.Tensor): Predicted masks for each anchor of shape (BS, N_anchors, 32).
-            imgsz (torch.Tensor): Size of the input image as a tensor of shape (2), i.e., (H, W).
-            overlap (bool): Whether the masks in `masks` tensor overlap.
+            fg_mask: [B, H*W] 正样本
+            masks: 若 overlap=False -> [B, Hp, Wp]；否则为 [B, ?, Hp, Wp]
+            target_gt_idx: [B, H*W] 正样本对应 gt 索引
+            target_bboxes: [B, H*W, 4] 已缩放为输入分辨率
+            batch_idx: [N_gt,1]
+            proto: [B, nm, Hp, Wp]
+            pred_masks: [B, H*W, nm]
+            imgsz: (H,W) 输入分辨率
+            overlap: 是否采用重叠 mask
 
         Returns:
-            (torch.Tensor): The calculated loss for instance segmentation.
-
-        Notes:
-            The batch loss can be computed for improved speed at higher memory usage.
-            For example, pred_mask can be computed as follows:
-                pred_mask = torch.einsum('in,nhw->ihw', pred, proto)  # (i, 32) @ (32, 160, 160) -> (i, 160, 160)
+            seg 损失标量
         """
         _, _, mask_h, mask_w = proto.shape
         loss = 0

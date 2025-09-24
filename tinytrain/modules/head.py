@@ -236,8 +236,8 @@ class YOLOSegment(YOLODetect):
         p = self.proto(x[0])  # mask protos
         bs = p.shape[0]  # batch size
 
-        mc = torch.cat([self.cv4[i](x[i]).view(bs, self.nm, -1) for i in range(len(self.from_channels))], 2)  # mask coefficients
+        mc = torch.cat([self.cv4[i](x[i]).view(bs, self.nm, -1) for i in range(len(self.from_channels))], 2)  # mask coefficients  # (batch_size, num_masks, h*w)
         x = YOLODetect.forward(self, x)
         if self.training:
             return x, mc, p
-        return torch.cat([x, mc], 1), p
+        return torch.cat([x, mc.permute(0, 2, 1)], -1), p

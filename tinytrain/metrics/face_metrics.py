@@ -8,15 +8,22 @@ from .base import BaseMetric
 
 class FaceRecognitionMetrics(BaseMetric):
     """
-    人脸识别评测指标计算器（1:1 验证场景）
-    支持增量 accumulate → 一次性 compute → 绘图保存
-    主要指标：
+    人脸识别1:1验证场景评测指标计算器。
+
+    功能
+    ----
+    1. 支持增量 accumulate → 一次性 compute → 绘图保存
+    2. 主要指标：
         - AUC
         - TPR@FAR = 1e-3
         - 最优阈值（Youden's index）
         - Balanced Accuracy（= (TPR + TNR)/2 ）
     """
+
     def __init__(self):
+        """
+        初始化空缓冲区与指标占位变量。
+        """
         super().__init__()
 
         # 原始样本缓冲区
@@ -35,8 +42,10 @@ class FaceRecognitionMetrics(BaseMetric):
         self._tpr = None
         self._threshold = None
 
-    def reset(self, *args, **kwargs):
-        """清空缓冲区与所有计算结果，支持多轮复用"""
+    def reset(self):
+        """
+        清空缓冲区与所有计算结果，支持多轮复用。
+        """
         self.scores = []
         self.labels = []
         self._auc = 0.
@@ -49,13 +58,13 @@ class FaceRecognitionMetrics(BaseMetric):
         self._tpr = None
         self._threshold = None
 
-    def update(self, scores, labels):
+    def update(self, scores: np.ndarray, labels: np.ndarray):
         """
-        批量追加一次推理结果
-        Parameters
-        ----------
-        scores : array-like  一维相似度得分
-        labels : array-like  一维 0/1 标签
+        批量追加一次推理结果。
+
+        Args:
+            scores (np.ndarray): 一维相似度得分。
+            labels (np.ndarray): 一维 0/1 标签，0 表示负样本，1 表示正样本。
         """
         scores = np.asarray(scores).ravel()
         labels = np.asarray(labels).ravel()
@@ -64,7 +73,7 @@ class FaceRecognitionMetrics(BaseMetric):
         self.scores.append(scores)
         self.labels.append(labels)
 
-    def compute(self, *args, **kwargs):
+    def compute(self):
         """
         汇总所有样本后计算指标：
         1. ROC → AUC
@@ -108,28 +117,56 @@ class FaceRecognitionMetrics(BaseMetric):
             self._tpr_1e4 = np.interp(1e-4, self._fpr, self._tpr)
 
     def auc(self):
+        """
+        返回计算得到的 AUC 值。
+
+        Returns:
+            float: AUC；若尚未 compute 则返回 0。
+        """
         return self._auc
 
     def balanced_accuracy(self):
+        """
+        返回最优阈值下的 Balanced Accuracy。
+
+        Returns:
+            float: Balanced Accuracy；若尚未 compute 则返回 0。
+        """
         return self._bal_acc
 
     def tpr_1e3(self):
+        """
+        返回 FAR=1e-3 时对应的 TPR。
+
+        Returns:
+            float: TPR@FAR=1e-3；若尚未 compute 则返回 0。
+        """
         return self._tpr_1e3
 
     def tpr_1e4(self):
+        """
+        返回 FAR=1e-4 时对应的 TPR。
+
+        Returns:
+            float: TPR@FAR=1e-4；若尚未 compute 则返回 0。
+        """
         return self._tpr_1e4
 
     def best_threshold(self):
+        """
+        返回 Youden 索引最优阈值（cosine 得分）。
+
+        Returns:
+            float: 最优阈值；若尚未 compute 则返回 0。
+        """
         return self._best_threshold
 
     def plot(self, save_dir: Path):
         """
-        绘制 ROC 曲线、AUC 面积及 TPR@FAR=1e-3 标注图。
+        绘制 ROC 曲线、AUC 面积及 TPR@FAR=1e-3 标注图并保存。
 
-        Parameters
-        ----------
-        save_dir : str, optional
-            则将图片保存到该路径。
+        Args:
+            save_dir (Path): 保存目录路径，将生成 ROC_curve.png。
         """
         import matplotlib.pyplot as plt
 

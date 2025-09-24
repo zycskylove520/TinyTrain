@@ -38,6 +38,9 @@ class FaceRecognitionTrainer(BaseTrainer):
         return batch_samples
 
     def convert_ddp_model(self, world_size: int):
+        """
+        转换模型成DDP模型，criterion部分不转换，PartialFCLoss在分布式情况不同device上的weight大小可能不一致。
+        """
         if world_size <= 1:
             return
 

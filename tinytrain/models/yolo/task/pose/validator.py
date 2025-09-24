@@ -64,31 +64,37 @@ class YOLOPoseValidator(BaseValidator):
         self.pose_metrics.reset()
 
     def update_metrics_on_training(self, outputs: list[torch.Tensor], batch_samples: PoseBatchDataInfo, pbar: TTProgressBar):
-        # 拆分box和keypoint
-        box_outputs = []
-        keypoint_outputs = []
-        for output in outputs:
-            box_outputs.append(output[:, :6])
-            keypoint_outputs.append(output[:, 6:].reshape(-1, self.keypoint_shape[0], self.keypoint_shape[1]))
+        preds = outputs
 
         # 真实目标解码
         self.decode_boxes(batch_samples)
-        # 分割样本
-        box_list, keypoint_list, box_area_list = self.batch_samples_split(batch_samples)
 
-        self.detect_metrics.update(box_outputs, box_list)
+        batch = len(preds)
+        for i in range(batch):
+            # 选出对应批次的bboxes_idx
+            idx = batch_samples.bboxes_idx == i
 
-        for i in range(len(keypoint_list)):
-            gt_keypoint = keypoint_list[i]
-            pred_keypoint = keypoint_outputs[i]
-            area = box_area_list[i]
+            # 获取该批次的真实值
+            gt_bboxes = batch_samples.bboxes[idx]
+            gt_targets = batch_samples.target[idx]
+            gt_keypoints = batch_samples.batch_keypoints[idx]
+            # `0.53` is from https://github.com/jin-s13/xtcocoapi/blob/master/xtcocotools/cocoeval.py#L384
+            gt_box_areas = gt_bboxes[:, 2:].prod(1) * 0.53
 
-            gt_cls = box_list[i][:, 4].cpu().numpy()
-            pred_cls = box_outputs[i][:, 5].cpu().numpy()
-            score = box_outputs[i][:, 4].cpu().numpy()
+            # 获取该批次的预测值
+            pred = preds[i]
+            pred_scores = pred[:, 4]
+            pred_targets = pred[:, 5]
+            pred_keypoints = pred[:, 6:].reshape(-1, self.keypoint_shape[0], self.keypoint_shape[1])
 
-            tp = self.calculate_tp(gt_cls, pred_cls, gt_keypoint, pred_keypoint, area, self.sigma)
-            self.pose_metrics.update(tp, score, pred_cls, gt_cls)
+            # 计算detect metrics
+            p = [pred[:, :6]]
+            t = [torch.cat([gt_bboxes, gt_targets.view(-1, 1)], dim=1)]
+            self.detect_metrics.update(p, t)
+
+            # 计算pose metrics
+            tp = self.calculate_tp(gt_targets.cpu().numpy(), pred_targets.cpu().numpy(), gt_keypoints, pred_keypoints, gt_box_areas, self.sigma)
+            self.pose_metrics.update(tp, pred_scores.cpu().numpy(), pred_targets.cpu().numpy(), gt_targets.cpu().numpy())
 
         desc = f"{'val':^5}|{'classes':^15}[Detect: {'Precision':^15}|{'Recall':^15}|{'MAP50':^15}|{'MAP50_95':^15}][Pose: {'Precision':^15}|{'Recall':^15}|{'MAP50':^15}|{'MAP50_95':^15}]"
         pbar.set_description(desc)
@@ -130,32 +136,38 @@ class YOLOPoseValidator(BaseValidator):
         LOGGER.info(f"Calculate iou=0.5, per class precision and recall...")
 
     def update_metrics_on_train_completed(self, outputs: list[torch.Tensor], batch_samples: PoseBatchDataInfo, pbar: TTProgressBar):
-        # 拆分box和keypoint
-        box_outputs = []
-        keypoint_outputs = []
-        for output in outputs:
-            box_outputs.append(output[:, :6])
-            keypoint_outputs.append(output[:, 6:].reshape(-1, self.keypoint_shape[0], self.keypoint_shape[1]))
+        preds = outputs
 
         # 真实目标解码
         self.decode_boxes(batch_samples)
-        # 分割样本
-        box_list, keypoint_list, box_area_list = self.batch_samples_split(batch_samples)
 
-        self.detect_metrics.update(box_outputs, box_list)
-        self.confuse_matrix.update(box_outputs, box_list)
+        batch = len(preds)
+        for i in range(batch):
+            # 选出对应批次的bboxes_idx
+            idx = batch_samples.bboxes_idx == i
 
-        for i in range(len(keypoint_list)):
-            gt_keypoint = keypoint_list[i]
-            pred_keypoint = keypoint_outputs[i]
-            area = box_area_list[i]
+            # 获取该批次的真实值
+            gt_bboxes = batch_samples.bboxes[idx]
+            gt_targets = batch_samples.target[idx]
+            gt_keypoints = batch_samples.batch_keypoints[idx]
+            # `0.53` is from https://github.com/jin-s13/xtcocoapi/blob/master/xtcocotools/cocoeval.py#L384
+            gt_box_areas = gt_bboxes[:, 2:].prod(1) * 0.53
 
-            gt_cls = box_list[i][:, 4].flatten().cpu().numpy()
-            score = box_outputs[i][:, 4].flatten().cpu().numpy()
-            pred_cls = box_outputs[i][:, 5].flatten().cpu().numpy()
+            # 获取该批次的预测值
+            pred = preds[i]
+            pred_scores = pred[:, 4]
+            pred_targets = pred[:, 5]
+            pred_keypoints = pred[:, 6:].reshape(-1, self.keypoint_shape[0], self.keypoint_shape[1])
 
-            tp = self.calculate_tp(gt_cls, pred_cls, gt_keypoint, pred_keypoint, area, self.sigma)
-            self.pose_metrics.update(tp, score, pred_cls, gt_cls)
+            # 计算detect metrics & confuse matrix
+            p = [pred[:, :6]]
+            t = [torch.cat([gt_bboxes, gt_targets.view(-1, 1)], dim=1)]
+            self.detect_metrics.update(p, t)
+            self.confuse_matrix.update(p, t)
+
+            # 计算pose metrics
+            tp = self.calculate_tp(gt_targets.cpu().numpy(), pred_targets.cpu().numpy(), gt_keypoints, pred_keypoints, gt_box_areas, self.sigma)
+            self.pose_metrics.update(tp, pred_scores.cpu().numpy(), pred_targets.cpu().numpy(), gt_targets.cpu().numpy())
 
         # log
         desc = f"calculating per-class precision and recall..."
@@ -179,10 +191,13 @@ class YOLOPoseValidator(BaseValidator):
         if RANK in {-1, 0}:
             print(f"{'val':^5}|{'class_name':^15}[Detect: {'Precision':^15}|{'Recall':^15}][Pose: {'Precision':^15}|{'Recall':^15}]")
             pr_table = torch.full((self.num_classes, 4), -1.0, dtype=torch.float32)
-            pr_table[classes, 0] = detect_precision_per_class
-            pr_table[classes, 1] = detect_recall_per_class
-            pr_table[classes, 2] = torch.from_numpy(pose_precision_per_class).float()
-            pr_table[classes, 3] = torch.from_numpy(pose_recall_per_class).float()
+            if len(classes) >= 1:
+                pr_table[classes, 0] = detect_precision_per_class
+                pr_table[classes, 1] = detect_recall_per_class
+            if pose_precision_per_class.size == classes.numel():
+                pr_table[classes, 2] = torch.from_numpy(pose_precision_per_class).float()
+            if pose_recall_per_class.size == classes.numel():
+                pr_table[classes, 3] = torch.from_numpy(pose_recall_per_class).float()
 
             lines = []
             for i, pr in enumerate(pr_table):
@@ -214,27 +229,6 @@ class YOLOPoseValidator(BaseValidator):
 
         # 缩放关键点
         batch_samples.batch_keypoints[..., :2] *= target_shapes_2.unsqueeze(1)
-
-    def batch_samples_split(self, batch_samples: PoseBatchDataInfo):
-        """
-        将一批真实标签分割成一个个组成的列表
-        @return:
-        """
-        _, counts = torch.unique(batch_samples.bboxes_idx, return_counts=True)
-        bboxes_split = torch.split(batch_samples.bboxes, counts.tolist())
-        target_split = torch.split(batch_samples.target, counts.tolist())
-        keypoints_split = torch.split(batch_samples.batch_keypoints, counts.tolist())
-
-        target_list = []
-        box_area_list = []
-
-        for b, t in zip(bboxes_split, target_split):
-            target_list.append(torch.cat([b, t.view(-1, 1)], dim=1))
-
-            # `0.53` is from https://github.com/jin-s13/xtcocoapi/blob/master/xtcocotools/cocoeval.py#L384
-            box_area_list.append(b[:, 2:].prod(1) * 0.53)
-
-        return target_list, list(keypoints_split), box_area_list
 
     def calculate_tp(self, gt_cls, pred_cls, gt_keypoint, pred_keypoint, area, sigma):
         iou = kpt_iou(gt_keypoint, pred_keypoint, area=area, sigma=sigma)

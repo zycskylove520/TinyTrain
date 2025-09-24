@@ -1,27 +1,9 @@
 import cv2
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from tinytrain.utils.box_utils import lxlyrxry_2_cxcywh
-
-
-def crop_mask(masks, boxes):
-    """
-    It takes a mask and a bounding box, and returns a mask that is cropped to the bounding box.
-
-    Args:
-        masks (torch.Tensor): [n, h, w] tensor of masks
-        boxes (torch.Tensor): [n, 4] tensor of bbox coordinates in relative point form
-
-    Returns:
-        (torch.Tensor): The masks are being cropped to the bounding box.
-    """
-    _, h, w = masks.shape
-    x1, y1, x2, y2 = torch.chunk(boxes[:, :, None], 4, 1)  # x1 shape(n,1,1)
-    r = torch.arange(w, device=masks.device, dtype=x1.dtype)[None, None, :]  # rows shape(1,1,w)
-    c = torch.arange(h, device=masks.device, dtype=x1.dtype)[None, :, None]  # cols shape(1,h,1)
-
-    return masks * ((r >= x1) * (r < x2) * (c >= y1) * (c < y2))
 
 
 def segments2boxes(segments):
@@ -137,3 +119,71 @@ def polygons2masks_overlap(imgsz, segments, downsample_ratio=1):
         # 限制在i+1的目的是上面说的掩盖问题
         masks = np.clip(masks, a_min=0, a_max=i + 1)
     return masks, index
+
+
+def crop_mask(masks, boxes):
+    """
+    It takes a mask and a bounding box, and returns a mask that is cropped to the bounding box.
+
+    Args:
+        masks (torch.Tensor): [n, h, w] tensor of masks
+        boxes (torch.Tensor): [n, 4] tensor of bbox coordinates in relative point form
+
+    Returns:
+        (torch.Tensor): The masks are being cropped to the bounding box.
+    """
+    _, h, w = masks.shape
+    x1, y1, x2, y2 = torch.chunk(boxes[:, :, None], 4, 1)  # x1 shape(n,1,1)
+    r = torch.arange(w, device=masks.device, dtype=x1.dtype)[None, None, :]  # rows shape(1,1,w)
+    c = torch.arange(h, device=masks.device, dtype=x1.dtype)[None, :, None]  # cols shape(1,h,1)
+
+    return masks * ((r >= x1) * (r < x2) * (c >= y1) * (c < y2))
+
+
+def decode_pred_masks(proto: torch.Tensor, pred_bboxes: torch.Tensor, pred_masks_vec: torch.Tensor, target_shape, bin=True, retina_masks=False):
+    """
+    解码出最终实例 mask。
+
+    Args:
+        proto:        原型 mask，形状 [C, mh, mw]  (如 32×160×160)
+        pred_bboxes:  网络输出的 bbox，已解码到target_shape，形状 [n, 4]  (x1,y1,x2,y2)
+        pred_masks_vec:   每个实例对 C 个原型的系数，形状 [n, C]
+        target_shape: 最终希望输出的 (W, H) 尺寸（目标图大小）
+        retina_masks: 是否使用高分辨率 mask。True→直接上采到原图尺寸再裁；False→在原型尺寸上裁完再上采。
+
+    Returns:
+        masks:        二值 mask，形状 [n, H, W]，dtype=torch.bool
+    """
+    c, mh, mw = proto.shape  # 原型通道数、高、宽
+    iw, ih = target_shape  # 目标宽、高
+
+    # 用系数与原型做线性组合，得到 n 张 mask（仍在原型分辨率）
+    masks = (pred_masks_vec @ proto.float().view(c, -1)).view(-1, mh, mw)  # [n, mh, mw]
+
+    if not retina_masks:
+        # 低分辨率路线：在原型尺寸上裁剪，最后再上采
+        width_ratio = mw / iw
+        height_ratio = mh / ih
+
+        # pred_boxes放缩到pred_mask尺寸
+        downsampled_bboxes = pred_bboxes.clone()
+        downsampled_bboxes[:, [0, 2]] *= width_ratio  # x1,x2
+        downsampled_bboxes[:, [1, 3]] *= height_ratio  # y1,y2
+
+        masks = crop_mask(masks, downsampled_bboxes)  # CHW
+    else:
+        # 高分辨率路线：先把原型上采到原图尺寸，再用原图 bbox 裁剪
+        # 把原型上采到 (ih, iw)
+        proto_up = F.interpolate(proto.unsqueeze(0),
+                                 size=(ih, iw),
+                                 mode='bilinear',
+                                 align_corners=False).squeeze(0)  # [C, ih, iw]
+
+        # 重新组合得到高分辨率 mask
+        masks = (pred_masks_vec @ proto_up.view(c, -1)).view(-1, ih, iw)  # [n, ih, iw]
+
+        # 用目标图尺寸的 bbox 裁剪
+        abs_bboxes = pred_bboxes.clone()
+        masks = crop_mask(masks, abs_bboxes)  # [n, ih, iw]
+
+    return masks.gt_(0.0) if bin else masks

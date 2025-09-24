@@ -9,8 +9,18 @@ from .base import BaseImgResult
 
 class PoseImgResult(BaseImgResult):
     """
-    目标检测可视化实现：
-    在图片上画框、写类别与置信度。
+    姿态估计结果可视化类。
+
+    职责：
+    1. 接收一批图像及其对应的姿态预测张量（含检测框、置信度、类别、关键点坐标与可见性）。
+    2. 根据置信度阈值过滤低分目标，在图像上绘制：
+       - 检测框（绿色框）
+       - 类别标签与置信度（白底黑字）
+       - 可见关键点（彩色圆点，半径固定，颜色按关键点索引循环）
+    3. 返回绘制后的 RGB 图像数组，供后续拼板保存或前端展示。
+
+    继承自 BaseImgResult，复用其批量拼板、保存、子图数量控制等能力。
+    本类只关注“单张图像如何绘制”，具体拼图与文件写入逻辑由父类完成。
     """
 
     def __init__(self, keypoint_shape, save_dir: Path, plot_count: int = 4, mode: str = "val", max_sub_len: int = 3, rgb=True, draw_conf_threshold: float = 0.25):
@@ -26,7 +36,7 @@ class PoseImgResult(BaseImgResult):
         imgs_np = imgs.byte().cpu().numpy()
         return imgs_np, None
 
-    def _draw_one_img(self, img: np.ndarray, pred: torch.Tensor) -> np.ndarray:
+    def _draw_one_img(self, img: np.ndarray, pred: torch.Tensor, **kwargs) -> np.ndarray:
         """
         绘制检测框：框 + 类别 + 置信度。
         """

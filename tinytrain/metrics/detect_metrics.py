@@ -53,16 +53,17 @@ class DetectMetrics(BaseMetric):
                                                                    )
         self.results = None
 
+        self.nc = len(self.class_names) if class_names else 1
         # recall_curve的维度为：(TxK), 其中T是 IoU 阈值的数量，K是类别数量
-        self.recall_curve = torch.zeros((1, 1), dtype=torch.float32)
+        self.recall_curve = torch.zeros((10, self.nc), dtype=torch.float32)
         # precision_curve的维度为：(TxRxK), 其中T是 IoU 阈值的数量，R是召回率阈值的数量，K是类别数量
-        self.precision_curve = torch.zeros((1, 1, 1), dtype=torch.float32)
+        self.precision_curve = torch.zeros((10, 101, self.nc), dtype=torch.float32)
 
     def reset(self):
         """重置内部状态，开始新一轮评估。"""
         self.results = None
-        self.recall_curve = torch.zeros((1, 1), dtype=torch.float32)
-        self.precision_curve = torch.zeros((1, 1, 1), dtype=torch.float32)
+        self.recall_curve = torch.zeros((10, self.nc), dtype=torch.float32)
+        self.precision_curve = torch.zeros((10, 101, self.nc), dtype=torch.float32)
         self.metrics.reset()
 
     def update(self, pred: list[torch.Tensor], target: list[torch.Tensor]):
@@ -132,17 +133,19 @@ class DetectMetrics(BaseMetric):
         # 其中T是 IoU 阈值的数量，K是类别数量， A是区域数量，M是每幅图像的最大检测数量。
         # 区域数量：默认四个区域，area=all、area=small、area=medium和area=large
         # 最大检测数量：默认三个检测数量：1，10，100
-        all_recall_matrix = self.results["recall"]
+        all_recall_matrix = self.results.get("recall")
         # 只取area=all，并取最大检测数量=100
-        self.recall_curve = all_recall_matrix[:, :, 0, 2]
+        if all_recall_matrix is not None and all_recall_matrix.numel() > 0:
+            self.recall_curve = all_recall_matrix[:, :, 0, 2]
 
         # all_precision_matrix的维度为：(TxRxKxAxM)
         # 其中T是 IoU 阈值的数量，R是置信度阈值的数量，K是类别数量, A是区域数量，M是每幅图像的最大检测数量。
         # 区域数量：默认四个区域，area=all、area=small、area=medium和area=large
         # 最大检测数量：默认三个检测数量：1，10，100
-        all_precision_matrix = self.results["precision"]
+        all_precision_matrix = self.results.get("precision")
         # 只取area=all，并取最大检测数量=100
-        self.precision_curve = all_precision_matrix[:, :, :, 0, 2]
+        if all_precision_matrix is not None and all_precision_matrix.numel() > 0:
+            self.precision_curve = all_precision_matrix[:, :, :, 0, 2]
 
     def map50(self):
         """
@@ -251,6 +254,14 @@ class DetectMetrics(BaseMetric):
         单个类别 → 只画 1 条线（不额外画 Mean）
         多个类别 → 每类别一条细线 + 一条 Mean
         """
+        if self.results is None or self.recall_curve.numel() == 0:
+            LOGGER.warning("No detection results available, skipping Recall-IoU curve.")
+            return
+
+        # 如果类别为空，也跳过
+        if len(self.classes()) == 0:
+            LOGGER.warning("No classes detected, skipping Recall-IoU curve.")
+            return
 
         # 类别名
         if self.class_names is None:
@@ -322,6 +333,14 @@ class DetectMetrics(BaseMetric):
         """
         绘制 PR 曲线（IoU = 0.5, 0.75, 0.95）
         """
+        if self.results is None or self.precision_curve.numel() == 0:
+            LOGGER.warning("No detection results available, skipping PR curve.")
+            return
+
+        if len(self.classes()) == 0:
+            LOGGER.warning("No classes detected, skipping PR curve.")
+            return
+
         target_iou_vals = [0.5, 0.75, 0.95]
         idx_list = [0, 5, 9]  # precision_curve 对应下标
 
@@ -640,6 +659,10 @@ class DetectLabelInfo:
         一键绘制并保存所有统计图表：
         label_infos.png（包含 boxes_statistics + cxcy_and_wh）
         """
+        if len(self.bboxes) == 0:
+            LOGGER.warning(f"{self.prefix} No bounding boxes available; skipping label visualization plots.")
+            return
+
         # 创建一个2行2列的子图网格
         fig, axes = plt.subplots(2, 2, figsize=(10, 8))
         self.boxes_statistics(axes)

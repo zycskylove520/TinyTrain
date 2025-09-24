@@ -46,7 +46,7 @@ class BaseImgResult(ABC):
 
     # ---------- 子类必须实现 ----------
     @abstractmethod
-    def _draw_one_img(self, img: np.ndarray, pred: torch.Tensor) -> np.ndarray:
+    def _draw_one_img(self, img: np.ndarray, pred: torch.Tensor, **kwargs) -> np.ndarray:
         """
         把单张图片画好并返回 uint8 RGB（或 BGR，后面统一转 RGB）。
 
@@ -72,7 +72,7 @@ class BaseImgResult(ABC):
         return imgs_np, batch_samples.pred if hasattr(batch_samples, 'pred') else None
 
     # ---------- 公共绘制入口 ----------
-    def plot(self, batch_samples, preds: list[torch.Tensor]):
+    def plot(self, batch_samples, preds: list[torch.Tensor], **kwargs):
         """
         主入口：根据批次绘制子图并保存。
         - 自动跳过超过 plot_count 的请求。

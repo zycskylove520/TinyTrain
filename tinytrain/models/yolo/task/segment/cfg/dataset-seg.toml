@@ -15,9 +15,13 @@ val = "datasets/xxx/images/val"
 # 验证集图像路径
 
 segment_resamples = 1000
-# 关键点的形状，表示每个目标有 17 个关键点，每个关键点有 3 个坐标值（x, y, visibility）
+# 对分割标签进行重采样时的采样点数。数值越大，轮廓越平滑，但会增加内存与计算开销
+
 overlap_mask = true
+# 是否允许不同实例的掩码重叠。姿态估计任务中，若多人重叠区域较多，建议设为 true
+
 mask_ratio = 4
+# 掩码下采样比例（相对于输入图像）。最终掩码分辨率为 img_size // mask_ratio，可显著减少显存占用
 
 nc = 1
 # 数据集的类别数量

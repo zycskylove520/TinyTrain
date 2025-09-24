@@ -1,3 +1,22 @@
+"""
+人脸识别训练 & 验证数据集
+
+FaceRecognitionTrainDataset
+    继承自 torchvision.datasets.ImageFolder，用于“分类”式训练。
+    支持：
+    1. 单目录加载（root 为 list 时仅取第 0 项）
+    2. 按比例随机裁剪训练集（crop_fraction）
+    3. 随机水平翻转 + 归一化（mean=0.5, std=0.5）
+    4. 返回 ClassifyDataInfo 结构体，collate 后得到 ClassifyBatchDataInfo
+
+FaceRecognitionValidDataset
+    继承自 TTBaseMapDataset，用于“配对”验证（verification）。
+    支持：
+    1. 读取 *.txt 列表，每行格式：img1_path img2_path is_same(0/1)
+    2. 返回 (sample1, sample2, is_pair) 三元组
+    3. collate 后得到 FaceRecognitionValidBatchDataInfo
+"""
+
 import os
 import random
 import cv2
@@ -17,19 +36,36 @@ from tinytrain.utils.data_utils import cv_imread
 
 
 class FaceRecognitionTrainDataset(ImageFolder):
+    """
+    人脸识别训练数据集（分类任务）
+    目录结构须符合 ImageFolder 约定：
+    root/
+    ├── person1/
+    │   ├── 0001.jpg
+    │   └── 0002.jpg
+    ├── person2/
+    │   └── 0001.jpg
+    """
+
     def __init__(self, config_manager, root: list[Path]):
+        # 1. 仅支持单目录，多目录时给出警告并取第 0 个
         if isinstance(root, list):
             if len(root) > 1:
                 LOGGER.warning(f"Face recognition datasets do not support multiple directories! Only loaded: {root[0]}")
             root = root[0]
+
+        # 2. 父类 ImageFolder 完成样本扫描：self.samples = [(path, class_id), ...]
         super().__init__(root=root)
+
         self.config_manager = config_manager
         self.img_size = make2tuple(self.config_manager.dataset["train_img_size"])
         self.crop_fraction = self.config_manager.augment["img_crop_fraction"]
         self.rgb: bool = self.config_manager.augment["rgb"]
 
+        # 3. 按比例裁剪训练集
         self.crop_samples()
 
+        # 4. 定义数据增强
         self.transform = transforms.Compose(
             [
                 transforms.RandomHorizontalFlip(),
@@ -41,6 +77,15 @@ class FaceRecognitionTrainDataset(ImageFolder):
         return len(self.samples)
 
     def __getitem__(self, index) -> ClassifyDataInfo:
+        """
+        返回单个样本
+        流程：
+        1. 读取图片（BGR）
+        2. 可选 BGR→RGB
+        3. resize 到目标尺寸
+        4. 封装成 ClassifyDataInfo
+        5. transform → tensor
+        """
         filename, label = self.samples[index]  # filename, label
         label = np.array(label)
         image = cv_imread(filename)  # BGR
@@ -69,7 +114,7 @@ class FaceRecognitionTrainDataset(ImageFolder):
         return sample
 
     def crop_samples(self):
-        """训练阶段按 crop_fraction 裁剪数据集。"""
+        """训练阶段按 crop_fraction 随机裁剪数据集（减少样本量）"""
         if self.crop_fraction < 1.0:
             origin_len = len(self.samples)
             # 打乱数据集
@@ -78,6 +123,10 @@ class FaceRecognitionTrainDataset(ImageFolder):
             LOGGER.info(f"Perform datasets clipping, current train dataset size is:{origin_len}x{self.crop_fraction}={len(self.samples)}")
 
     def collate_fn(self, batch: list[ClassifyDataInfo]) -> ClassifyBatchDataInfo:
+        """
+       将 list[ClassifyDataInfo] 合并成批张量
+       采用预分配策略，避免 Python list → tensor 的额外拷贝
+       """
         B = len(batch)
         if B == 0:
             raise ValueError("Empty batch!")
@@ -102,6 +151,14 @@ class FaceRecognitionTrainDataset(ImageFolder):
 
 
 class FaceRecognitionValidDataset(TTBaseMapDataset):
+    """
+    人脸识别验证数据集（配对任务）
+    列表文件格式（txt）：
+        img1 img2 is_same
+        0001.jpg 0002.jpg 1
+        0003.jpg 0004.jpg 0
+    路径均为相对于 txt 所在目录的相对路径
+    """
     def __init__(self, config_manager, txt_files: list[Path]):
         super().__init__(config_manager)
         self.txt_files = txt_files
@@ -117,6 +174,7 @@ class FaceRecognitionValidDataset(TTBaseMapDataset):
             ])
 
     def make_pair_dataset(self) -> list:
+        """读取全部 txt 文件，生成列表：samples = [((img1_path, img2_path), is_pair), ...]"""
         samples = []
         for pairs_file in self.txt_files:
             root = Path(pairs_file).parent
@@ -137,6 +195,12 @@ class FaceRecognitionValidDataset(TTBaseMapDataset):
         return len(self.samples)
 
     def __getitem__(self, index) -> tuple[ClassifyDataInfo, ClassifyDataInfo, int]:
+        """
+        返回：
+        sample1: ClassifyDataInfo  第一张图
+        sample2: ClassifyDataInfo  第二张图
+        is_pair: int               是否同一人（0/1）
+        """
         (filename1, filename2), is_pair = self.samples[index]
         image1 = cv_imread(filename1)  # BGR
         image2 = cv_imread(filename2)
@@ -178,6 +242,12 @@ class FaceRecognitionValidDataset(TTBaseMapDataset):
         return sample1, sample2, is_pair
 
     def collate_fn(self, batch: list[tuple[ClassifyDataInfo, ClassifyDataInfo, int]]) -> FaceRecognitionValidBatchDataInfo:
+        """
+        将 list[(sample1, sample2, is_pair)] 合并成批张量
+        返回：
+        data = [images1, images2]  # 两个 (B,C,H,W) 张量
+        match_tensor = (B,)  # 0/1 标签
+        """
         B = len(batch)
         if B == 0:
             raise ValueError("Empty batch!")

@@ -301,6 +301,28 @@ class BaseModel(nn.Module):
 
     @staticmethod
     def get_layer(module_str: str):
+        """
+        根据字符串名称动态导入并返回对应的 **模块类**（而非实例）。
+
+        查找顺序（一旦匹配立即返回，不再继续）：
+        1. 完整包路径：如 "torch.nn.Conv2d" → 直接 import torch.nn 并返回 Conv2d 类。
+        2. 候选包搜索：依次在 ["torch.nn", "torchvision.ops", "transformers"] 等中查找同名类。
+        3. 全局注册表：查询用户通过 `@register_module` 注册的自定义模块。
+
+        Args:
+            module_str (str): 模块名称，支持简写（"Conv2d"）或完整路径（"torch.nn.Conv2d"）。
+
+        Returns:
+            type: 对应的 **类对象**，可用于后续实例化。
+
+        Raises:
+            ValueError: 所有查找路径均未命中时抛出，提示检查拼写、补充候选包或使用 `@register_module` 注册。
+
+        Examples:
+            >>> BaseModel.get_layer("ReLU")           # 返回 torch.nn.ReLU
+            >>> BaseModel.get_layer("my_pkg.MyBlock") # 返回自定义包中的 MyBlock
+            >>> BaseModel.get_layer("CustomBlock")    # 返回 @register_module 注册的 CustomBlock
+        """
         import importlib
         module_str = module_str.strip()
 
@@ -319,6 +341,7 @@ class BaseModel(nn.Module):
             "torch.nn",
             "torchvision.ops",
             "transformers",
+            # 自定义继续添加更多第三方候选包
         ]
         for pkg in candidate_pkgs:
             try:
@@ -340,6 +363,12 @@ class BaseModel(nn.Module):
     def _model_log(self):
         """
         打印模型结构摘要到日志与终端。
+
+        输出示例
+        --------
+        |layer|type|repeat|from|module|args|
+        |----|----|----|----|----|----|
+        | 0  |entry| 1  |[-1]|Conv|{'k':6,'s':2,'p':2}|
         """
 
         # 获取对齐长度，打印会更好看

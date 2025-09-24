@@ -19,7 +19,7 @@ class YOLODetectionValidator(BaseValidator):
     def __init__(self, trainer: BaseTrainer, world_size: int):
         super().__init__(trainer, world_size)
         self.num_classes = self.config_manager.dataset["nc"]
-        self.class_names = self.config_manager.dataset["names"]
+        self.class_names = {int(k): v for k, v in self.config_manager.dataset["names"].items()}
 
         # metrics
         self.detect_metrics = DetectMetrics(class_names=self.class_names)
@@ -124,8 +124,9 @@ class YOLODetectionValidator(BaseValidator):
             print(f"{'val':^5}|{'class_name':^15}|{'Precision':^15}|{'Recall':^15}|")
             lines = []
             pr_table = torch.full((self.num_classes, 2), -1.0, dtype=torch.float32)
-            pr_table[classes, 0] = precision_per_class
-            pr_table[classes, 1] = recall_per_class
+            if len(classes) >= 1:
+                pr_table[classes, 0] = precision_per_class
+                pr_table[classes, 1] = recall_per_class
 
             for i, pr in enumerate(pr_table):
                 progress_str = f"{'val':^5}|{self.class_names[i]:^15}|{max(pr[0].item(), 0):^15.3f}|{max(pr[1].item(), 0):^15.3f}|"  # type: ignore[arg-type]

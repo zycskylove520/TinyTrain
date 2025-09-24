@@ -229,39 +229,23 @@ def kpt_iou(kpt1, kpt2, area, sigma, eps=1e-7):
     return ((-e).exp() * kpt_mask[:, None]).sum(-1) / (kpt_mask.sum(-1)[:, None] + eps)
 
 
-def box_invert_affine_transform(boxes: np.ndarray, affine_matrix: np.ndarray) -> np.ndarray:
+def mask_iou(mask1, mask2, eps=1e-7):
     """
-    将经过仿射变换的框坐标恢复到原图坐标系。
+    Calculate masks IoU.
 
     Args:
-        boxes: 变换后的框坐标 (N, 8) 或 (N, 4)。
-        affine_matrix: 2×3 仿射矩阵。
+        mask1 (torch.Tensor): A tensor of shape (N, n) where N is the number of ground truth objects and n is the
+                        product of image width and height.
+        mask2 (torch.Tensor): A tensor of shape (M, n) where M is the number of predicted objects and n is the
+                        product of image width and height.
+        eps (float, optional): A small value to avoid division by zero. Defaults to 1e-7.
 
     Returns:
-        ndarray: 与输入同形状的原始坐标。
+        (torch.Tensor): A tensor of shape (N, M) representing masks IoU.
     """
-    # 将仿射矩阵扩展为 3x3 矩阵
-    affine_matrix_homo = np.vstack([affine_matrix, [0, 0, 1]])
-
-    # 求逆矩阵
-    inv_matrix_homo = np.linalg.inv(affine_matrix_homo)
-    inv_matrix = inv_matrix_homo[:2, :]
-
-    # 将 box 坐标转换为 (N*4, 2) 形状
-    num_boxes = boxes.shape[0]
-    corners = boxes.reshape(-1, 2)  # (N*4, 2)
-
-    # 转换为齐次坐标 (N*4, 3)
-    ones = np.ones((corners.shape[0], 1))
-    corners_homo = np.hstack([corners, ones])
-
-    # 应用逆变换矩阵
-    original_corners = (inv_matrix @ corners_homo.T).T
-
-    # 恢复为原始 box 形状 (N, 4)
-    original_boxes = original_corners.reshape(num_boxes, -1)
-
-    return original_boxes
+    intersection = torch.matmul(mask1, mask2.T).clamp_(0)
+    union = (mask1.sum(1)[:, None] + mask2.sum(1)[None]) - intersection  # (area1 + area2) - intersection
+    return intersection / (union + eps)
 
 
 def make_anchors(feats: list[torch.Tensor], strides: torch.Tensor, grid_cell_offset: float = 0.5):

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from tinytrain.data.data_format import ImgDataInfo, PoseDataInfo
 from tinytrain.engine.predictor import BasePredictor
 from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry
@@ -118,11 +120,24 @@ class YOLOPosePredictor(BasePredictor):
     def show_predict_result(self, data_info: ImgDataInfo, result: PoseDataInfo):
         import cv2
         import random
-        img = data_info.img
-        for i, box in enumerate(result.bboxes):
-            cv2.rectangle(img, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (0, 255, 0), 2)
 
-            object_kpt = result.keypoints[i]
+        img = data_info.img
+
+        bboxes = result.bboxes
+        labels = result.label.astype(np.int32)  # 类别索引
+        scores = result.scores  # 置信度
+        keypoints = result.keypoints # 关键点
+        for idx, box in enumerate(bboxes):
+            # 画框
+            x1, y1, x2, y2 = map(int, box)
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+            # 写文字：类别索引 + 置信度
+            txt = f"{labels[idx]}:{scores[idx]:.2f}"
+            cv2.putText(img, txt, (x1, y1 - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+            object_kpt = keypoints[idx]
             for kpt in object_kpt:
                 if kpt[2] > self.mask_threshold:  # 可见
                     # 随机彩色

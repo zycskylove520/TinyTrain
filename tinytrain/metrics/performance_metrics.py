@@ -9,7 +9,24 @@ from tinytrain.utils import LOGGER
 
 
 class PerformanceMetrics(BaseMetric):
+    """
+    通用性能评估器。
+
+    一次性收集所有图片的预测结果（tp/score/pred_class/target_class），
+    在 compute() 中按类构建 PR 曲线，计算 AP50、AP75、AP50-95、mAP、F1 等指标，
+    并提供 plot 系列方法将 P/R/F1/PR 曲线保存到本地。
+    """
+
     def __init__(self, prefix: str = "", class_names: dict[int, str] = None):
+        """
+        初始化评估器。
+
+        Args:
+            prefix (str, optional):
+                文件名前缀，用于保存图表时区分不同实验。默认为空字符串。
+            class_names (dict[int, str] | None, optional):
+                {class_id: class_name} 映射，仅用于绘图时显示可读标签。默认为 None。
+        """
         super().__init__()
         self.prefix = prefix
         self.class_names = class_names
@@ -23,7 +40,10 @@ class PerformanceMetrics(BaseMetric):
 
         self.results = {}
 
-    def reset(self, *args, **kwargs):
+    def reset(self):
+        """
+        清空所有缓存的预测结果与计算结果，准备开始新一轮评估。
+        """
         self._tp = []
         self._scores = []
         self._pred_classes = []
@@ -32,11 +52,17 @@ class PerformanceMetrics(BaseMetric):
 
     def update(self, tp: np.ndarray, score: np.ndarray, pred_class: np.ndarray, target_class: np.ndarray):
         """
+        单张图片的预测结果写入缓存。
+
         Args:
-            tp (np.ndarray): Binary array indicating whether the detection is correct (True) or not (False).
-            score (list[np.ndarray]): Array of confidence scores of the detections.
-            pred_class (np.ndarray): Array of predicted classes of the detections.
-            target_class (np.ndarray): Array of true classes of the detections.
+            tp (np.ndarray):
+                形状 (D, 10) 的 bool 数组，D 个检测框在 10 个 IoU 阈值下是否匹配。
+            score (np.ndarray):
+                形状 (D,) 的 float 数组，置信度分数。
+            pred_class (np.ndarray):
+                形状 (D,) 的 int 数组，预测类别 id。
+            target_class (np.ndarray):
+                形状 (L,) 的 int 数组，真值类别 id。
         """
         self._tp.append(tp)
         self._scores.append(score)
@@ -44,6 +70,13 @@ class PerformanceMetrics(BaseMetric):
         self._target_classes.append(target_class)
 
     def compute(self):
+        """
+        汇总所有 update 进来的数据，按类计算 PR 曲线、AP、F1 曲线及最佳 F1 阈值下的 P/R/F1，
+        结果存入 self.results 字典，供后续指标函数与绘图函数使用。
+        """
+        if not len(self._tp):
+            return
+
         tp = np.concatenate(self._tp, axis=0)
         scores = np.concatenate(self._scores, axis=0)
         pred_classes = np.concatenate(self._pred_classes, axis=0)
@@ -120,86 +153,112 @@ class PerformanceMetrics(BaseMetric):
         self.results["prec_values"] = prec_values  # y轴刻度
 
     def p(self):
-        return self.results["p"] if len(self.results["p"]) else []
+        """
+        返回各类在最佳 F1 阈值下的精确率数组。
+
+        Returns:
+            np.ndarray:
+                形状 (nc,) 的 float 数组，nc 为存在数据的类别数；若无数据返回空数组。
+        """
+        return self.results["p"] if self.results and len(self.results["p"]) else np.array([])
 
     def r(self):
-        return self.results["r"] if len(self.results["r"]) else []
+        """
+        返回各类在最佳 F1 阈值下的召回率数组。
+
+        Returns:
+            np.ndarray:
+                形状 (nc,) 的 float 数组；若无数据返回空数组。
+        """
+        return self.results["r"] if self.results and len(self.results["r"]) else np.array([])
 
     def ap50(self):
         """
-        Returns the Average Precision (AP) at an IoU threshold of 0.5 for all classes.
+        返回各类 AP@IoU=0.5 的数组。
 
         Returns:
-            (np.ndarray, list): Array of shape (nc,) with AP50 values per class, or an empty list if not available.
+            np.ndarray:
+                形状 (nc,) 的 float 数组；若无数据返回空数组。
         """
-        return self.results["ap"][:, 0] if len(self.results["ap"]) else []
+        return self.results["ap"][:, 0] if self.results and len(self.results["ap"]) else np.array([])
 
     def ap(self):
         """
-           Returns the Average Precision (AP) at an IoU threshold of 0.5-0.95 for all classes.
+        返回各类 AP@IoU=0.5:0.95 的均值数组（即 AP50-95）。
 
-           Returns:
-               (np.ndarray, list): Array of shape (nc,) with AP50-95 values per class, or an empty list if not available.
-           """
-        return self.results["ap"].mean(1) if len(self.results["ap"]) else []
+        Returns:
+            np.ndarray:
+                形状 (nc,) 的 float 数组；若无数据返回空数组。
+        """
+        return self.results["ap"].mean(1) if self.results and len(self.results["ap"]) else np.array([])
 
     def mp(self):
         """
-        Returns the Mean Precision of all classes.
+        返回所有类别的平均精确率 (mean Precision)。
 
         Returns:
-            (float): The mean precision of all classes.
+            float:
+                平均精确率；若无数据返回 0.0。
         """
-        return self.results["p"].mean() if len(self.results["p"]) else 0.0
+        return self.results["p"].mean() if self.results and len(self.results["p"]) else 0.0
 
     def mr(self):
         """
-        Returns the Mean Recall of all classes.
+        返回所有类别的平均召回率 (mean Recall)。
 
         Returns:
-            (float): The mean recall of all classes.
+            float:
+                平均召回率；若无数据返回 0.0。
         """
-        return self.results["r"].mean() if len(self.results["r"]) else 0.0
+        return self.results["r"].mean() if self.results and len(self.results["r"]) else 0.0
 
     def map50(self):
         """
-        Returns the mean Average Precision (mAP) at an IoU threshold of 0.5.
+        返回 AP50 的均值 (mAP@0.5)。
 
         Returns:
-            (float): The mAP at an IoU threshold of 0.5.
+            float:
+                mAP@0.5；若无数据返回 0.0。
         """
-        return self.results["ap"][:, 0].mean() if len(self.results["ap"]) else 0.0
+        return self.results["ap"][:, 0].mean() if self.results and len(self.results["ap"]) else 0.0
 
     def map75(self):
         """
-        Returns the mean Average Precision (mAP) at an IoU threshold of 0.75.
+        返回 AP75 的均值 (mAP@0.75)。
 
         Returns:
-            (float): The mAP at an IoU threshold of 0.75.
+            float:
+                mAP@0.75；若无数据返回 0.0。
         """
-        return self.results["ap"][:, 5].mean() if len(self.results["ap"]) else 0.0
+        return self.results["ap"][:, 5].mean() if self.results and len(self.results["ap"]) else 0.0
 
     def map50_95(self):
         """
-        Returns the mean Average Precision (mAP) over IoU thresholds of 0.5 - 0.95 in steps of 0.05.
+        返回 AP50-95 的均值 (mAP@0.5:0.95)。
 
         Returns:
-            (float): The mAP over IoU thresholds of 0.5 - 0.95 in steps of 0.05.
+            float:
+                mAP@0.5:0.95；若无数据返回 0.0。
         """
-        return self.results["ap"].mean() if len(self.results["ap"]) else 0.0
+        return self.results["ap"].mean() if self.results and len(self.results["ap"]) else 0.0
 
     def match_predictions(self, pred_classes, true_classes, iou, use_scipy=False) -> np.ndarray:
         """
-        Matches predictions to ground truth objects (pred_classes, true_classes) using IoU.
+        将预测框与真值框按类别+IoU 进行匹配，输出 (D,10) 的匹配矩阵。
 
         Args:
-            pred_classes (np.ndarray): Predicted class indices of shape(N,).
-            true_classes (np.ndarray): Target class indices of shape(M,).
-            iou (np.ndarray): An MxN tensor containing the pairwise IoU values for predictions and ground of truth
-            use_scipy (bool): Whether to use scipy for matching (more precise).
+            pred_classes (np.ndarray):
+                形状 (D,) 的 int 数组，预测类别。
+            true_classes (np.ndarray):
+                形状 (L,) 的 int 数组，真值类别。
+            iou (np.ndarray):
+                形状 (L, D) 的 float 数组，两两 IoU。
+            use_scipy (bool, optional):
+                是否使用 scipy.linear_sum_assignment 做最优匹配；默认 False 用贪心法。
 
         Returns:
-            (np.ndarray): Correct tensor of shape(N,10) for 10 IoU thresholds.
+            np.ndarray:
+                形状 (D, 10) 的 bool 数组，每个检测框在 10 个 IoU 阈值下是否算 TP。
         """
         # Dx10 matrix, where D - detections, 10 - IoU thresholds
         correct = np.zeros((pred_classes.shape[0], self.iouv.shape[0])).astype(bool)
@@ -230,9 +289,27 @@ class PerformanceMetrics(BaseMetric):
         return correct.astype(bool)
 
     def plot(self, save_dir: Path, plot_pr=True, plot_f1=True, plot_p=True, plot_r=True):
+        """
+        一次性绘制并保存 PR、F1、P、R 四条曲线到指定目录。
+
+        Args:
+            save_dir (Path):
+                保存图片的文件夹路径。
+            plot_pr (bool, optional):
+                是否绘制 PR 曲线，默认 True。
+            plot_f1 (bool, optional):
+                是否绘制 F1 曲线，默认 True。
+            plot_p (bool, optional):
+                是否绘制 Precision 曲线，默认 True。
+            plot_r (bool, optional):
+                是否绘制 Recall 曲线，默认 True。
+        """
         if self.class_names:
-            names = [v for k, v in self.class_names.items() if k in self.results["unique_classes"]]  # list: only classes that have data
-            names = dict(enumerate(names))
+            if self.results:
+                names = [v for k, v in self.class_names.items() if k in self.results["unique_classes"]]  # list: only classes that have data
+                names = dict(enumerate(names))
+            else:
+                names = {}
         else:
             names = dict(enumerate(self.results["unique_classes"]))
 
@@ -251,8 +328,18 @@ class PerformanceMetrics(BaseMetric):
 
     def plot_PR_curve(self, names, save_dir: Path):
         """
-        Plot Precision-Recall curve for each class, using AP values.
+        绘制所有类别的 P-R 曲线并保存。
+
+        Args:
+            names (dict[int, str]):
+                {类别索引: 可读名称}，用于图例。
+            save_dir (Path):
+                保存图片的文件夹路径。
         """
+        if not self.results:
+            LOGGER.info("No data available for PR curve.")
+            return
+
         fig, ax = plt.subplots(figsize=(10, 6))
         for i, c in enumerate(self.results["unique_classes"]):
             ap_value = self.results["ap"][i, 0]  # AP@0.5 for the current class
@@ -268,8 +355,18 @@ class PerformanceMetrics(BaseMetric):
 
     def plot_F1_curve(self, names, save_dir: Path):
         """
-        Plot F1 curve for each class.
+        绘制所有类别的 F1-Confidence 曲线并保存。
+
+        Args:
+            names (dict[int, str]):
+                类别名称映射。
+            save_dir (Path):
+                保存文件夹。
         """
+        if not self.results:
+            LOGGER.info("No data available for PR curve.")
+            return
+
         fig, ax = plt.subplots(figsize=(10, 6))
         for i, c in enumerate(self.results["unique_classes"]):
             ax.plot(self.results["x"], self.results["f1_curve"][i], label=f'{names[i]} (F1: {self.results["f1"][i]:.2f})')
@@ -284,8 +381,18 @@ class PerformanceMetrics(BaseMetric):
 
     def plot_P_curve(self, names, save_dir: Path):
         """
-        Plot Precision curve for each class.
+        绘制所有类别的 Precision-Confidence 曲线并保存。
+
+        Args:
+            names (dict[int, str]):
+                类别名称映射。
+            save_dir (Path):
+                保存文件夹。
         """
+        if not self.results:
+            LOGGER.info("No data available for PR curve.")
+            return
+
         fig, ax = plt.subplots(figsize=(10, 6))
         for i, c in enumerate(self.results["unique_classes"]):
             ax.plot(self.results["x"], self.results["p_curve"][i], label=f'{names[i]} (P: {self.results["p"][i]:.2f})')
@@ -300,8 +407,18 @@ class PerformanceMetrics(BaseMetric):
 
     def plot_R_curve(self, names, save_dir: Path):
         """
-        Plot Recall curve for each class.
+        绘制所有类别的 Recall-Confidence 曲线并保存。
+
+        Args:
+            names (dict[int, str]):
+                类别名称映射。
+            save_dir (Path):
+                保存文件夹。
         """
+        if not self.results:
+            LOGGER.info("No data available for PR curve.")
+            return
+
         fig, ax = plt.subplots(figsize=(10, 6))
         for i, c in enumerate(self.results["unique_classes"]):
             ax.plot(self.results["x"], self.results["r_curve"][i], label=f'{names[i]} (R: {self.results["r"][i]:.2f})')
@@ -317,16 +434,19 @@ class PerformanceMetrics(BaseMetric):
     @staticmethod
     def compute_ap(recall, precision):
         """
-        Compute the average precision (AP) given the recall and precision curves.
+        根据单类 recall/precision 曲线计算 AP（11 点插值或连续积分法）。
 
         Args:
-            recall: The recall curve.
-            precision: The precision curve.
+            recall (np.ndarray):
+                召回率曲线，形状 (N,)。
+            precision (np.ndarray):
+                精确率曲线，形状 (N,)。
 
         Returns:
-            (float): Average precision.
-            (np.ndarray): Precision envelope curve.
-            (np.ndarray): Modified recall curve with sentinel values added at the beginning and end.
+            tuple[float, np.ndarray, np.ndarray]:
+                ap:      标量，平均精度。
+                mpre:    精度包络曲线，形状 (N+2,)。
+                mrec:    带哨兵值的召回曲线，形状 (N+2,)。
         """
         # Append sentinel values to beginning and end
         mrec = np.concatenate(([0.0], recall, [1.0]))
@@ -348,7 +468,19 @@ class PerformanceMetrics(BaseMetric):
 
     @staticmethod
     def smooth(y, f=0.05):
-        """Box filter of fraction f."""
+        """
+        对 1D 数组 y 做简单滑动平均（box filter），用于平滑 F1 曲线找峰值。
+
+        Args:
+            y (np.ndarray):
+                原始 1D 曲线。
+            f (float, optional):
+                平滑窗口占长度比例，默认 0.05。
+
+        Returns:
+            np.ndarray:
+                平滑后的曲线，长度与 y 相同。
+        """
         nf = round(len(y) * f * 2) // 2 + 1  # number of filter elements (must be odd)
         p = np.ones(nf // 2)  # ones padding
         yp = np.concatenate((p * y[0], y, p * y[-1]), 0)  # y padded

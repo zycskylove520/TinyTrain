@@ -41,6 +41,10 @@ class ClassesLabelHistogram:
         - 纵轴：实例数量（条形顶部显示数值）
         - 自动根据类别数量调整宽度
         """
+        if len(self.labels) == 0:
+            LOGGER.warning(f"{self.prefix} No bounding boxes available; skipping classes label histogram plots.")
+            return
+
         instances = np.zeros(self.num_classes, dtype=int)
         for label in self.labels:
             instances[int(label)] += 1

@@ -1,44 +1,7 @@
 """
 YOLOModel
 =========
-YOLO 系列检测 / 分类模型的统一解析器。
-在 TinyTrain 框架中，所有 YOLO 变体（v5 / v7 / v8 / NAS …）均可通过
-同一套配置语法描述网络结构，并由本类自动完成深度、宽度缩放与模块实例化。
-
-核心职责
---------
-1. 依据模型规模（n/s/m/l/x）自动计算 depth / width 增益并一次性写入类变量，
-   确保所有层共享同一缩放因子。
-2. 逐层校验网络描述合法性（entry→flow→head 的顺序、from / repeat 约束）。
-3. 对 entry / flow / head 中 `in_channels / out_channels / nc` 等关键字段
-   执行 width-gain 调整，保证输出通道数为硬件对齐值（8 的倍数）。
-4. 支持用户通过 `custom_parse_model` 钩子插入私有解析逻辑，实现零侵入扩展。
-5. 自动生成 `layers / record_list / ask_set / log_info` 四元组，
-   供 Backbone、Neck、Head 按需索引与特征融合。
-
-配置约定
---------
-network:
-  - type: entry      # 第 0 层必须为 entry，且仅出现一次
-    module: CBA     # 模块类名，必须能在 tinytrain.modules 中找到
-    from: [-1]       # -1 表示「来自上一层」
-    repeat: 1        # 重复次数，flow 层受 depth 增益影响
-    args:
-      in_channels: 3
-      out_channels: 64
-  - type: flow
-    module: C2f
-    from: [-1]
-    repeat: 6
-    args:
-      in_channels: 64
-      out_channels: 64
-  - type: head
-    module: Detect
-    from: [15, 18, 21]
-    repeat: 1
-    args:
-      nc: -1          # 自动替换为 dataset.nc
+TinyTrain 框架中 YOLO 检测、分割、关键点等任务的通用基类实现。
 """
 
 from copy import deepcopy
@@ -51,8 +14,45 @@ from tinytrain.utils.any_utils import make_divisible
 
 
 class YOLOModel(BaseModel):
-    # YOLO模型专属类变量
+    """
+    YOLOModel
+    ~~~~~~~
+
+    YOLO 系列检测/分割/关键点模型的 **通用基类**，承担以下职责：
+
+    1. 根据 ``model.toml`` 动态解析网络结构（entry / flow / head）。
+    2. 在解析阶段完成 **深度增益** (depth gain) 与 **宽度增益** (width gain) 缩放。
+    3. 提供统一的 ``init_criterion`` / ``loss`` / ``forward`` 接口，子类仅需实现任务损失。
+    4. 内置 stride 自动推算、权重初始化、结构摘要打印等公共能力。
+
+    设计要点
+    --------
+    - 结构配置完全由 ConfigManager 驱动，**零硬编码**。
+    - 宽度增益统一调用 ``make_divisible()``，保证通道数为 8 / 16 的倍数，兼容 TensorRT。
+    - 深度增益仅对 **in_channels == out_channels** 的模块生效，避免上采样 / 降采样层被误缩放。
+    - 第 0 层强制为 entry 且 ``from = [-1]``，杜绝非法依赖。
+    - 支持自定义解析钩子 ``custom_parse_model()``，子类可原地修改 ``module_info``。
+    - 所有模块延迟实例化，先校验再构建，**配置错误立即抛异常**。
+    """
     def __init__(self, config_manager: ConfigManager, device, *args, **kwargs):
+        """
+        初始化 YOLO 基类。
+
+        步骤
+        ----
+        1. 提前占位 ``WIDTH_GAIN``，供后续解析阶段写入。
+        2. 调用父类 ``BaseModel.__init__()``，触发 ``parse_model()`` 完成网络构建。
+        3. 子类（检测/分割/关键点）可在 ``super()`` 之后继续初始化 stride、loss 等。
+
+        Args
+        ----
+        config_manager : ConfigManager
+            必须包含 model.scales / model.network / dataset.nc 等字段。
+        device : torch.device
+            模型所在设备。
+        *args, **kwargs
+            预留扩展参数，透传给 ``BaseModel``。
+        """
         self.WIDTH_GAIN = None  # 宽度增益
         super().__init__(config_manager=config_manager, device=device, *args, **kwargs)
 
@@ -187,9 +187,14 @@ class YOLOModel(BaseModel):
 
     def _model_log(self):
         """
-        打印模型结构摘要到日志与终端。
-        """
+        以表格形式将网络结构打印到终端与日志文件。
 
+        输出示例
+        --------
+        |layer|type|repeat|from|module|args|
+        |----|----|----|----|----|----|
+        | 0  |entry| 1  |[-1]|Conv|{'k':6,'s':2,'p':2}|
+        """
 
         # 获取对齐长度，打印会更好看
         align_len = dict({"layer": 5, "type": 4, "repeat": 6, "from": 4, "module": 6, "args": 4})

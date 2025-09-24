@@ -7,7 +7,34 @@ from tinytrain.models.yolo.yolo_model import YOLOModel
 
 
 class YOLOSegmentModel(YOLOModel):
+    """
+    YOLOSegmentModel
+
+    在 YOLO 检测框架上扩展的实例分割（Instance Segmentation）专用模型。
+
+    设计要点
+    --------
+    1. 完全复用 YOLO 的 backbone + neck，仅将 head 替换为 YOLOSegment，实现检测+掩码联合输出。
+    2. 采用 YOLOV8SegmentLoss，同时优化 cls / box / dfl / seg 四项损失。
+    3. 通过 custom_parse_model 完成深度、宽度增益缩放，并依据尺度开启 c3k 分支。
+    4. 对外保持 BaseModel 统一接口：forward(data) 自动返回 loss 或推理结果。
+    """
     def __init__(self, config_manager: ConfigManager, device, *args, **kwargs):
+        """
+        初始化实例分割模型。
+
+        额外完成：
+        - 推算并保存三个输出层的步长 strides；
+        - 对 YOLOSegment 头进行 bias 初始化；
+        - 主动调用 initialize_weights()，确保 Conv / BN / Act 参数处于最佳初始分布。
+
+        Args
+        ----
+        config_manager : ConfigManager
+            必须包含 dataset.nc / dataset.img_size / loss.* / loss.num_masks / loss.num_protos 等字段。
+        device : torch.device
+            模型所在设备。
+        """
         self.reg_max = None
         super().__init__(config_manager=config_manager, device=device, *args, **kwargs)
         self.initialize_weights()
@@ -21,7 +48,18 @@ class YOLOSegmentModel(YOLOModel):
 
     def _initialize_stride(self, input_channel):
         """
-        初始化 stride，避免在初始化阶段调用 forward 方法。
+        通过一次 dummy forward 推算三个输出层的下采样倍数（stride），
+        避免在后续训练阶段反复计算。
+
+        Args
+        ----
+        input_channel : int
+            输入图片的通道数（通常为 3）。
+
+        Returns
+        -------
+        torch.Tensor
+            长度 = 输出层数量，每项对应该层输出的步长。
         """
         stride = 256  # 2x min stride
         with torch.no_grad():  # 确保不会改变模型状态
@@ -34,6 +72,15 @@ class YOLOSegmentModel(YOLOModel):
         return stride_tensor
 
     def init_criterion(self):
+        """
+        构建实例分割专用损失实例。
+
+        Returns
+        -------
+        YOLOV8SegmentLoss
+            已内置 strides / reg_max / imgsz / device / overlap_mask 等信息，
+            可直接前向计算 cls_loss / box_loss / dfl_loss / seg_loss。
+        """
         return YOLOV8SegmentLoss(nc=self.config_manager.dataset["nc"],
                                  strides=self.strides,
                                  reg_max=self.reg_max,
@@ -47,9 +94,45 @@ class YOLOSegmentModel(YOLOModel):
                                  )
 
     def loss(self, preds: list[torch.Tensor], batch_samples: SegmentBatchDataInfo) -> tuple[float, dict]:
+        """
+        训练模式：计算实例分割损失。
+
+        Args
+        ----
+        preds : list[torch.Tensor]
+            仅使用 preds[0]（YOLOSegment 输出列表）。
+        batch_samples : SegmentBatchDataInfo
+            必须包含 .bboxes / .labels / .masks / .mask_indices 等字段。
+
+        Returns
+        -------
+        tuple[float, dict]
+            (总损失, 详细分量字典)，
+            字典固定包含 keys = {"cls_loss", "box_loss", "dfl_loss", "seg_loss"}。
+        """
         return self.criterion(preds[0], batch_samples)
 
     def custom_parse_model(self, level, module_info):
+        """
+        实例分割任务专属解析逻辑，在通用解析完成后、模块实例化前调用。
+
+        调整策略
+        --------
+        1. C3k2：
+           - 按 depth 增益重算 n；
+           - 仅当 scale ∈ {m, l, x} 时开启 c3k 分支。
+        2. YOLOSegment：
+           - 按 width 增益缩放 from_channels；
+           - 写入 num_masks / num_protos 供 head 内部构建掩码分支；
+           - 保存 reg_max 供损失函数使用。
+
+        Args
+        ----
+        level : int
+            当前正在解析的层序号。
+        module_info : dict
+            当前层原始配置，函数内直接原地修改。
+        """
         scale = self.config_manager.model["scale"]
 
         width = self.WIDTH_GAIN
@@ -66,3 +149,5 @@ class YOLOSegmentModel(YOLOModel):
         if module_info["module"] == "YOLOSegment":
             module_info["args"]["from_channels"] = [int(i * width) for i in module_info["args"]["from_channels"]]
             self.reg_max = module_info["args"].get("reg_max", 16)
+            module_info["args"]["nm"] = self.config_manager.loss["num_masks"]
+            module_info["args"]["npr"] = self.config_manager.loss["num_protos"]
