@@ -7,6 +7,12 @@ def Migrate(old_model_pt, new_model_pt):
     for i, module in enumerate(model_args["network"]):
         if module["module"] == "nn.Upsample":
             ckpt["model_args"]["network"][i]["module"] = "torch.nn.Upsample"
+        if module["module"] == "Conv":
+            ckpt["model_args"]["network"][i]["module"] = "CBA"
+        if module["module"] == "Concat":
+            value = ckpt["model_args"]["network"][i]["module"]["args"].pop("dimension", None)
+            if value:
+                ckpt["model_args"]["network"][i]["module"]["args"]["dim"] = value
     torch.save(ckpt, new_model_pt)
 
 if __name__ == '__main__':

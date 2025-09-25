@@ -57,7 +57,8 @@ class YOLODetectionAugmentation(BaseAugmentation):
         构建 **训练阶段** 增强流水线。
         """
         # Dynamic filling augmentation
-        dynamic_filling = DynamicFilling(target_size=self.target_size, p=0.5)
+        df = DynamicFilling(target_size=self.target_size, p=0.5)
+
 
         albumentations_compose = A.Compose([
             A.Blur(p=0.01),
@@ -76,7 +77,7 @@ class YOLODetectionAugmentation(BaseAugmentation):
             # A.ToTensorV2(),
         ], bbox_params=A.BboxParams(format="yolo", label_fields=["class_labels"], min_area=100, min_visibility=0.1, filter_invalid_bboxes=True))
 
-        self.augment = [dynamic_filling, albumentations_compose]
+        self.augment = [df, albumentations_compose]
 
     def set_transform(self):
         """
