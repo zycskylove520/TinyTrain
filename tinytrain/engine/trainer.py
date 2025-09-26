@@ -492,24 +492,25 @@ class BaseTrainer:
             world_size (int): 分布式训练中的进程数量。
         """
         LOGGER.info(f"Setting dataloader...")
+        only_val = self.config_manager.core["only_val"]
+
+        # train dataloader
+        if self.train_dir and not only_val:
+            self.train_dataloader = self.build_dataloader(world_size, mode="train")
 
         # validate dataloader
         if self.val_dir:
             self.val_dataloader = self.build_dataloader(world_size, mode="val")
 
         if self.val_dataloader is None:
-            if self.config_manager.core.get("only_val"):
+            if only_val:
                 raise RuntimeError("only_val is True, but valid directory is not provided.")
         else:
             self.validator = self.get_validator(world_size)
-            if self.config_manager.core.get("only_val"):
+            if only_val:
                 if self.validator is None:
                     raise RuntimeError("only_val is True, but validator engine is not bound.")
                 return  # 仅验证模式下，初始化完 validator 就可以返回了
-
-        # train dataloader
-        if self.train_dir:
-            self.train_dataloader = self.build_dataloader(world_size, mode="train")
 
         # test dataloader
         if self.test_dir:
@@ -729,7 +730,7 @@ class BaseTrainer:
         # 线性缩放 LR
         if world_size > 1:
             lr_scaled = lr0 * max(world_size, 1) * self.accumulate
-            LOGGER.warning(f"[DDP] LR scaled from {lr0} to {lr_scaled} ")
+            LOGGER.info(f"DDP LR scaled from {lr0} -> {lr_scaled} ")
         else:
             lr_scaled = lr0
 
