@@ -38,18 +38,19 @@ class Core:
     # ------------------------------------------------------------------
     # 1. 构造与类级钩子
     # ------------------------------------------------------------------
-    def __init__(self, link_file: str | Path, callback: Callback = None):
+    def __init__(self, link_file: str | Path, callback: Callback = None, *args, **kwargs) -> None:
         """
         初始化 Core，加载 link 配置并注册各 engine 的占位符。
 
         Args:
             link_file (str | Path, optional): link 配置文件路径（yaml / toml）。
         """
-        # register manager and components
+        # register manager
         self.config_manager = ConfigManager(link_file=link_file)
-        self.register_components()
+        self.task: str = self.config_manager.core["task"]
 
-        self.task: str | None = None
+        # register components
+        self.register_components()
 
         # register callback
         self.callback = callback if callback else Callback()
@@ -116,7 +117,7 @@ class Core:
     # ------------------------------------------------------------------
     # 3. 对外主要 API
     # ------------------------------------------------------------------
-    def train(self, model_scale: str = None, model: str | Path = None, use_last_pt=False, process_name: str = None):
+    def train(self, model_scale: str = None, model: str | Path = None, use_last_pt=False, process_name: str = None, **kwargs) -> None:
         """
         启动训练。
 
@@ -748,5 +749,3 @@ class Core:
                 f"在 {task_dir} 及其子目录中均未找到可用的 best.pt"
             )
         return pt_model
-
-

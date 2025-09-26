@@ -29,7 +29,7 @@ from torchvision.datasets.folder import ImageFolder
 from torchvision.transforms import transforms
 
 from tinytrain.data.base import TTBaseMapDataset
-from tinytrain.data.data_format import ClassifyDataInfo, ClassifyBatchDataInfo, FaceRecognitionValidBatchDataInfo
+from tinytrain.data.data_format import ClassifyDataInfo, ClassifyBatchDataInfo, FaceRecognitionValidBatchDataInfo, BaseBatchDataInfo
 from tinytrain.utils import LOGGER
 from tinytrain.utils.any_utils import make2tuple
 from tinytrain.utils.data_utils import cv_imread
@@ -159,6 +159,7 @@ class FaceRecognitionValidDataset(TTBaseMapDataset):
         0003.jpg 0004.jpg 0
     路径均为相对于 txt 所在目录的相对路径
     """
+
     def __init__(self, config_manager, txt_files: list[Path]):
         super().__init__(config_manager)
         self.txt_files = txt_files
@@ -194,7 +195,7 @@ class FaceRecognitionValidDataset(TTBaseMapDataset):
     def __len__(self):
         return len(self.samples)
 
-    def __getitem__(self, index) -> tuple[ClassifyDataInfo, ClassifyDataInfo, int]:
+    def __getitem__(self, index) -> tuple[tuple, tuple, int]:
         """
         返回：
         sample1: ClassifyDataInfo  第一张图
@@ -215,12 +216,20 @@ class FaceRecognitionValidDataset(TTBaseMapDataset):
             image1 = cv2.cvtColor(image1, cv2.COLOR_BGR2RGB)
             image2 = cv2.cvtColor(image2, cv2.COLOR_BGR2RGB)
         image1 = cv2.resize(image1, self.img_size)
+        flip_image1 = cv2.flip(image1, 1)
         image2 = cv2.resize(image2, self.img_size)
+        flip_image2 = cv2.flip(image2, 1)
 
         origin_shape1 = image1.shape[:2][::-1]
         sample1 = ClassifyDataInfo(
             img_file=filename1,
             img=image1,
+            origin_shape=origin_shape1,
+            target_shape=self.img_size
+        )
+        flip_sample1 = ClassifyDataInfo(
+            img_file=filename1,
+            img=flip_image1,
             origin_shape=origin_shape1,
             target_shape=self.img_size
         )
@@ -232,18 +241,24 @@ class FaceRecognitionValidDataset(TTBaseMapDataset):
             origin_shape=origin_shape2,
             target_shape=self.img_size
         )
+        flip_sample2 = ClassifyDataInfo(
+            img_file=filename2,
+            img=flip_image2,
+            origin_shape=origin_shape2,
+            target_shape=self.img_size
+        )
 
-        sample1.img = Image.fromarray(sample1.img)
-        sample1.img = self.transform(sample1.img)  # torch.tensor and shape=[c,h,w]
+        sample1.img = self.transform(Image.fromarray(sample1.img))  # torch.tensor and shape=[c,h,w]
+        flip_sample1.img = self.transform(Image.fromarray(flip_sample1.img))
 
-        sample2.img = Image.fromarray(sample2.img)
-        sample2.img = self.transform(sample2.img)  # torch.tensor and shape=[c,h,w]
+        sample2.img = self.transform(Image.fromarray(sample2.img))  # torch.tensor and shape=[c,h,w]
+        flip_sample2.img = self.transform(Image.fromarray(flip_sample2.img))
 
-        return sample1, sample2, is_pair
+        return (sample1, sample2), (flip_sample1, flip_sample2), is_pair
 
-    def collate_fn(self, batch: list[tuple[ClassifyDataInfo, ClassifyDataInfo, int]]) -> FaceRecognitionValidBatchDataInfo:
+    def collate_fn(self, batch: list[tuple[tuple, tuple, int]]) -> BaseBatchDataInfo:
         """
-        将 list[(sample1, sample2, is_pair)] 合并成批张量
+        合并成批张量
         返回：
         data = [images1, images2]  # 两个 (B,C,H,W) 张量
         match_tensor = (B,)  # 0/1 标签
@@ -253,20 +268,23 @@ class FaceRecognitionValidDataset(TTBaseMapDataset):
             raise ValueError("Empty batch!")
 
         # 预分配张量，避免 Python list → tensor 拷贝
-        first: torch.Tensor = batch[0][0].img  # (C, H, W) numpy
+        first: torch.Tensor = batch[0][0][0].img  # (C, H, W) numpy
         C, H, W = first.shape
         dtype = first.dtype  # 保持原 dtype
 
         images1 = torch.empty((B, C, H, W), dtype=dtype)
         images2 = torch.empty((B, C, H, W), dtype=dtype)
+        flip_images1 = torch.empty((B, C, H, W), dtype=dtype)
+        flip_images2 = torch.empty((B, C, H, W), dtype=dtype)
         match_tensor = torch.empty(B, dtype=torch.int64)
 
-        for i, (sample1, sample2, is_pair) in enumerate(batch):
+        for i, ((sample1, sample2), (flip_sample1, flip_sample2), is_pair) in enumerate(batch):
             images1[i] = sample1.img
             images2[i] = sample2.img
+            flip_images1[i] = flip_sample1.img
+            flip_images2[i] = flip_sample2.img
             match_tensor[i] = is_pair
 
-        return FaceRecognitionValidBatchDataInfo(
-            data=[images1, images2],
-            match_tensor=match_tensor,
+        return BaseBatchDataInfo(
+            data=((images1, images2), (flip_images1, flip_images2), match_tensor),
         )

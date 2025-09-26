@@ -322,6 +322,11 @@ class BaseTrainer:
         # set model
         self.set_model(world_size)
 
+        # only val
+        if self.config_manager.core["only_val"]:
+            self.only_do_validate()
+            sys.exit("Validation finished, exiting.")
+
         # set optimizer
         self.set_optimizer(world_size)
 
@@ -488,14 +493,23 @@ class BaseTrainer:
         """
         LOGGER.info(f"Setting dataloader...")
 
+        # validate dataloader
+        if self.val_dir:
+            self.val_dataloader = self.build_dataloader(world_size, mode="val")
+
+        if self.val_dataloader is None:
+            if self.config_manager.core.get("only_val"):
+                raise RuntimeError("only_val is True, but valid directory is not provided.")
+        else:
+            self.validator = self.get_validator(world_size)
+            if self.config_manager.core.get("only_val"):
+                if self.validator is None:
+                    raise RuntimeError("only_val is True, but validator engine is not bound.")
+                return  # 仅验证模式下，初始化完 validator 就可以返回了
+
         # train dataloader
         if self.train_dir:
             self.train_dataloader = self.build_dataloader(world_size, mode="train")
-
-        # validate dataloader
-        self.val_dataloader = self.build_dataloader(world_size, mode="val")
-        if self.val_dataloader is not None:
-            self.validator = self.get_validator(world_size)
 
         # test dataloader
         if self.test_dir:
@@ -671,7 +685,7 @@ class BaseTrainer:
         self.convert_ddp_model(world_size)
 
         # EMA
-        if self.config_manager.core["ema"] and LOCAL_RANK in {-1, 0}:
+        if self.config_manager.core["ema"]:
             self.ema = ModelEMA(self.get_model_instance(world_size))
             LOGGER.info("EMA(Exponential Moving Average) is enabled.")
 
@@ -715,6 +729,7 @@ class BaseTrainer:
         # 线性缩放 LR
         if world_size > 1:
             lr_scaled = lr0 * max(world_size, 1) * self.accumulate
+            LOGGER.warning(f"[DDP] LR scaled from {lr0} to {lr_scaled} ")
         else:
             lr_scaled = lr0
 
@@ -920,7 +935,7 @@ class BaseTrainer:
                 last_epoch=last_epoch
             )
         elif scheduler_name == "CosineLR":
-            t_max = normal_epochs if normal_epochs < 100 else normal_epochs // 10
+            t_max = normal_epochs if normal_epochs < self.config_manager.core["t_max"] else self.config_manager.core["t_max"]
             self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer,
                 T_max=t_max,
@@ -954,9 +969,9 @@ class BaseTrainer:
             self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
                 self.optimizer,
                 mode="max",
-                patience=5,
-                factor=0.5,
-                threshold=0.01,
+                patience=self.config_manager.core["plateau_epochs"],
+                factor=self.config_manager.core["plateau_factor"],
+                threshold=self.config_manager.core["plateau_sensitivity"],
                 threshold_mode="rel",
                 cooldown=0,
                 min_lr=lr0 * lr1,
@@ -1015,11 +1030,6 @@ class BaseTrainer:
         # 训练前检查
         self._before_train(world_size)
 
-        # 只做验证
-        if self.config_manager.core["only_val"]:
-            self.only_do_validate()
-            return
-
         current_epoch = self.start_epoch  # 一个epoch有几个batch
         num_batch = len(self.train_dataloader)  # 整个训练所有epoch一共有多少个batch
         last_opt_step = -1  # 记录上一次真正更新参数的 batch 序号
@@ -1027,6 +1037,14 @@ class BaseTrainer:
         # 先清一次显存,梯度归零
         self._clear_memory()
         self.optimizer.zero_grad()
+
+        # 设置数据精度类型
+        dtype = torch.bfloat16 if self.device.type == "cuda" and torch.cuda.is_bf16_supported() and self.config_manager.core["bf16"] else torch.float16
+        if world_size > 1:
+            # 同步AMP dtype
+            dtype_list = [dtype] if RANK == 0 else [None]
+            dist.broadcast_object_list(dtype_list, src=0)
+            dtype = dtype_list[0]
 
         # 正式训练
         LOGGER.info(f"start training...")
@@ -1053,13 +1071,6 @@ class BaseTrainer:
 
                 # 判断本次是否真正执行 optimizer.step()
                 is_last_accum_step = (current_batch - last_opt_step) == self.accumulate
-
-                dtype = torch.bfloat16 if self.device.type == "cuda" and torch.cuda.is_bf16_supported() and self.config_manager.core["bf16"] else torch.float16
-                if world_size > 1:
-                    # 同步AMP dtype
-                    dtype_list = [dtype] if RANK == 0 else [None]
-                    dist.broadcast_object_list(dtype_list, src=0)
-                    dtype = dtype_list[0]
 
                 # move data to device
                 batch_samples = self.preprocess_data(batch_samples)  # type: ignore[arg-type]

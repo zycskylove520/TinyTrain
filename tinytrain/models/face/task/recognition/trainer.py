@@ -51,7 +51,12 @@ class FaceRecognitionTrainer(BaseTrainer):
             self.model.module_list[i] = DDP(self.model.module_list[i], device_ids=[LOCAL_RANK], gradient_as_bucket_view=True)
 
     def get_model_instance(self, world_size: int) -> BaseModel:
-        return self.model
+        model: BaseModel = deepcopy(self.model)
+        for i in range(len(model.module_list)):
+            if isinstance(model.module_list[i], torch.nn.parallel.DistributedDataParallel):
+                model.module_list[i] = model.module_list[i].module
+
+        return model
 
     def save_model(self, world_size: int, current_epoch: int):
         """
@@ -69,10 +74,7 @@ class FaceRecognitionTrainer(BaseTrainer):
 
         try:
             # 保存非DDP模型参数
-            model: BaseModel = deepcopy(self.model)
-            for i in range(len(model.module_list)):
-                if isinstance(model.module_list[i], torch.nn.parallel.DistributedDataParallel):
-                    model.module_list[i] = model.module_list[i].module
+            model: BaseModel = self.get_model_instance(world_size=world_size)
             model.eval()
 
             # 剔除criterion.weight参数
@@ -119,10 +121,7 @@ class FaceRecognitionTrainer(BaseTrainer):
         LOGGER.info(f"start export simplified model...")
 
         # 保存非DDP模型参数
-        model: BaseModel = deepcopy(self.model)
-        for i in range(len(model.module_list)):
-            if isinstance(model.module_list[i], torch.nn.parallel.DistributedDataParallel):
-                model.module_list[i] = model.module_list[i].module
+        model: BaseModel = self.get_model_instance(world_size=world_size)
 
         fp16_pt = self.config_manager.core["fp16_pt"]
         if fp16_pt:

@@ -1,7 +1,7 @@
 # <div align="center">TinyTrain:轻量级AI框架</div>
 ***
 TinyTrain 是一个基于 PyTorch 的轻量级弹性可扩展 AI 框架，易于上手，支持高度自定义修改，能够实现绝大多数 AI 任务。该框架支持单机单卡、单机多卡以及多机多卡（尚未测试）训练模式。
-目前，TinyTrain 已实现 YOLOv11 分类任务和目标检测任务，后续将不断增加更多 AI 任务适配。
+目前，TinyTrain 已实现 YOLO 图像分类、目标检测、姿态估计、实例分割任务和人脸识别算法，后续将不断增加更多 AI 任务适配。
 
 ### TinyTrain工作目录结构:
 - assets:资产目录

@@ -80,30 +80,29 @@ class FaceRecognitionPredictor(BasePredictor):
         tensor2 = transform(rgb_img2).unsqueeze(0).to(self.device)
         return tensor1, tensor2
 
-    def inference(self, data: Any) -> Any:
+    def inference(self, data: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         """
         分别对两张图像提取人脸特征向量。
 
         Args
         ----
-        data : tuple[Tensor, Tensor]
+        data : tuple[torch.Tensor, torch.Tensor]
             preprocess 返回的两个 Tensor
 
         Returns
         ----
-        list[Tensor]
+        tuple[torch.Tensor, torch.Tensor]
             两张图对应的特征向量，每个形状 [1, D]
         """
-        inference_result = []
-        for tensor in data:
-            result = self.model.inference(tensor)[0]  # 拿推理后的第一个输出
-            inference_result.append(result)
-        return inference_result
+        x = torch.cat(data, dim=0)  # 2b
+        result = self.model.inference(x)[0]  # 拿推理后的第一个输出
+        pred1, pred2 = torch.chunk(result, 2, dim=0)
+        return pred1, pred2
 
     # ---------- 后处理 ----------
-    def postprocess(self, data_info: AnyDataInfo, preds: list[torch.Tensor]):
+    def postprocess(self, data_info: AnyDataInfo, preds: tuple[torch.Tensor, torch.Tensor]):
         """
-        计算两张人脸特征的余弦相似度。
+        计算两张人脸特征的欧氏距离。
 
         Args
         ----
@@ -115,11 +114,12 @@ class FaceRecognitionPredictor(BasePredictor):
         Returns
         ----
         tuple[float, list[Tensor]]
-            (cosine_similarity, preds)
+            (distance, preds)
         """
-        # 计算余弦相似度
-        cosine_similarity = torch.nn.functional.cosine_similarity(preds[0], preds[1], dim=1).item()
-        return cosine_similarity, preds
+        # 计算欧氏距离
+        diff = preds[0] - preds[1]
+        distance = torch.sum(diff * diff, dim=1).item()  # L2 距离
+        return distance, preds
 
     # ---------- 可视化 ----------
     def show(self, data_info: AnyDataInfo, result):
@@ -131,15 +131,15 @@ class FaceRecognitionPredictor(BasePredictor):
         data_info : AnyDataInfo
             原始数据信息，预留接口
         result : tuple[float, list[Tensor]]
-            postprocess 返回的 (cosine_similarity, preds)
+            postprocess 返回的 (l2_distance, preds)
 
         Returns
         ----
         dict
             {
-                "cosine_similarity": float,
+                "l2_distance": float,
                 "img1_feature_vector": Tensor,
                 "img2_feature_vector": Tensor
             }
         """
-        return {"cosine_similarity": result[0], "img1_feature_vector": result[1][0], "img2_feature_vector": result[1][1]}
+        return {"l2_distance": result[0], "img1_feature_vector": result[1][0], "img2_feature_vector": result[1][1]}
