@@ -55,7 +55,7 @@ resume = false
 # type: bool
 # 断点续训，是否从上次中断的训练进度继续训练。
 
-amp = true
+amp = false
 # type: [bool]
 # 自动混合精度（AMP），用于节省内存并加速训练，开启后显存≈减半，速度+20~50%，但可能影响精度。
 # 关闭场景：

@@ -7,11 +7,12 @@ from torch import distributed
 
 from tinytrain.data.data_format import ClassifyBatchDataInfo
 from tinytrain.global_var import RANK, WORLD_SIZE
+from tinytrain.loss.base.base_loss import BaseLoss
 from tinytrain.utils.dist import all_gather_with_grad, DistCrossEntropy
 
 
 
-class PartialFCLoss(nn.Module):
+class PartialFCLoss(BaseLoss):
     """
     分布式 Partial FC 训练的头层 + 损失封装。
 

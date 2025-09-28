@@ -456,10 +456,4 @@ class PoseBatchDataInfo(DetectBatchDataInfo):
         super().__init__(**kwargs)
         self.batch_keypoints = batch_keypoints
 
-
-class FaceRecognitionValidBatchDataInfo(BaseBatchDataInfo):
-    def __init__(self, match_tensor: torch.Tensor | None = None, **kwargs):
-        super().__init__(**kwargs)
-        self.match_tensor = match_tensor
-
 # endregion

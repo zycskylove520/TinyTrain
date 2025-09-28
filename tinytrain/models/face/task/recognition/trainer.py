@@ -16,6 +16,7 @@ from tinytrain.utils import LOGGER
 class FaceRecognitionTrainer(BaseTrainer):
     def __init__(self, config_manager, device, model, callback):
         super(FaceRecognitionTrainer, self).__init__(config_manager, device, model, callback)
+
         self.best_threshold = 0.  # 人脸识别计算余弦相似度最佳阈值
         self.ddp_model_state_dict = None
 
@@ -74,7 +75,7 @@ class FaceRecognitionTrainer(BaseTrainer):
 
         try:
             # 保存非DDP模型参数
-            model: BaseModel = self.get_model_instance(world_size=world_size)
+            model: BaseModel = self.get_model_instance(world_size)
             model.eval()
 
             # 剔除criterion.weight参数
@@ -121,7 +122,8 @@ class FaceRecognitionTrainer(BaseTrainer):
         LOGGER.info(f"start export simplified model...")
 
         # 保存非DDP模型参数
-        model: BaseModel = self.get_model_instance(world_size=world_size)
+        model: BaseModel = self.get_model_instance(world_size)
+        model.eval()
 
         fp16_pt = self.config_manager.core["fp16_pt"]
         if fp16_pt:

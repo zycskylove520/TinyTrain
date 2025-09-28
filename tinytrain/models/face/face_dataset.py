@@ -14,7 +14,7 @@ FaceRecognitionValidDataset
     支持：
     1. 读取 *.txt 列表，每行格式：img1_path img2_path is_same(0/1)
     2. 返回 (sample1, sample2, is_pair) 三元组
-    3. collate 后得到 FaceRecognitionValidBatchDataInfo
+    3. collate 后得到 BaseBatchDataInfo
 """
 
 import os
@@ -29,7 +29,7 @@ from torchvision.datasets.folder import ImageFolder
 from torchvision.transforms import transforms
 
 from tinytrain.data.base import TTBaseMapDataset
-from tinytrain.data.data_format import ClassifyDataInfo, ClassifyBatchDataInfo, FaceRecognitionValidBatchDataInfo, BaseBatchDataInfo
+from tinytrain.data.data_format import ClassifyDataInfo, ClassifyBatchDataInfo, BaseBatchDataInfo
 from tinytrain.utils import LOGGER
 from tinytrain.utils.any_utils import make2tuple
 from tinytrain.utils.data_utils import cv_imread

@@ -49,6 +49,8 @@ class DynamicFilling:
 
     使用示例
     --------
+    >>> img = cv2.imread('xxx.jpg')
+    >>> old_bboxes = np.array([[0.5,0.5,0.2,0.2]])
     >>> df = DynamicFilling((640, 640), p=0.8, fill_value=114)
     >>> img_new, M = df(img)          # img 为 HWC np.uint8
     >>> new_bboxes = df.map_norm_cxcywh(M, old_bboxes)  # 一键同步 bbox
@@ -444,6 +446,8 @@ class DynamicScaling:
 
     使用示例
     --------
+    >>> img = cv2.imread('xxx.jpg')
+    >>> old_bboxes = np.array([[0.5,0.5,0.2,0.2]])
     >>> ds = DynamicScaling(scale_range=(0.5, 2.0), p=0.8, fill_value=114)
     >>> img_new, M = ds(img)          # img 为 HWC np.uint8
     >>> new_bboxes, keep = ds.map_norm_cxcywh(M, old_bboxes, min_area=0.001)
@@ -858,6 +862,8 @@ class DynamicRotating:
 
     使用示例
     --------
+    >>> img = cv2.imread('xxx.jpg')
+    >>> old_bboxes = np.array([[0.5,0.5,0.2,0.2]])
     >>> dr = DynamicRotating(angle_range=(-15, 15), p=0.8, fill_value=114)
     >>> img_new, M = dr(img)          # img 为 HWC np.uint8
     >>> new_bboxes, keep_idx = dr.map_norm_cxcywh(M, old_bboxes, min_area=0.001)
@@ -1076,11 +1082,11 @@ class DynamicRotating:
 
         # 2. 仿射变换 → [N,4,2]
         homo = np.concatenate([quad, np.ones((quad.shape[0], 1))], axis=1, dtype=np.float32)
-        new_quad = (homo @ M.T).astype(np.float32)[:, :2].reshape(-1, 4, 2)
+        new_quad = np.array(homo @ M.T)[:, :2].reshape(-1, 4, 2)
 
         # 原地计算最小外接矩形（仅取轴对齐部分）
         final = np.zeros((new_quad.shape[0], 4), dtype=np.float32)
-        for i, q in enumerate(new_quad):
+        for i, q in enumerate(new_quad):  # type: np.ndarray
             x_min = q[:, 0].min()
             y_min = q[:, 1].min()
             x_max = q[:, 0].max()
@@ -1152,7 +1158,7 @@ class DynamicRotating:
 
         # 3. 最小外接轴对齐框
         new_bboxes = np.zeros((N, 4), dtype=np.float32)
-        for i, q in enumerate(new_quad):
+        for i, q in enumerate(new_quad):  # type: np.ndarray
             xmin = q[:, 0].min()
             ymin = q[:, 1].min()
             xmax = q[:, 0].max()
@@ -1208,7 +1214,7 @@ class DynamicRotating:
 
         # 2. 最小外接轴对齐框
         new_bboxes = np.zeros((new_quad.shape[0], 4), dtype=np.float32)
-        for i, q in enumerate(new_quad):
+        for i, q in enumerate(new_quad):  # type: np.ndarray
             x_min = q[:, 0].min()
             y_min = q[:, 1].min()
             x_max = q[:, 0].max()
@@ -1268,6 +1274,8 @@ class DynamicShearing:
 
     使用示例
     --------
+    >>> img = cv2.imread('xxx.jpg')
+    >>> old_bboxes = np.array([[0.5,0.5,0.2,0.2]])
     >>> dshear = DynamicShearing(shear_range=(-0.2, 0.2), p=0.5, fill_value=114)
     >>> img_new, M = dshear(img)          # img 为 HWC np.uint8
     >>> new_bboxes, keep = dshear.map_norm_cxcywh(M, old_bboxes, min_area=0.001)
@@ -1480,10 +1488,10 @@ class DynamicShearing:
         x4, y4 = cx - w / 2, cy + h / 2
         quad = np.stack([x1, y1, x2, y2, x3, y3, x4, y4], axis=1).reshape(-1, 2)
         homo = np.concatenate([quad, np.ones((quad.shape[0], 1))], axis=1, dtype=np.float32)
-        new_quad = (homo @ M.T)[:, :2].astype(np.float32).reshape(-1, 4, 2)
+        new_quad = (homo @ M.T)[:, :2].reshape(-1, 4, 2)
 
         final = np.zeros((new_quad.shape[0], 4), dtype=np.float32)
-        for i, q in enumerate(new_quad):
+        for i, q in enumerate(new_quad):  # type: np.ndarray
             xmin, ymin = q[:, 0].min(), q[:, 1].min()
             xmax, ymax = q[:, 0].max(), q[:, 1].max()
             final[i] = ((xmin + xmax) / 2, (ymin + ymax) / 2, xmax - xmin, ymax - ymin)
@@ -1534,7 +1542,7 @@ class DynamicShearing:
         new_quad = (homo @ M.T)[:, :2].reshape(N, 4, 2)
 
         new_bboxes = np.zeros((N, 4), dtype=np.float32)
-        for i, q in enumerate(new_quad):
+        for i, q in enumerate(new_quad):  # type: np.ndarray
             new_bboxes[i] = (q[:, 0].min(), q[:, 1].min(), q[:, 0].max(), q[:, 1].max())
 
         valid_mask = (new_bboxes[:, 2] > 0) & (new_bboxes[:, 3] > 0) & \
@@ -1579,7 +1587,7 @@ class DynamicShearing:
         new_quad = (homo @ M.T)[:, :2].reshape(-1, 4, 2)
 
         new_bboxes = np.zeros((new_quad.shape[0], 4), dtype=np.float32)
-        for i, q in enumerate(new_quad):
+        for i, q in enumerate(new_quad):  # type: np.ndarray
             xmin, ymin = q[:, 0].min(), q[:, 1].min()
             xmax, ymax = q[:, 0].max(), q[:, 1].max()
             new_bboxes[i] = (xmin, ymin, xmax - xmin, ymax - ymin)

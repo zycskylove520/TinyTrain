@@ -730,7 +730,7 @@ class BaseTrainer:
         # 线性缩放 LR
         if world_size > 1:
             lr_scaled = lr0 * max(world_size, 1) * self.accumulate
-            LOGGER.info(f"DDP LR scaled from {lr0} -> {lr_scaled} ")
+            LOGGER.info(f"DDP LR scaled from {lr0} -> {lr_scaled:.4f} ")
         else:
             lr_scaled = lr0
 

@@ -9,10 +9,11 @@ from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry, lxlyrxry_2_cxcywh, make
 from tinytrain.utils.tal import TaskAlignedAssigner, dist2bbox
 from tinytrain.utils.segment_utils import crop_mask
 
+from .base.base_loss import BaseLoss
 from .subloss import BboxLossWithDFL, KeypointLoss
 
 
-class ClassificationLoss(nn.Module):
+class ClassificationLoss(BaseLoss):
     """
     通用分类损失封装，默认使用 CrossEntropyLoss。
     可通过 cls_loss_gain 对最终损失进行缩放。
@@ -44,7 +45,7 @@ class ClassificationLoss(nn.Module):
         return loss, loss_items
 
 
-class ClassificationWithFocalLoss(nn.Module):
+class ClassificationWithFocalLoss(BaseLoss):
     """
     Focal Loss，用于缓解类别不平衡问题。
     在 CE 基础上加入 (1-pt)^γ 调制因子，并可指定类别权重 alpha。
@@ -111,7 +112,7 @@ class ClassificationWithFocalLoss(nn.Module):
         return focal_loss, loss_items
 
 
-class YOLOV8DetectionLoss(nn.Module):
+class YOLOV8DetectionLoss(BaseLoss):
     """
     YOLOv8 检测头损失，包含：
         1. 分类损失 (BCE)
@@ -477,6 +478,7 @@ class YOLOV8SegmentLoss(YOLOV8DetectionLoss):
     YOLOv8 实例分割头损失,在检测损失基础上增加：
         6. 实例分割 mask 损失
     """
+
     def __init__(self, nc, strides, reg_max, imgsz, device, overlap_mask, cls_gain=1, box_gain=1, dfl_gain=1, seg_gain=1, tal_topk=10):  # model must be de-paralleled
         """
         Args:
@@ -601,16 +603,16 @@ class YOLOV8SegmentLoss(YOLOV8DetectionLoss):
         return (crop_mask(loss, xyxy).mean(dim=(1, 2)) / area).sum()
 
     def calculate_segmentation_loss(self,
-            fg_mask: torch.Tensor,
-            masks: torch.Tensor,
-            target_gt_idx: torch.Tensor,
-            target_bboxes: torch.Tensor,
-            batch_idx: torch.Tensor,
-            proto: torch.Tensor,
-            pred_masks: torch.Tensor,
-            imgsz: torch.Tensor,
-            overlap: bool,
-    ) -> torch.Tensor:
+                                    fg_mask: torch.Tensor,
+                                    masks: torch.Tensor,
+                                    target_gt_idx: torch.Tensor,
+                                    target_bboxes: torch.Tensor,
+                                    batch_idx: torch.Tensor,
+                                    proto: torch.Tensor,
+                                    pred_masks: torch.Tensor,
+                                    imgsz: torch.Tensor,
+                                    overlap: bool,
+                                    ) -> torch.Tensor:
         """
         计算整批分割损失。
 

@@ -1,11 +1,8 @@
 # ---------- 全局注册器 ----------
 from __future__ import annotations
 
-import importlib
-import pkgutil
-
-import torch.nn as nn
-from typing import Dict, Iterable, Set, Type, List, Tuple, Any, Optional, ClassVar, Callable, Union
+from torch import nn
+from typing import Dict, Iterable, Set, Type, List, Tuple, Optional, ClassVar, Callable, Union
 
 from tinytrain.utils import LOGGER
 
