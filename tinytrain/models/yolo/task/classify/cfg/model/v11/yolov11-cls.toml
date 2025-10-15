@@ -146,7 +146,7 @@ args.out_channels = 1024
 [[network]]
 # 10
 type = "head"
-module = "Classify"
+module = "ClassifyHead"
 repeat = 1
 from = [-1]
 args.in_channels = 1024

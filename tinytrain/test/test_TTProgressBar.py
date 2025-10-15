@@ -3,7 +3,7 @@
 import time
 import random
 import threading
-from tinytrain.utils.TT_progress_bar import TTProgressBar
+from tinytrain.utils.progress_bar import TTProgressBar
 
 
 # ---------- 1 ~ 12 号测试函数 ----------

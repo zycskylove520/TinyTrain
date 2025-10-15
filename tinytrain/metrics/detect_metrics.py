@@ -17,10 +17,10 @@ from tinytrain.global_var import WORLD_SIZE, RANK
 from tinytrain.utils import LOGGER
 from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry
 
-from .base import BaseMetric, BaseImgResult
+from .base import TTBaseMetric, BaseImgResult
 
 
-class DetectMetrics(BaseMetric):
+class DetectMetrics(TTBaseMetric):
     """
     检测任务统一评估指标封装类，基于 torchmetrics.detection.MeanAveragePrecision。
 

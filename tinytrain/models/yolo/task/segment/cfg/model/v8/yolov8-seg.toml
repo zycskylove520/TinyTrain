@@ -288,7 +288,7 @@ from = [17, 21, 25]
 [[network]]
 # 27 Segment(P3, P4, P5)
 type = "head"
-module = "YOLOSegment"
+module = "YOLOSegmentHead"
 repeat = 1
 from = [-1]
 args.nc = -1

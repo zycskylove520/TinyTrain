@@ -31,7 +31,7 @@ from torchvision.transforms import transforms
 from tinytrain.data.base import TTBaseMapDataset
 from tinytrain.data.data_format import ClassifyDataInfo, ClassifyBatchDataInfo, BaseBatchDataInfo
 from tinytrain.utils import LOGGER
-from tinytrain.utils.any_utils import make2tuple
+from tinytrain.utils.any_utils import make_N_tuple
 from tinytrain.utils.data_utils import cv_imread
 
 
@@ -58,7 +58,7 @@ class FaceRecognitionTrainDataset(ImageFolder):
         super().__init__(root=root)
 
         self.config_manager = config_manager
-        self.img_size = make2tuple(self.config_manager.dataset["train_img_size"])
+        self.img_size = make_N_tuple(self.config_manager.dataset["train_img_size"])
         self.crop_fraction = self.config_manager.augment["img_crop_fraction"]
         self.rgb: bool = self.config_manager.augment["rgb"]
 
@@ -163,7 +163,7 @@ class FaceRecognitionValidDataset(TTBaseMapDataset):
     def __init__(self, config_manager, txt_files: list[Path]):
         super().__init__(config_manager)
         self.txt_files = txt_files
-        self.img_size = make2tuple(self.config_manager.dataset["val_img_size"])
+        self.img_size = make_N_tuple(self.config_manager.dataset["val_img_size"])
         self.rgb: bool = self.config_manager.augment["rgb"]
 
         self.samples = self.make_pair_dataset()

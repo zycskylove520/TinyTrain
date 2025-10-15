@@ -39,6 +39,7 @@ cv2.setNumThreads(NUM_THREADS)  # 在模块初始化时设置一次
 # font
 def localization(font: str = None):
     if font is None:
+        # warnings.filterwarnings("ignore", message="Glyph.*missing from font")
         return
 
     font_dir = Path(matplotlib.matplotlib_fname()).parent / "fonts/ttf/"

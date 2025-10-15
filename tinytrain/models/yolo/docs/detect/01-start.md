@@ -1,34 +1,37 @@
 **在阅读该md文件前，请确保您已阅读tinytrain目录下的README.md文件！**
 
-YOLO目标检测算法支持多个不同的模型结构，具体可查阅当前目录下的`cfg/model`目录，来切换不同的模型。
+# 简介
+***
+1. YOLO目标检测算法来自开源框架 *ultralytics*，链接：https://github.com/ultralytics/ultralytics
+2. 该算法支持多个不同的模型结构，具体可查阅该文件父目录下的`task/detect/cfg/model`目录，来切换不同的模型。
 
 # 数据集构建
 ***
-构建YOLO目标检测数据集时使用YOLO目标检测数据集格式.
+1. 构建YOLO目标检测数据集时，使用YOLO目标检测数据集格式.
 
 数据集目录格式如下：
-dataset/
-├── images/
-│   ├── train/
-│   │   ├── 1.jpg
-│   │   ├── 2.jpg
-│   │   └── ...
-│   └── val/
-│       ├── 3.jpg
-│       ├── 4.jpg
-│       └── ...
-│
-├── labels/
-│   ├── train/
-│   │   ├── 1.txt
-│   │   ├── 2.txt
-│   │   └── ...
-│   └── val/
-│       ├── 3.txt
-│       ├── 4.txt
-│       └── ...
+<div>dataset/</div>
+<div>├── images/</div>
+<div>│   ├── train/</div>
+<div>│   │   ├── 1.jpg</div>
+<div>│   │   ├── 2.jpg</div>
+<div>│   │   └── ...</div>
+<div>│   └── val/</div>
+<div>│       ├── 3.jpg</div>
+<div>│       ├── 4.jpg</div>
+<div>│       └── ...</div>
+<div>│</div>
+<div>├── labels/</div>
+<div>│   ├── train/</div>
+<div>│   │   ├── 1.txt</div>
+<div>│   │   ├── 2.txt</div>
+<div>│   │   └── ...</div>
+<div>│   └── val/</div>
+<div>│       ├── 3.txt</div>
+<div>│       ├── 4.txt</div>
+<div>│       └── ...</div>
 
-### 说明
+说明
 - **`dataset/`**：数据集根目录。
 - **`images/`**：包含所有图像文件。
   - **`train/`**：训练集图像，用于模型训练。
@@ -37,12 +40,12 @@ dataset/
   - **`train/`**：训练集标签，与训练集图像对应。
   - **`val/`**：验证集标签，与验证集图像对应。
 
-### 文件命名规则
+###### 文件命名规则
 - 图像文件和标签文件的命名规则一致，例如：
   - 图像文件 `1.jpg` 对应的标签文件为 `1.txt`。
   - 图像文件 `2.jpg` 对应的标签文件为 `2.txt`。
 
-### txt文件内容规则
+###### txt文件内容规则
 每个 `.txt` 标签文件对应一张图像，文件中的每一行表示一个目标边界框，格式如下：
 ```txt
 <class_id> <x_center> <y_center> <width><height>

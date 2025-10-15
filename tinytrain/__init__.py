@@ -1,4 +1,5 @@
 from .cfg import TTModuleRegistry, TTEngineRegistry
 from .models import *
 
-TTModuleRegistry.register_plugin("tinytrain.modules")
+# 自动扫描注册算子
+TTModuleRegistry.auto_discover()

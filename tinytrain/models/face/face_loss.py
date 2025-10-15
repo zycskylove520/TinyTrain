@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributed as dist
 
 from typing import Callable
 from torch import distributed
@@ -8,8 +9,6 @@ from torch import distributed
 from tinytrain.data.data_format import ClassifyBatchDataInfo
 from tinytrain.global_var import RANK, WORLD_SIZE
 from tinytrain.loss.base.base_loss import BaseLoss
-from tinytrain.utils.dist import all_gather_with_grad, DistCrossEntropy
-
 
 
 class PartialFCLoss(BaseLoss):
@@ -238,3 +237,98 @@ class FCLoss(nn.Module):
         loss_items = {"cls_loss": loss.detach()}
 
         return loss, loss_items
+
+
+def all_gather_with_grad(tensor, *gather_list):
+    """AllGather op with gradient backward"""
+    return AllGatherWithGradFunc.apply(tensor, *gather_list)
+
+
+class AllGatherWithGradFunc(torch.autograd.Function):
+    """AllGather op with gradient backward"""
+
+    @staticmethod
+    def forward(ctx, tensor, *gather_list):
+        gather_list = list(gather_list)
+        dist.all_gather(gather_list, tensor)
+        return tuple(gather_list)
+
+    @staticmethod
+    def backward(ctx, *grads):
+        grad_list = list(grads)
+        rank = dist.get_rank()
+        grad_out = grad_list[rank]
+
+        dist_ops = [
+            dist.reduce(grad_out, rank, dist.ReduceOp.SUM, async_op=True)
+            if i == rank
+            else dist.reduce(
+                grad_list[i], i, dist.ReduceOp.SUM, async_op=True
+            )
+            for i in range(dist.get_world_size())
+        ]
+        for _op in dist_ops:
+            _op.wait()
+
+        grad_out *= len(grad_list)  # cooperate with distributed loss function
+        return grad_out, *[None for _ in range(len(grad_list))]
+
+
+class DistCrossEntropyFunc(torch.autograd.Function):
+    """
+    CrossEntropy loss is calculated in parallel, allreduce denominator into single gpu and calculate softmax.
+    Implemented of ArcFace (https://arxiv.org/pdf/1801.07698v1.pdf):
+    """
+
+    @staticmethod
+    def forward(ctx, logits: torch.Tensor, label: torch.Tensor):
+        """ """
+        batch_size = logits.size(0)
+        # for numerical stability
+        max_logits, _ = torch.max(logits, dim=1, keepdim=True)
+        # local to global
+        dist.all_reduce(max_logits, dist.ReduceOp.MAX)
+        logits = logits - max_logits
+        logits = logits.exp()
+        sum_logits_exp = torch.sum(logits, dim=1, keepdim=True)
+        # local to global
+        dist.all_reduce(sum_logits_exp, dist.ReduceOp.SUM)
+        logits = logits / sum_logits_exp
+        index = torch.where(label != -1)[0]
+        # loss
+        loss = torch.zeros(batch_size, 1, device=logits.device)
+        loss[index] = logits[index].gather(1, label[index])
+        dist.all_reduce(loss, dist.ReduceOp.SUM)
+        ctx.save_for_backward(index, logits, label)
+        return loss.clamp_min_(1e-30).log_().mean() * (-1)
+
+    @staticmethod
+    def backward(ctx, loss_gradient):
+        """
+        Args:
+            loss_grad (torch.Tensor): gradient backward by last layer
+        Returns:
+            gradients for each input in forward function
+            `None` gradients for one-hot label
+        """
+        (
+            index,
+            logits,
+            label,
+        ) = ctx.saved_tensors
+        batch_size = logits.size(0)
+        one_hot = torch.zeros(
+            size=[index.size(0), logits.size(1)], device=logits.device
+        )
+        one_hot.scatter_(1, label[index], 1)
+        logits[index] -= one_hot
+        logits.div_(batch_size)
+        return logits * loss_gradient.item(), None
+
+
+class DistCrossEntropy(torch.nn.Module):
+    def __init__(self):
+        super(DistCrossEntropy, self).__init__()
+
+    def forward(self, logit_part, label_part):
+        return DistCrossEntropyFunc.apply(logit_part, label_part)

@@ -96,7 +96,7 @@ args.n = 3
 [[network]]
 # 9
 type = "head"
-module = "Classify"
+module = "ClassifyHead"
 repeat = 1
 from = [-1]
 args.in_channels = 2048

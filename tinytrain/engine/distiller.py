@@ -9,35 +9,35 @@ from pathlib import Path
 from torch import autocast, nn
 
 from tinytrain.global_var import LOCAL_RANK, RANK
-from tinytrain.cfg import ConfigManager
+from tinytrain.cfg import TTConfigManager
 from tinytrain.utils import LOGGER
-from tinytrain.utils.TT_progress_bar import TTProgressBar
+from tinytrain.utils.progress_bar import TTProgressBar
 from tinytrain.utils.callback import Callback
 
-from .trainer import BaseTrainer
+from .trainer import TTBaseTrainer
 
 if TYPE_CHECKING:
-    from .model import BaseModel
+    from .model import TTBaseModel
 
 
-class BaseDistiller(BaseTrainer):
+class TTBaseDistiller(TTBaseTrainer):
     """
     通用知识蒸馏训练器基类。
 
     功能：
-    1. 复用 BaseTrainer 的全部训练流程（DDP、AMP、EMA、断点续训等）。
+    1. 复用 TTBaseTrainer 的全部训练流程（DDP、AMP、EMA、断点续训等）。
     2. 额外引入「教师模型」提供软标签，学生模型通过蒸馏损失进行学习。
     3. 默认仅冻结教师模型参数；子类可重写蒸馏损失计算逻辑。
 
     使用：
-        distiller = BaseDistiller(cfg, device, student_model, teacher_model, callback)
+        distiller = TTBaseDistiller(cfg, device, student_model, teacher_model, callback)
         distiller.train()
     """
 
     # ------------------------------------------------------------------
     # 1. 构造与入口
     # ------------------------------------------------------------------
-    def __init__(self, config_manager: ConfigManager, device: torch.device, student_model: BaseModel, teacher_model: BaseModel, callback: Callback):
+    def __init__(self, config_manager: TTConfigManager, device: torch.device, student_model: TTBaseModel, teacher_model: TTBaseModel, callback: Callback):
         """
         初始化蒸馏器。
 
@@ -115,12 +115,12 @@ class BaseDistiller(BaseTrainer):
     # ------------------------------------------------------------------
     # 3. 训练流程钩子（不建议重写）
     # ------------------------------------------------------------------
-    def freeze_layers(self, model: BaseModel, world_size: int):
+    def freeze_layers(self, model: TTBaseModel, world_size: int):
         """
         蒸馏场景下仅冻结教师模型参数（学生模型照常训练）。
 
         Args:
-            model: 此处实际传入的是学生模型（BaseTrainer.model）。
+            model: 此处实际传入的是学生模型（TTBaseTrainer.model）。
             world_size: DDP 进程数。
         """
 

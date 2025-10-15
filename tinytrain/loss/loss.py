@@ -1,16 +1,22 @@
+from __future__ import annotations
+
 import numpy as np
 import torch
 import torch.nn.functional as F
 
 from torch import nn
+from typing import TYPE_CHECKING
 
-from tinytrain.data.data_format import ClassifyBatchDataInfo, DetectBatchDataInfo, PoseBatchDataInfo, SegmentBatchDataInfo
 from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry, lxlyrxry_2_cxcywh, make_anchors
-from tinytrain.utils.tal import TaskAlignedAssigner, dist2bbox
+from tinytrain.modules.assigner.taa_assigner import TaskAlignedAssigner, dist2bbox
 from tinytrain.utils.segment_utils import crop_mask
 
 from .base.base_loss import BaseLoss
 from .subloss import BboxLossWithDFL, KeypointLoss
+
+if TYPE_CHECKING:
+    from tinytrain.data.data_format import ClassifyBatchDataInfo, DetectBatchDataInfo, PoseBatchDataInfo, SegmentBatchDataInfo
+    from tinytrain.models.ocr.ocr_data_format import LPRBatchDataInfo
 
 
 class ClassificationLoss(BaseLoss):
@@ -110,6 +116,35 @@ class ClassificationWithFocalLoss(BaseLoss):
         focal_loss = focal_loss.mean() * self.cls_loss_gain
         loss_items = {"cls_loss": focal_loss.detach()}
         return focal_loss, loss_items
+
+
+class LPRCTCLoss(BaseLoss):
+    def __init__(self, max_time_steps: int, blank: int, reduction: str = "mean"):
+        super().__init__()
+        self.max_time_steps = max_time_steps
+        self.criterion = nn.CTCLoss(blank=blank, reduction=reduction)
+
+    def forward(self, pred: torch.Tensor, batch: LPRBatchDataInfo):
+        lengths = batch.lengths
+        input_lengths, target_lengths = self.sparse_tuple_for_ctc(self.max_time_steps, lengths)
+
+        log_probs = pred.permute(2, 0, 1)  # for ctc loss: T x N x C
+        log_probs = log_probs.log_softmax(dim=-1)
+
+        loss = self.criterion(log_probs, batch.target, input_lengths=input_lengths, target_lengths=target_lengths)
+        loss_items = {"lpr_loss": loss.detach()}
+        return loss, loss_items
+
+    @staticmethod
+    def sparse_tuple_for_ctc(T_length, lengths):
+        input_lengths = []
+        target_lengths = []
+
+        for ch in lengths:
+            input_lengths.append(T_length)
+            target_lengths.append(ch)
+
+        return tuple(input_lengths), tuple(target_lengths)
 
 
 class YOLOV8DetectionLoss(BaseLoss):
@@ -239,7 +274,7 @@ class YOLOV8DetectionLoss(BaseLoss):
 
         _, target_bboxes, target_scores, fg_mask, _ = self.assigner(
             pred_scores.detach().sigmoid(),
-            # 乘以stride_tensor将pred_bboxes恢复原图大小，对anchor_points同理
+            # 乘以stride_tensor将pred_bboxes恢复训练图大小，对anchor_points同理
             (pred_bboxes.detach() * stride_tensor).type(gt_bboxes.dtype),
             anchor_points * stride_tensor,
             gt_labels,

@@ -50,7 +50,7 @@ args.padding = 1
 [[network]]
 # 1
 type = "flow"
-module = "DWBlock"
+module = "BottleneckDW"
 allow_repeat = true
 repeat = 1
 from = [-1]
@@ -64,7 +64,7 @@ args.groups = 64
 [[network]]
 # 2-P2/4
 type = "flow"
-module = "DWBlock"
+module = "BottleneckDW"
 repeat = 1
 from = [-1]
 args.in_channels = 64
@@ -77,7 +77,7 @@ args.groups = 128
 [[network]]
 # 3
 type = "flow"
-module = "DWBlock"
+module = "BottleneckDW"
 repeat = 4
 from = [-1]
 args.in_channels = 64
@@ -91,7 +91,7 @@ args.residual = true
 [[network]]
 # 4-P3/8
 type = "flow"
-module = "DWBlock"
+module = "BottleneckDW"
 repeat = 1
 from = [-1]
 args.in_channels = 64
@@ -104,7 +104,7 @@ args.groups = 256
 [[network]]
 # 5
 type = "flow"
-module = "DWBlock"
+module = "BottleneckDW"
 repeat = 6
 from = [-1]
 args.in_channels = 128
@@ -118,7 +118,7 @@ args.residual = true
 [[network]]
 # 6-P4/16
 type = "flow"
-module = "DWBlock"
+module = "BottleneckDW"
 repeat = 1
 from = [-1]
 args.in_channels = 128
@@ -131,7 +131,7 @@ args.groups = 512
 [[network]]
 # 7
 type = "flow"
-module = "DWBlock"
+module = "BottleneckDW"
 repeat = 2
 from = [-1]
 args.in_channels = 128
@@ -147,7 +147,7 @@ args.residual = true
 [[network]]
 # 10
 type = "head"
-module = "GDC"
+module = "GDCHead"
 repeat = 1
 from = [-1]
 args.in_channels = 128

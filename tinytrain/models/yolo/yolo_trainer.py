@@ -1,11 +1,11 @@
 from torch import nn
 
-from tinytrain.engine import BaseModel
-from tinytrain.engine.trainer import BaseTrainer
+from tinytrain.engine import TTBaseModel
+from tinytrain.engine.trainer import TTBaseTrainer
 
 
-class YOLOTrainer(BaseTrainer):
-    def make_param_groups(self, model: BaseModel, lr, weight_decay, **kwargs) -> dict:
+class YOLOTrainer(TTBaseTrainer):
+    def make_param_groups(self, model: TTBaseModel, lr, weight_decay, **kwargs) -> dict:
         # 所有可训练参数，按 name 排序保证 DDP 一致性
         named_params = sorted(
             [(n, p) for n, p in self.model.named_parameters() if p.requires_grad],

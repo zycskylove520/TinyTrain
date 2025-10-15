@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from torch import nn
 
 
-class BaseExportServer:
+class TTBaseExportServer:
     """
     导出服务器的抽象基类，定义了所有后端导出器必须实现的接口。
 

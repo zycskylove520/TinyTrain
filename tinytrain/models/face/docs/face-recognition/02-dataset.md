@@ -1,4 +1,4 @@
-### 训练数据集下载链接:
+# 训练数据集下载链接:
 以下是转换成训练数据集格式的数据集，需要可自行下载:
 - `Glint360K数据集`:通过网盘分享的文件:Glint360K
 链接: https://pan.baidu.com/s/1HZ5q2wWekKppVTu9l-IRdQ?pwd=dans 提取码: dans 
@@ -19,7 +19,7 @@
 链接: https://pan.baidu.com/s/1LuvG2gqDzr9wqJOm9zLMQg?pwd=re9d 提取码: re9d 
 --来自百度网盘超级会员v7的分享
 
-### 验证数据集下载链接:
+# 验证数据集下载链接:
 以下是转换成验证数据集格式的数据集，需要可自行下载:
 - `lfw数据集`:通过网盘分享的文件:lfw-align-112x112-图片版.zip
 链接: https://pan.baidu.com/s/1Emng3y0AVyQyKs0Txx8-Sg?pwd=4795 提取码: 4795 

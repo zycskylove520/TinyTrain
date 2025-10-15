@@ -288,7 +288,7 @@ from = [17, 21, 25]
 [[network]]
 # 27 Pose(P3, P4, P5)
 type = "head"
-module = "YOLOPose"
+module = "YOLOPoseHead"
 repeat = 1
 from = [-1]
 args.nc = -1

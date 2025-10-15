@@ -1,4 +1,4 @@
-from .TT_register import TTEngineRegistry, TTModuleRegistry
-from .config_manager import ConfigManager
+from .register import TTEngineRegistry, TTModuleRegistry
+from .config_manager import TTConfigManager
 
-__all__ = ['TTEngineRegistry', 'TTModuleRegistry', 'ConfigManager']
+__all__ = ['TTEngineRegistry', 'TTModuleRegistry', 'TTConfigManager']

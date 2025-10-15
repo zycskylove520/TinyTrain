@@ -1,34 +1,37 @@
 **在阅读该md文件前，请确保您已阅读tinytrain目录下的README.md文件！**
 
-YOLO姿态估计算法支持多个不同的模型结构，具体可查阅当前目录下的`cfg/model`目录，来切换不同的模型。
+# 简介
+***
+1. YOLO姿态估计算法来自开源框架 *ultralytics*，链接：https://github.com/ultralytics/ultralytics
+2. 该算法支持多个不同的模型结构，具体可查阅该文件父目录下的`task/detect/cfg/model`目录，来切换不同的模型。
 
 # 数据集构建
 ***
-构建YOLO姿态估计数据集时使用YOLO姿态估计数据集格式.
+1. 构建YOLO姿态估计数据集时使用YOLO姿态估计数据集格式.
 
 数据集目录格式如下：
-dataset/
-├── images/
-│   ├── train/
-│   │   ├── 1.jpg
-│   │   ├── 2.jpg
-│   │   └── ...
-│   └── val/
-│       ├── 3.jpg
-│       ├── 4.jpg
-│       └── ...
-│
-├── labels/
-│   ├── train/
-│   │   ├── 1.txt
-│   │   ├── 2.txt
-│   │   └── ...
-│   └── val/
-│       ├── 3.txt
-│       ├── 4.txt
-│       └── ...
+<div>dataset/</div>
+<div>├── images/</div>
+<div>│   ├── train/</div>
+<div>│   │   ├── 1.jpg</div>
+<div>│   │   ├── 2.jpg</div>
+<div>│   │   └── ...</div>
+<div>│   └── val/</div>
+<div>│       ├── 3.jpg</div>
+<div>│       ├── 4.jpg</div>
+<div>│       └── ...</div>
+<div>│</div>
+<div>├── labels/</div>
+<div>│   ├── train/</div>
+<div>│   │   ├── 1.txt</div>
+<div>│   │   ├── 2.txt</div>
+<div>│   │   └── ...</div>
+<div>│   └── val/</div>
+<div>│       ├── 3.txt</div>
+<div>│       ├── 4.txt</div>
+<div>│       └── ...</div>
 
-### 说明
+说明
 - **`dataset/`**：数据集根目录。
 - **`images/`**：包含所有图像文件。
   - **`train/`**：训练集图像，用于模型训练。
@@ -37,12 +40,12 @@ dataset/
   - **`train/`**：训练集标签，与训练集图像对应。
   - **`val/`**：验证集标签，与验证集图像对应。
 
-### 文件命名规则
+###### 文件命名规则
 - 图像文件和标签文件的命名规则一致，例如：
   - 图像文件 `1.jpg` 对应的标签文件为 `1.txt`。
-  - 图像文件 `2.jpg` 对应的标签文件为 `2.txt`。_
+  - 图像文件 `2.jpg` 对应的标签文件为 `2.txt`。
 
-### txt文件内容规则
+###### txt文件内容规则
 YOLO 姿态估计（YOLO-Pose）沿用 YOLOv5/v8 的扁平化文本格式，**每行**描述一个对象，结构为：
 ```text
 <class_id> <x_center> <y_center> <width><height><x1><y1><mask_1><x2><y2><mask_2>...<xk><yk><mask_k>
@@ -56,7 +59,7 @@ YOLO 姿态估计（YOLO-Pose）沿用 YOLOv5/v8 的扁平化文本格式，**�
      - `<mask_i>` – 可见性标志  
        - `0`=未标注
        - `1`=被遮挡
-       - `2`=可见  
+       - `2`=可见
 
 # 模型训练
 ***

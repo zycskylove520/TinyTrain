@@ -2,28 +2,28 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Union
 
-from tinytrain.cfg import ConfigManager, TTEngineRegistry
+from tinytrain.cfg import TTConfigManager, TTEngineRegistry
 from tinytrain.utils.callback import Callback
 
 if TYPE_CHECKING:
     import torch
     from torch import nn
-    from tinytrain.server.export_server import BaseExportServer
+    from tinytrain.server.export_server import TTBaseExportServer
 
 
-class BaseExporter:
+class TTBaseExporter:
     """
-    BaseExporter 是一个通用模型导出基类，用于将 PyTorch 模型转换为部署格式
+    TTBaseExporter 是一个通用模型导出基类，用于将 PyTorch 模型转换为部署格式
     （如 ONNX、TensorRT、TorchScript、CoreML、OpenVINO 等）。
 
     特性：
     - 支持本地 torch.nn.Module 导出。
-    - 内置 BaseExportServer 统一封装导出逻辑，支持多种后端。
+    - 内置 TTBaseExportServer 统一封装导出逻辑，支持多种后端。
     - 提供完整的生命周期钩子（on_export_start / on_export_end）。
     - 输出目录可自定义，自动创建多级目录。
 
     使用方式：
-    1. 创建实例：BaseExporter(cfg, model, callback, backend="onnx")
+    1. 创建实例：TTBaseExporter(cfg, model, callback, backend="onnx")
     2. 调用 export：exporter.export(Path("runs/export"))
     """
 
@@ -31,7 +31,7 @@ class BaseExporter:
     # 1. 构造与入口
     # ------------------------------------------------------------------
     def __init__(self,
-                 config_manager: ConfigManager,
+                 config_manager: TTConfigManager,
                  device: torch.device,
                  model: nn.Module,
                  callback: Callback,
@@ -42,11 +42,11 @@ class BaseExporter:
         初始化导出器。
 
         Args:
-            config_manager (ConfigManager): 全局配置管理器，包含 device、输入尺寸等信息。
+            config_manager (TTConfigManager): 全局配置管理器，包含 device、输入尺寸等信息。
             model (nn.Module): 已加载权重的 PyTorch 模型。
             callback (Callback): 回调对象，用于在导出前后插入自定义逻辑。
             backend (str | None, optional): 导出后端名称，如 "onnx"、"tensorrt"、"torchscript" 等。
-            **kwargs: 透传给 BaseExportServer 的额外参数，如 opset_version、dynamic_axes 等。
+            **kwargs: 透传给 TTBaseExportServer 的额外参数，如 opset_version、dynamic_axes 等。
         """
         self.config_manager = config_manager
         self.backend = backend
@@ -83,16 +83,16 @@ class BaseExporter:
     # ------------------------------------------------------------------
     # 3. 内部工具（不建议重写）
     # ------------------------------------------------------------------
-    def _setup_export_server(self, model: nn.Module, **kwargs) -> Union[nn.Module, BaseExportServer]:
+    def _setup_export_server(self, model: nn.Module, **kwargs) -> Union[nn.Module, TTBaseExportServer]:
         """
         根据模型类型初始化导出服务器（目前仅支持 PyTorch nn.Module）。
 
         Args:
             model (nn.Module): 待导出的 PyTorch 模型。
-            **kwargs: 透传给 BaseExportServer 的额外参数。
+            **kwargs: 透传给 TTBaseExportServer 的额外参数。
 
         Returns:
-            BaseExportServer: 已配置的导出服务器实例。
+            TTBaseExportServer: 已配置的导出服务器实例。
 
         Raises:
             TypeError: 如果模型不是 nn.Module。

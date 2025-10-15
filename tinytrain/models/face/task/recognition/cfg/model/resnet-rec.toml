@@ -96,7 +96,7 @@ args.n = 2
 [[network]]
 # 10
 type = "head"
-module = "GDC"
+module = "GDCHead"
 repeat = 1
 from = [-1]
 args.in_channels = 512

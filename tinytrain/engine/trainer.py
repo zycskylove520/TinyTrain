@@ -16,12 +16,12 @@ from torch import autocast, optim, nn, Tensor
 from torch.utils.data import Dataset
 from torch.utils.data.dataloader import DataLoader
 
-from tinytrain.cfg import ConfigManager, TTEngineRegistry
+from tinytrain.cfg import TTConfigManager, TTEngineRegistry
 from tinytrain.data.data_format import BaseBatchDataInfo
 from tinytrain.global_var import RANK, LOCAL_RANK, WORLD_SIZE
 from tinytrain.metrics.base import TrainResult
 from tinytrain.utils import LOGGER
-from tinytrain.utils.TT_progress_bar import TTProgressBar
+from tinytrain.utils.progress_bar import TTProgressBar
 from tinytrain.utils.any_utils import set_random_seed, create_iter_directory, maybe_limit_num_workers
 from tinytrain.utils.callback import Callback
 from tinytrain.utils.checks import check_amp
@@ -29,13 +29,13 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from tinytrain.utils.train_utils import ModelEMA, EarlyStopping
 
 if TYPE_CHECKING:
-    from .model import BaseModel
-    from .validator import BaseValidator
+    from .model import TTBaseModel
+    from .validator import TTBaseValidator
 
 
-class BaseTrainer:
+class TTBaseTrainer:
     """
-    BaseTrainer 是一个通用、可扩展的深度学习训练框架基类，支持单机单卡、单机多卡（DDP）、多机多卡等多种训练模式。
+    TTBaseTrainer 是一个通用、可扩展的深度学习训练框架基类，支持单机单卡、单机多卡（DDP）、多机多卡等多种训练模式。
 
     设计目标：
     - 解耦：将配置、模型、数据、优化器、验证器、回调等模块解耦，方便复用与扩展。
@@ -70,7 +70,7 @@ class BaseTrainer:
 
     注意事项：
     - 所有路径类参数建议使用 `pathlib.Path`。
-    - 所有配置通过 `ConfigManager` 统一管理，支持 TOML 文件。
+    - 所有配置通过 `TTConfigManager` 统一管理，支持 TOML 文件。
     - 所有日志通过 `LOGGER` 输出，支持 rank 过滤。
     - 训练结果统一保存在 `save_dir`，包括权重、日志、配置、图表等。
     """
@@ -78,18 +78,18 @@ class BaseTrainer:
     # ------------------------------------------------------------------
     # 1. 构造与入口
     # ------------------------------------------------------------------
-    def __init__(self, config_manager: ConfigManager, device: torch.device, model: BaseModel, callback: Callback):
+    def __init__(self, config_manager: TTConfigManager, device: torch.device, model: TTBaseModel, callback: Callback):
         """
-        初始化 BaseTrainer 类，配置训练所需的核心组件。
+        初始化 TTBaseTrainer 类，配置训练所需的核心组件。
 
         Args:
-            config_manager (ConfigManager): 配置管理器，提供训练参数。
-            model (BaseModel): 模型实例，用于训练和验证。
+            config_manager (TTConfigManager): 配置管理器，提供训练参数。
+            model (TTBaseModel): 模型实例，用于训练和验证。
             callback (Callback): 回调函数，用于在训练过程中执行自定义操作。
         """
         torch.set_float32_matmul_precision('high')
-        self.config_manager: ConfigManager = config_manager
-        self.validator: BaseValidator | None = None
+        self.config_manager: TTConfigManager = config_manager
+        self.validator: TTBaseValidator | None = None
 
         # resume
         self.resume: bool = self.config_manager.core["resume"]
@@ -123,7 +123,7 @@ class BaseTrainer:
         self.test_dataloader = None
 
         # model
-        self.model: BaseModel = model
+        self.model: TTBaseModel = model
         self.ema: ModelEMA | None = None
 
         # train
@@ -227,17 +227,17 @@ class BaseTrainer:
         """
         pass
 
-    def freeze_layers(self, model: BaseModel, world_size: int):
+    def freeze_layers(self, model: TTBaseModel, world_size: int):
         """
         冻结模型的某些层，防止其参数在训练中被更新。
 
         Args:
-            model (BaseModel): 模型实例
+            model (TTBaseModel): 模型实例
             world_size (int): 分布式训练中的进程数量。
         """
         pass
 
-    def make_param_groups(self, model: BaseModel, lr, weight_decay, **kwargs) -> dict:
+    def make_param_groups(self, model: TTBaseModel, lr, weight_decay, **kwargs) -> dict:
         """
         将模型参数划分为不同的优化组（parameter group），用于后续构造优化器。
 
@@ -253,7 +253,7 @@ class BaseTrainer:
         若返回空 dict，则 Trainer 会自动生成一个默认组，包含 model.parameters()。
 
         Args:
-            model (BaseModel): 当前待训练模型。
+            model (TTBaseModel): 当前待训练模型。
             lr (float): 当前经过 world_size 与 accumulate 缩放后的初始学习率。
             weight_decay (float): 全局权重衰减系数。
             **kwargs: 预留扩展字段，例如 momentum、betas 等。
@@ -263,7 +263,7 @@ class BaseTrainer:
         """
         return {}
 
-    def add_extra_save_params(self, model: BaseModel) -> dict:
+    def add_extra_save_params(self, model: TTBaseModel) -> dict:
         """
         在保存 checkpoint 时，向 dict 中追加自定义字段。
 
@@ -271,14 +271,14 @@ class BaseTrainer:
         与模型强相关的信息一并写入 *.pt，方便后续推理或断点续训。
 
         Args:
-            model (BaseModel): 当前待保存的模型（可能是 EMA 或原始模型）。
+            model (TTBaseModel): 当前待保存的模型（可能是 EMA 或原始模型）。
 
         Returns:
             dict: 需要额外写入 checkpoint 的 key-value 字典；无额外内容时返回空 dict。
         """
         return {}
 
-    def load_extra_save_params(self, model: BaseModel) -> None:
+    def load_extra_save_params(self, model: TTBaseModel) -> None:
         """
         从 checkpoint 中读取并恢复由 add_extra_save_params 写入的自定义字段。
 
@@ -287,7 +287,7 @@ class BaseTrainer:
         并赋值给 model 或 trainer 的相应属性。
 
         Args:
-            model (BaseModel): 当前正在构建的模型实例。
+            model (TTBaseModel): 当前正在构建的模型实例。
 
         Returns:
             None
@@ -368,7 +368,7 @@ class BaseTrainer:
             save_dir = Path(config_core["save_dir"]).resolve()
             project_name = config_core["project_name"] or "default_project"
             config_core["project_name"] = project_name
-            save_dir = save_dir / project_name / config_core["task"]
+            save_dir = save_dir / project_name / config_core["task"] / "train"
             self.save_dir = create_iter_directory(save_dir)
 
         # 节点内广播 save_dir
@@ -1304,14 +1304,14 @@ class BaseTrainer:
         if LOCAL_RANK in {-1, 0} and self.ema is not None:
             self.ema.update(self.get_model_instance(WORLD_SIZE))
 
-    def do_grad_clip(self, model: BaseModel) -> None:
+    def do_grad_clip(self, model: TTBaseModel) -> None:
         """
         对模型全部参数进行梯度范数裁剪（gradient norm clipping）。
 
         仅在 config_manager.core["grad_clip"] > 0 时生效，用于防止梯度爆炸。
 
         Args:
-            model (BaseModel): 待裁剪的模型（DDP 下为 model.module）。
+            model (TTBaseModel): 待裁剪的模型（DDP 下为 model.module）。
 
         Returns:
             None
@@ -1420,7 +1420,7 @@ class BaseTrainer:
 
         torch.save(checkpoint, self.simplified_pt.as_posix())
 
-    def get_model_instance(self, world_size: int) -> BaseModel:
+    def get_model_instance(self, world_size: int) -> TTBaseModel:
         """
         获取用于保存的模型实例（EMA 或原始模型）。
 
@@ -1462,7 +1462,7 @@ class BaseTrainer:
             world_size (int): 分布式训练中的进程数量。
 
         Returns:
-            BaseValidator: 验证器实例。
+            TTBaseValidator: 验证器实例。
         """
 
         validator_cls = TTEngineRegistry.get(self.config_manager, "validator")

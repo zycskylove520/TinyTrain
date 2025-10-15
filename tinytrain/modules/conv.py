@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch
 
 from tinytrain.cfg import TTModuleRegistry
-from tinytrain.engine import BaseModel
+from tinytrain.engine import TTBaseModel
 
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -19,40 +19,43 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 class CBA(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
 
-    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=None, groups=1, dilation=1, act: bool | str | nn.Module = True):
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=None, groups=1, dilation=1, act: bool | str | nn.Module = True, bn=True):
         """Initialize CBA layer with given arguments including activation."""
         super().__init__()
+        self.bn = bn
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, autopad(kernel_size, padding, dilation), groups=groups, dilation=dilation, bias=False)
-        self.bn = nn.BatchNorm2d(out_channels)
+        if bn:
+            self.bn = nn.BatchNorm2d(out_channels)
 
         if act is True:
             self.act = nn.SiLU()
         elif isinstance(act, nn.Module):
             self.act = act
         elif act is str:
-            self.act = BaseModel.get_layer(act)
+            self.act = TTBaseModel.get_layer(act)
         else:
             self.act = nn.Identity()
 
     def forward(self, x):
         """Apply convolution, batch normalization and activation to input tensor."""
         x = self.conv(x)
-        x = self.bn(x)
+        if self.bn:
+            x = self.bn(x)
         x = self.act(x)
         return x
 
 
 @TTModuleRegistry.register
-class DWConv(CBA):
+class DWCBA(CBA):
     """Depth-wise convolution."""
 
-    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, dilation=1, act=True):  # ch_in, ch_out, kernel, stride, dilation, activation
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, dilation=1, act=True, bn=True):  # ch_in, ch_out, kernel, stride, dilation, activation
         """Initialize Depth-wise convolution with given parameters."""
-        super().__init__(in_channels, out_channels, kernel_size, stride, groups=math.gcd(in_channels, out_channels), dilation=dilation, act=act)
+        super().__init__(in_channels, out_channels, kernel_size, stride, groups=math.gcd(in_channels, out_channels), dilation=dilation, act=act, bn=bn)
 
 
 @TTModuleRegistry.register
-class GhostConv(nn.Module):
+class GhostCBA(nn.Module):
     """Ghost Convolution https://github.com/huawei-noah/ghostnet."""
 
     def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, groups=1, act=True):

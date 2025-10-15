@@ -4,11 +4,11 @@ import numpy as np
 from pathlib import Path
 from matplotlib import pyplot as plt
 
-from tinytrain.metrics.base import BaseMetric
+from tinytrain.metrics.base import TTBaseMetric
 from tinytrain.utils import LOGGER
 
 
-class PerformanceMetrics(BaseMetric):
+class PerformanceMetrics(TTBaseMetric):
     """
     通用性能评估器。
 

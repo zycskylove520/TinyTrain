@@ -9,7 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Generator, Any, Dict
 
-from tinytrain.cfg import TTEngineRegistry, ConfigManager
+from tinytrain.cfg import TTEngineRegistry, TTConfigManager
 from tinytrain.utils import LOGGER
 from tinytrain.utils.callback import Callback
 from tinytrain.utils.checks import check_file
@@ -17,7 +17,7 @@ from tinytrain.global_var import NUM_THREADS, LOCAL_RANK, WORLD_SIZE
 from ..utils.dist import DDPLauncher
 
 if TYPE_CHECKING:
-    from .model import BaseModel
+    from .model import TTBaseModel
 
 
 class Core:
@@ -26,11 +26,11 @@ class Core:
     等所有 engine 统一调度起来，对外暴露简洁的 train / predict / export 等接口。
 
     主要功能：
-    1. 统一管理 ConfigManager，支持链式配置（link 文件）。
+    1. 统一管理 TTConfigManager，支持链式配置（link 文件）。
     2. 根据场景自动绑定并实例化：
-       - 训练：BaseTrainer
-       - 推理：BasePredictor
-       - 导出：BaseExporter
+       - 训练：TTBaseTrainer
+       - 推理：TTBasePredictor
+       - 导出：TTBaseExporter
     3. 自动搜索 last.pt / best.pt 等权重文件。
     4. 支持进程名修改、回调钩子、DDP 启动路径保存等辅助特性。
     """
@@ -46,7 +46,7 @@ class Core:
             link_file (str | Path, optional): link 配置文件路径（yaml / toml）。
         """
         # register manager
-        self.config_manager = ConfigManager(link_file=link_file)
+        self.config_manager = TTConfigManager(link_file=link_file)
         self.task: str = self.config_manager.core["task"]
 
         # register components
@@ -57,7 +57,7 @@ class Core:
 
         # register engine
         self.device: torch.device | None = None
-        self.model: BaseModel | None = None
+        self.model: TTBaseModel | None = None
         self.trainer = None
         self.predictor = None
         self.exporter = None
@@ -646,7 +646,7 @@ class Core:
         实例化知识蒸馏器（Distiller）并绑定到 self.distiller。
 
         参数：
-            teacher_model: 已加载权重的教师模型实例（BaseModel）。
+            teacher_model: 已加载权重的教师模型实例（TTBaseModel）。
 
         注册表查询 key 为 "distiller"，传入下列参数：
         - config_manager: 全局配置
@@ -688,7 +688,7 @@ class Core:
         if project_name == "":
             project_name = self.config_manager.core["project_name"] = "default_project"
 
-        task_dir = save_dir / project_name / self.config_manager.core["task"]
+        task_dir = save_dir / project_name / self.config_manager.core["task"] / "train"
         if not task_dir.exists():
             raise FileNotFoundError(f"{task_dir} 不存在，无法加载 last.pt")
         # 按时间升序排列所有 run 目录（可根据需要改成按名称排序）
@@ -727,7 +727,7 @@ class Core:
         if project_name == "":
             project_name = self.config_manager.core["project_name"] = "default_project"
 
-        task_dir = save_dir / project_name / self.config_manager.core["task"]
+        task_dir = save_dir / project_name / self.config_manager.core["task"] / "train"
         if not task_dir.exists():
             raise FileNotFoundError(f"{task_dir} 不存在，无法加载 best.pt")
         # 按时间升序排列所有 run 目录（可根据需要改成按名称排序）

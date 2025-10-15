@@ -9,16 +9,16 @@ from pathlib import Path
 
 from tinytrain.global_var import NUM_THREADS
 from tinytrain.utils import LOGGER
-from tinytrain.utils.TT_progress_bar import TTProgressBar
+from tinytrain.utils.progress_bar import TTProgressBar
 from tinytrain.utils.checks import check_detect_yolo_label, check_pose_yolo_label, check_segment_yolo_label
 from tinytrain.utils.data_utils import cv_imread, load_image_cache_file
 from tinytrain.data.data_format import DetectDataInfo, DetectBatchDataInfo, PoseDataInfo, PoseBatchDataInfo, SegmentDataInfo, SegmentBatchDataInfo
-from tinytrain.data.dataset import TTBaseVisionDataset
+from tinytrain.data.dataset import TTYOLOVisionDataset
 
 from .yolo_augment import YOLODetectionAugmentation, YOLOPoseAugmentation, YOLOSegmentAugmentation
 
 
-class YOLODetectionDataset(TTBaseVisionDataset):
+class YOLODetectionDataset(TTYOLOVisionDataset):
     """
     YOLO 检测数据集封装，支持 YOLO 格式标签（class cx cy w h，已归一化）。
     """
@@ -27,16 +27,17 @@ class YOLODetectionDataset(TTBaseVisionDataset):
         """
         参数
         ----
-        config_manager : ConfigManager
+        config_manager : TTConfigManager
             全局配置管理器，读取 augment / dataset / core 等配置段。
         img_path : Path | list[Path]
             图片所在目录或目录列表，支持混合背景图。
         mode : {"train", "val", "test"}
             数据集模式，决定增强策略及 collate 行为。
         """
-        self.rgb: bool = config_manager.augment["rgb"]
-        self.samples: list[DetectDataInfo] = []
         super().__init__(config_manager=config_manager, img_path=img_path, mode=mode)
+        self.rgb: bool = config_manager.augment["rgb"]
+
+        self.samples: list[DetectDataInfo] = self.prepare_data()
 
     def __len__(self):
         """返回样本总数（含背景图）。"""
@@ -75,11 +76,12 @@ class YOLODetectionDataset(TTBaseVisionDataset):
 
         return sample
 
-    def custom_check(self):
+    def prepare_data(self):
         """
         多线程并行校验所有图片与标签，并构建 DetectDataInfo 列表。
         背景图（无标签）与普通图共用同一校验函数，异常信息统一收集。
         """
+        samples = []
         messages = []
         with ThreadPool(NUM_THREADS) as pool:
             def wrapper(args):
@@ -100,7 +102,7 @@ class YOLODetectionDataset(TTBaseVisionDataset):
                     bbox_format="cxcywh",
                     normalized=True
                 )
-                self.samples.append(sample)
+                samples.append(sample)
 
                 if message:
                     messages.append(message)
@@ -120,7 +122,7 @@ class YOLODetectionDataset(TTBaseVisionDataset):
                     bbox_format="cxcywh",
                     normalized=True
                 )
-                self.samples.append(sample)
+                samples.append(sample)
 
                 if message:
                     messages.append(message)
@@ -129,12 +131,14 @@ class YOLODetectionDataset(TTBaseVisionDataset):
             LOGGER.warning(msg)
 
         # 添加last DetectDataInfo，用于多图像融合增强等操作
-        samples_len = len(self.samples)  # 提前计算长度
-        for i, sample in enumerate(self.samples):
+        samples_len = len(samples)  # 提前计算长度
+        for i, sample in enumerate(samples):
             # 计算下一个元素的索引，使用模运算实现循环
             next_index = (i + 1) % samples_len
-            # sample.next_ImgDataInfo = self.samples[next_index]   # dataloader多进程拷贝存在问题，暂时不开放
+            # sample.next_ImgDataInfo = samples[next_index]   # dataloader多进程拷贝存在问题，暂时不开放
             sample.next_ImgDataInfo = None
+
+        return samples
 
     def set_transform(self):
         """根据模式返回训练增强或验证/测试转换。"""
@@ -205,7 +209,7 @@ class YOLODetectionDataset(TTBaseVisionDataset):
         )
 
 
-class YOLOPoseDataset(TTBaseVisionDataset):
+class YOLOPoseDataset(TTYOLOVisionDataset):
     def __init__(self,
                  config_manager,
                  img_path: Path | list[Path],
@@ -214,17 +218,18 @@ class YOLOPoseDataset(TTBaseVisionDataset):
         """
         参数
         ----
-        config_manager : ConfigManager
+        config_manager : TTConfigManager
             全局配置管理器，读取 augment / dataset / core 等配置段。
         img_path : Path | list[Path]
             图片所在目录或目录列表，支持混合背景图。
         mode : {"train", "val", "test"}
             数据集模式，决定增强策略及 collate 行为。
         """
+        super().__init__(config_manager=config_manager, img_path=img_path, mode=mode)
         self.rgb: bool = config_manager.augment["rgb"]
         self.keypoint_shape = config_manager.dataset["keypoint_shape"]
-        self.samples: list[PoseDataInfo] = []
-        super().__init__(config_manager=config_manager, img_path=img_path, mode=mode)
+
+        self.samples: list[PoseDataInfo] = self.prepare_data()
 
     def __len__(self):
         """返回样本总数（含背景图）。"""
@@ -264,11 +269,12 @@ class YOLOPoseDataset(TTBaseVisionDataset):
 
         return sample
 
-    def custom_check(self):
+    def prepare_data(self):
         """
         多线程并行校验所有图片与标签，并构建 PoseDataInfo 列表。
         背景图（无标签）与普通图共用同一校验函数，异常信息统一收集。
         """
+        samples = []
         messages = []
         with ThreadPool(NUM_THREADS) as pool:
             def wrapper(args):
@@ -291,7 +297,7 @@ class YOLOPoseDataset(TTBaseVisionDataset):
                     kpt_shape=self.keypoint_shape,
                     normalized=True
                 )
-                self.samples.append(sample)
+                samples.append(sample)
 
                 if message:
                     messages.append(message)
@@ -313,7 +319,7 @@ class YOLOPoseDataset(TTBaseVisionDataset):
                     kpt_shape=self.keypoint_shape,
                     normalized=True
                 )
-                self.samples.append(sample)
+                samples.append(sample)
 
                 if message:
                     messages.append(message)
@@ -322,12 +328,14 @@ class YOLOPoseDataset(TTBaseVisionDataset):
             LOGGER.warning(msg)
 
         # 添加last PoseDataInfo，用于多图像融合增强等操作
-        samples_len = len(self.samples)  # 提前计算长度
-        for i, sample in enumerate(self.samples):
+        samples_len = len(samples)  # 提前计算长度
+        for i, sample in enumerate(samples):
             # 计算下一个元素的索引，使用模运算实现循环
             next_index = (i + 1) % samples_len
-            # sample.next_ImgDataInfo = self.samples[next_index]   # dataloader多进程拷贝存在问题，暂时不开放
+            # sample.next_ImgDataInfo = samples[next_index]   # dataloader多进程拷贝存在问题，暂时不开放
             sample.next_ImgDataInfo = None
+
+        return samples
 
     def set_transform(self):
         """根据模式返回训练增强或验证/测试转换。"""
@@ -403,7 +411,7 @@ class YOLOPoseDataset(TTBaseVisionDataset):
         )
 
 
-class YOLOSegmentDataset(TTBaseVisionDataset):
+class YOLOSegmentDataset(TTYOLOVisionDataset):
     def __init__(self,
                  config_manager,
                  img_path: Path | list[Path],
@@ -412,17 +420,18 @@ class YOLOSegmentDataset(TTBaseVisionDataset):
         """
         参数
         ----
-        config_manager : ConfigManager
+        config_manager : TTConfigManager
             全局配置管理器，读取 augment / dataset / core 等配置段。
         img_path : Path | list[Path]
             图片所在目录或目录列表，支持混合背景图。
         mode : {"train", "val", "test"}
             数据集模式，决定增强策略及 collate 行为。
         """
+        super().__init__(config_manager=config_manager, img_path=img_path, mode=mode)
         self.rgb: bool = config_manager.augment["rgb"]
         self.segment_resamples = config_manager.dataset["segment_resamples"]
-        self.samples: list[SegmentDataInfo] = []
-        super().__init__(config_manager=config_manager, img_path=img_path, mode=mode)
+
+        self.samples: list[SegmentDataInfo] = self.prepare_data()
 
     def __len__(self):
         """返回样本总数（含背景图）。"""
@@ -462,11 +471,12 @@ class YOLOSegmentDataset(TTBaseVisionDataset):
 
         return sample
 
-    def custom_check(self):
+    def prepare_data(self):
         """
         多线程并行校验所有图片与标签，并构建 SegmentDataInfo 列表。
         背景图（无标签）与普通图共用同一校验函数，异常信息统一收集。
         """
+        samples = []
         messages = []
         with ThreadPool(NUM_THREADS) as pool:
             def wrapper(args):
@@ -488,7 +498,7 @@ class YOLOSegmentDataset(TTBaseVisionDataset):
                     masks=segments,
                     normalized=True
                 )
-                self.samples.append(sample)
+                samples.append(sample)
 
                 if message:
                     messages.append(message)
@@ -509,7 +519,7 @@ class YOLOSegmentDataset(TTBaseVisionDataset):
                     masks=segments,
                     normalized=True
                 )
-                self.samples.append(sample)
+                samples.append(sample)
 
                 if message:
                     messages.append(message)
@@ -518,12 +528,14 @@ class YOLOSegmentDataset(TTBaseVisionDataset):
             LOGGER.warning(msg)
 
         # 添加last SegmentDataInfo，用于多图像融合增强等操作
-        samples_len = len(self.samples)  # 提前计算长度
-        for i, sample in enumerate(self.samples):
+        samples_len = len(samples)  # 提前计算长度
+        for i, sample in enumerate(samples):
             # 计算下一个元素的索引，使用模运算实现循环
             next_index = (i + 1) % samples_len
-            # sample.next_ImgDataInfo = self.samples[next_index]   # dataloader多进程拷贝存在问题，暂时不开放
+            # sample.next_ImgDataInfo = samples[next_index]   # dataloader多进程拷贝存在问题，暂时不开放
             sample.next_ImgDataInfo = None
+
+        return samples
 
     def set_transform(self):
         """根据模式返回训练增强或验证/测试转换。"""

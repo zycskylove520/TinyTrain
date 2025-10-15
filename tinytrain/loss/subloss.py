@@ -3,8 +3,8 @@ import torch.nn.functional as F
 
 from torch import nn
 
-from tinytrain.utils.box_utils import bbox_iou_torch
-from tinytrain.utils.tal import bbox2dist
+from tinytrain.utils.box_utils import box_iou_1v1
+from tinytrain.modules.assigner.taa_assigner import bbox2dist
 
 
 class FocalLoss(nn.Module):
@@ -182,7 +182,7 @@ class BboxLossWithDFL(nn.Module):
                 - loss_dfl (Tensor): 平均 DFL 损失（若 reg_max=1 则返回 0）。
         """
         weight = target_scores.sum(-1)[fg_mask].unsqueeze(-1)
-        iou = bbox_iou_torch(pred_bboxes[fg_mask], target_bboxes[fg_mask], xywh=False, CIoU=True)
+        iou = box_iou_1v1(pred_bboxes[fg_mask], target_bboxes[fg_mask], xywh=False, CIoU=True)
         loss_iou = ((1.0 - iou) * weight).sum() / target_scores_sum
 
         # DFL loss

@@ -1,2 +1,2 @@
-from .base_inference_server import BaseInferenceServer
-from .onnx_inference_server import BaseOnnxInferenceServer
+from .base_inference_server import TTBaseInferenceServer
+from .onnx_inference_server import TTBaseOnnxInferenceServer

@@ -17,7 +17,7 @@ YOLOCore 是 TinyTrain 针对 YOLO 系列任务（classify / detect / pose / seg
      通过 `"export_server"` / `"inference_server"` / `"track_server"` 等
      三级命名空间实现细粒度索引。
 3. 链式配置
-   - 继承 Core 的 ConfigManager，支持 link 配置文件链式继承，
+   - 继承 Core 的 TTConfigManager，支持 link 配置文件链式继承，
      用户仅需改动少量字段即可切换模型规模、数据集路径、训练超参。
 
 
@@ -29,9 +29,9 @@ classify
   ├── validator        -> YOLOClassificationValidator
   ├── tuner            -> YOLOClassificationTuner
   ├── predictor        -> YOLOClassificationPredictor
-  ├── exporter         -> BaseExporter
+  ├── exporter         -> TTBaseExporter
   ├── export_server
-  │     └── onnx       -> BaseOnnxExportServer
+  │     └── onnx       -> TTBaseOnnxExportServer
   └── inference_server
         └── onnx       -> YOLOClassificationOnnxInferenceServer
 
@@ -41,11 +41,11 @@ detect
   ├── validator        -> YOLODetectionValidator
   ├── tuner            -> YOLODetectionTuner
   ├── predictor        -> YOLODetectionPredictor
-  ├── exporter         -> BaseExporter
+  ├── exporter         -> TTBaseExporter
   ├── export_server
-  │     └── onnx       -> BaseOnnxExportServer
+  │     └── onnx       -> TTBaseOnnxExportServer
   ├── inference_server
-  │     └── onnx       -> BaseOnnxInferenceServer
+  │     └── onnx       -> TTBaseOnnxInferenceServer
   └── track_server
         └── bytetrack  -> ByteTrackServer
 
@@ -55,11 +55,11 @@ pose
   ├── validator        -> YOLOPoseValidator
   ├── tuner            -> YOLOPoseTuner
   ├── predictor        -> YOLOPosePredictor
-  ├── exporter         -> BaseExporter
+  ├── exporter         -> TTBaseExporter
   ├── export_server
-  │     └── onnx       -> BaseOnnxExportServer
+  │     └── onnx       -> TTBaseOnnxExportServer
   ├── inference_server
-  │     └── onnx       -> BaseOnnxInferenceServer
+  │     └── onnx       -> TTBaseOnnxInferenceServer
   └── track_server
         └── bytetrack  -> ByteTrackServer
 
@@ -69,16 +69,16 @@ segment
   ├── validator        -> YOLOSegmentValidator
   ├── tuner            -> YOLOSegmentTuner
   ├── predictor        -> YOLOSegmentPredictor
-  ├── exporter         -> BaseExporter
+  ├── exporter         -> TTBaseExporter
   ├── export_server
-  │     └── onnx       -> BaseOnnxExportServer
+  │     └── onnx       -> TTBaseOnnxExportServer
   ├── inference_server
-  │     └── onnx       -> BaseOnnxInferenceServer
+  │     └── onnx       -> TTBaseOnnxInferenceServer
   └── track_server
         └── bytetrack  -> ByteTrackServer
 """
 
-from tinytrain.engine import Core, BaseExporter
+from tinytrain.engine import Core, TTBaseExporter
 from tinytrain.cfg import TTEngineRegistry
 from tinytrain.models.yolo.task.classify import (
     YOLOClassificationModel,
@@ -109,8 +109,8 @@ from tinytrain.models.yolo.task.segment import (
     YOLOSegmentTuner,
     YOLOSegmentPredictor, YOLOSegmentOnnxInferenceServer
 )
-from tinytrain.server.export_server import BaseOnnxExportServer
-from tinytrain.server.inference_server import BaseOnnxInferenceServer
+from tinytrain.server.export_server import TTBaseOnnxExportServer
+from tinytrain.server.inference_server import TTBaseOnnxInferenceServer
 from tinytrain.server.track_server import ByteTrackServer
 
 
@@ -124,8 +124,8 @@ class YOLOCore(Core):
         TTEngineRegistry.register(cls, "classify", "tuner")(YOLOClassificationTuner)
         TTEngineRegistry.register(cls, "classify", "predictor")(YOLOClassificationPredictor)
         TTEngineRegistry.register(cls, "classify", "inference_server", "onnx")(YOLOClassificationOnnxInferenceServer)
-        TTEngineRegistry.register(cls, "classify", "exporter")(BaseExporter)
-        TTEngineRegistry.register(cls, "classify", "export_server", "onnx")(BaseOnnxExportServer)
+        TTEngineRegistry.register(cls, "classify", "exporter")(TTBaseExporter)
+        TTEngineRegistry.register(cls, "classify", "export_server", "onnx")(TTBaseOnnxExportServer)
 
         # ---------- detect ----------
         TTEngineRegistry.register(cls, "detect", "model")(YOLODetectionModel)
@@ -133,9 +133,9 @@ class YOLOCore(Core):
         TTEngineRegistry.register(cls, "detect", "validator")(YOLODetectionValidator)
         TTEngineRegistry.register(cls, "detect", "tuner")(YOLODetectionTuner)
         TTEngineRegistry.register(cls, "detect", "predictor")(YOLODetectionPredictor)
-        TTEngineRegistry.register(cls, "detect", "inference_server", "onnx")(BaseOnnxInferenceServer)
-        TTEngineRegistry.register(cls, "detect", "exporter")(BaseExporter)
-        TTEngineRegistry.register(cls, "detect", "export_server", "onnx")(BaseOnnxExportServer)
+        TTEngineRegistry.register(cls, "detect", "inference_server", "onnx")(TTBaseOnnxInferenceServer)
+        TTEngineRegistry.register(cls, "detect", "exporter")(TTBaseExporter)
+        TTEngineRegistry.register(cls, "detect", "export_server", "onnx")(TTBaseOnnxExportServer)
         TTEngineRegistry.register(cls, "detect", "track_server", "bytetrack")(ByteTrackServer)
 
         # ---------- pose ----------
@@ -144,9 +144,9 @@ class YOLOCore(Core):
         TTEngineRegistry.register(cls, "pose", "validator")(YOLOPoseValidator)
         TTEngineRegistry.register(cls, "pose", "tuner")(YOLOPoseTuner)
         TTEngineRegistry.register(cls, "pose", "predictor")(YOLOPosePredictor)
-        TTEngineRegistry.register(cls, "pose", "inference_server", "onnx")(BaseOnnxInferenceServer)
-        TTEngineRegistry.register(cls, "pose", "exporter")(BaseExporter)
-        TTEngineRegistry.register(cls, "pose", "export_server", "onnx")(BaseOnnxExportServer)
+        TTEngineRegistry.register(cls, "pose", "inference_server", "onnx")(TTBaseOnnxInferenceServer)
+        TTEngineRegistry.register(cls, "pose", "exporter")(TTBaseExporter)
+        TTEngineRegistry.register(cls, "pose", "export_server", "onnx")(TTBaseOnnxExportServer)
         TTEngineRegistry.register(cls, "pose", "track_server", "bytetrack")(ByteTrackServer)
 
         # ---------- segment ----------
@@ -156,6 +156,6 @@ class YOLOCore(Core):
         TTEngineRegistry.register(cls, "segment", "tuner")(YOLOSegmentTuner)
         TTEngineRegistry.register(cls, "segment", "predictor")(YOLOSegmentPredictor)
         TTEngineRegistry.register(cls, "segment", "inference_server", "onnx")(YOLOSegmentOnnxInferenceServer)
-        TTEngineRegistry.register(cls, "segment", "exporter")(BaseExporter)
-        TTEngineRegistry.register(cls, "segment", "export_server", "onnx")(BaseOnnxExportServer)
+        TTEngineRegistry.register(cls, "segment", "exporter")(TTBaseExporter)
+        TTEngineRegistry.register(cls, "segment", "export_server", "onnx")(TTBaseOnnxExportServer)
         TTEngineRegistry.register(cls, "segment", "track_server", "bytetrack")(ByteTrackServer)

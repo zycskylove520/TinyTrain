@@ -13,7 +13,7 @@ from torchvision.datasets import ImageFolder
 
 from tinytrain.global_var import NUM_THREADS, RANK
 from tinytrain.utils import LOGGER
-from tinytrain.utils.TT_progress_bar import TTProgressBar
+from tinytrain.utils.progress_bar import TTProgressBar
 from tinytrain.utils.checks import check_image_and_label, check_image, IMG_FORMATS, check_img_size
 from tinytrain.utils.data_utils import save_dict_cache_file, cv_imread, get_hash, load_dict_cache_file, save_image_cache_file
 
@@ -22,40 +22,60 @@ from .base.base_dataset import TTBaseMapDataset
 from .data_format import ClassifyDataInfo, ClassifyBatchDataInfo
 
 
-class TTBaseVisionDataset(TTBaseMapDataset):
+class TTYOLOVisionDataset(TTBaseMapDataset):
     """
-    视觉数据集 **通用基类**。
+    YOLO目录格式视觉数据集 **通用基类**。
+    YOLO格式数据集目录如下：
+    dataset/
+    ├── images/
+    │   ├── train/
+    │   │   ├── 1.jpg
+    │   │   ├── 2.jpg
+    │   │   └── ...
+    │   └── val/
+    │       ├── 3.jpg
+    │       ├── 4.jpg
+    │       └── ...
+    │
+    ├── labels/
+    │   ├── train/
+    │   │   ├── 1.txt
+    │   │   ├── 2.txt
+    │   │   └── ...
+    │   └── val/
+    │       ├── 3.txt
+    │       ├── 4.txt
+    │       └── ...
 
     功能
     ----
     1. 检查图片与标签合法性。
-    2. 支持 **磁盘缓存**（npy）加速多进程/多卡训练。
+    2. 支持 **磁盘缓存图片**（npy）加速多进程/多卡训练。
     3. 支持 **样本裁剪**（crop_fraction）快速缩小训练集。
     4. 支持 **背景图**（无标签）与 **正样本图**（有标签）分离。
     """
 
-    def __init__(
-            self,
-            config_manager,
-            img_path: Path | list[Path],
-            mode: str = "train"
-    ):
+    def __init__(self, config_manager, img_path: Path | list[Path], mode: str = "train", check_img_size=True):
         """
         Args:
-            config_manager (ConfigManager): 全局配置。
-            img_path (Path | list[Path]): 图片根目录或列表。
-            mode (str): 模式，"train"/"val"/"test"。
+            config_manager (TTConfigManager): 全局配置。
+            img_path (Path | list[Path]): 单个或多个满足YOLO格式的图片根目录或列表。
+            mode (str): 模式, "train"/"val"/"test"。
+            check_img_size (bool): 是否检查图像的尺寸，如果不满足检查条件将会自动调整图像尺寸。
         """
         super().__init__(config_manager=config_manager)
         self.img_path = img_path
         self.img_size = self.config_manager.dataset["img_size"]
         self.mode = mode
+        self.check_img_size = check_img_size
         self.crop_fraction = self.config_manager.augment["img_crop_fraction"]
         self.cache = self.config_manager.dataset["cache"]
 
+        """len(self.bg_img_files) = len(self.bg_npy_files)"""
         self.bg_img_files = []  # 图片路径为绝对路径，都为背景图片
         self.bg_npy_files = []  # npy路径为绝对路径，都为背景图片的缓存
 
+        """len(self.img_files) = len(self.npy_files) = len(self.label_files)"""
         self.img_files = []  # 图片路径为绝对路径，都为有标签对应的图片
         self.npy_files = []  # npy路径为绝对路径，都为有标签对应的图片的缓存
 
@@ -63,9 +83,6 @@ class TTBaseVisionDataset(TTBaseMapDataset):
 
         self.init()
         self.crop_samples()
-
-        # 用户增加自定义检查
-        self.custom_check()
 
         self.transform = self.set_transform()
 
@@ -94,7 +111,8 @@ class TTBaseVisionDataset(TTBaseMapDataset):
 
     def init(self):
         """统一入口：检查尺寸、类别、图片、标签、缓存。"""
-        self.img_size = self.config_manager.dataset["img_size"] = check_img_size(self.img_size, mode=self.mode)
+        if self.check_img_size:
+            self.img_size = self.config_manager.dataset["img_size"] = check_img_size(self.img_size, mode=self.mode)
         self.check_class_names()
         self.check_images_and_labels()
 
@@ -237,10 +255,6 @@ class TTBaseVisionDataset(TTBaseMapDataset):
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         save_image_cache_file(cache_file, cv_imread(img_file))  # 加载时走内存映射（省 RAM + 多进程共享）
 
-    def custom_check(self):
-        """子类可重写，做额外检查。"""
-        raise NotImplementedError("custom_check is not implemented.")
-
     def set_transform(self):
         """子类可重写，返回增强流水线。"""
         raise NotImplementedError(f"set_transform is not implemented.")
@@ -271,7 +285,7 @@ class TTClassificationDataset(ImageFolder):
     ):
         """
         Args:
-            config_manager (ConfigManager): 全局配置。
+            config_manager (TTConfigManager): 全局配置。
             root (str | Path): 数据集根目录（ImageFolder 格式）。
             mode (str): "train"/"val"/"test"。
         """

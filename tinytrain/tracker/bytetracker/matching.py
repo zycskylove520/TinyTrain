@@ -6,7 +6,7 @@
 import lap
 import numpy as np
 
-from tinytrain.utils.box_utils import bbox_iou_numpy
+from tinytrain.utils.box_utils import box_iou_numpy
 
 
 def linear_assignment(cost_matrix, thresh):
@@ -51,7 +51,7 @@ def iou_distance(atracks, btracks):
     if ious.size != 0:
         atlbrs = [track.lxlyrxry for track in atracks]
         btlbrs = [track.lxlyrxry for track in btracks]
-        ious = bbox_iou_numpy(
+        ious = box_iou_numpy(
             np.ascontiguousarray(atlbrs, dtype=np.float32),
             np.ascontiguousarray(btlbrs, dtype=np.float32)
         )

@@ -21,7 +21,7 @@ class TTBaseMapDataset(Dataset):
     def __init__(self, config_manager):
         """
         Args:
-            config_manager (ConfigManager): 全局配置管理器。
+            config_manager (TTConfigManager): 全局配置管理器。
         """
         super().__init__()
         self.config_manager = config_manager
@@ -65,7 +65,7 @@ class TTBaseIterableDataset(IterableDataset):
     def __init__(self, config_manager):
         """
         Args:
-            config_manager (ConfigManager): 全局配置管理器。
+            config_manager (TTConfigManager): 全局配置管理器。
         """
         super().__init__()
         self.config_manager = config_manager

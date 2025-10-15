@@ -16,7 +16,7 @@ FaceCore 是 TinyTrain 针对人脸相关任务的专用门面类。
    - 支持 onnx 导出与推理后端，
      通过 `"export_server"` / `"inference_server"` 两级命名空间实现细粒度索引。
 3. 链式配置
-   - 继承 Core 的 ConfigManager，支持 link 配置文件链式继承，
+   - 继承 Core 的 TTConfigManager，支持 link 配置文件链式继承，
      用户仅需改动少量字段即可切换模型规模、数据集路径、训练超参。
 
 注册表结构（摘要）
@@ -26,23 +26,23 @@ recognition
   ├── trainer          -> FaceRecognitionTrainer
   ├── validator        -> FaceRecognitionValidator
   ├── predictor        -> FaceRecognitionPredictor
-  ├── exporter         -> BaseExporter
+  ├── exporter         -> TTBaseExporter
   ├── export_server
-  │     └── onnx       -> BaseOnnxExportServer
+  │     └── onnx       -> TTBaseOnnxExportServer
   └── inference_server
-        └── onnx       -> BaseOnnxInferenceServer
+        └── onnx       -> TTBaseOnnxInferenceServer
 """
 
 from tinytrain.cfg import TTEngineRegistry
-from tinytrain.engine import Core, BaseExporter
+from tinytrain.engine import Core, TTBaseExporter
 from tinytrain.models.face.task.recognition import (
     FaceRecognitionModel,
     FaceRecognitionTrainer,
     FaceRecognitionValidator,
     FaceRecognitionPredictor,
 )
-from tinytrain.server.export_server import BaseOnnxExportServer
-from tinytrain.server.inference_server import BaseOnnxInferenceServer
+from tinytrain.server.export_server import TTBaseOnnxExportServer
+from tinytrain.server.inference_server import TTBaseOnnxInferenceServer
 
 
 class FaceCore(Core):
@@ -53,6 +53,6 @@ class FaceCore(Core):
         TTEngineRegistry.register(cls, "recognition", "trainer")(FaceRecognitionTrainer)
         TTEngineRegistry.register(cls, "recognition", "validator")(FaceRecognitionValidator)
         TTEngineRegistry.register(cls, "recognition", "predictor")(FaceRecognitionPredictor)
-        TTEngineRegistry.register(cls, "recognition", "inference_server", "onnx")(BaseOnnxInferenceServer)
-        TTEngineRegistry.register(cls, "recognition", "exporter")(BaseExporter)
-        TTEngineRegistry.register(cls, "recognition", "export_server", "onnx")(BaseOnnxExportServer)
+        TTEngineRegistry.register(cls, "recognition", "inference_server", "onnx")(TTBaseOnnxInferenceServer)
+        TTEngineRegistry.register(cls, "recognition", "exporter")(TTBaseExporter)
+        TTEngineRegistry.register(cls, "recognition", "export_server", "onnx")(TTBaseOnnxExportServer)

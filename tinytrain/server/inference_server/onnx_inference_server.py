@@ -6,10 +6,10 @@ from tabulate import tabulate
 
 from tinytrain.utils import LOGGER
 
-from .base_inference_server import BaseInferenceServer
+from .base_inference_server import TTBaseInferenceServer
 
 
-class BaseOnnxInferenceServer(BaseInferenceServer):
+class TTBaseOnnxInferenceServer(TTBaseInferenceServer):
     """
     ONNX 通用推理服务器，基于 onnxruntime 实现。
 

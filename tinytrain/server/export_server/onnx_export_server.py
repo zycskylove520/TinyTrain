@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING
 
 from tinytrain.utils import LOGGER
 
-from .base_export_server import BaseExportServer
+from .base_export_server import TTBaseExportServer
 
 if TYPE_CHECKING:
     from torch import nn
 
 
-class BaseOnnxExportServer(BaseExportServer):
+class TTBaseOnnxExportServer(TTBaseExportServer):
     """
     通用 ONNX 导出服务器，支持 torch → ONNX → onnxslim 完整链路。
     """

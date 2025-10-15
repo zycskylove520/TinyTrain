@@ -3,15 +3,15 @@ from __future__ import annotations
 import numpy as np
 import albumentations as A
 
-from tinytrain.cfg import ConfigManager
+from tinytrain.cfg import TTConfigManager
 from tinytrain.data.data_format import DetectDataInfo, PoseDataInfo, SegmentDataInfo
-from tinytrain.data.base import BaseAugmentation
-from tinytrain.utils.any_utils import make2tuple
+from tinytrain.data.base import TTBaseAugmentation
+from tinytrain.utils.any_utils import make_N_tuple
 from tinytrain.data.augment_ops import DynamicFilling
 from tinytrain.utils.segment_utils import polygons2masks_overlap, polygons2masks
 
 
-class YOLODetectionAugmentation(BaseAugmentation):
+class YOLODetectionAugmentation(TTBaseAugmentation):
     """
     为 YOLO 系列检测任务构建 **训练/验证** 数据增强流水线。
 
@@ -23,12 +23,12 @@ class YOLODetectionAugmentation(BaseAugmentation):
     4. **均值/方差 归一化延后**：为了加快 CPU→GPU 传输，归一化放在 device 端执行。
     """
 
-    def __init__(self, config_manager: ConfigManager):
+    def __init__(self, config_manager: TTConfigManager):
         """
         从配置文件中读取增强超参数。
 
         Args:
-            config_manager (ConfigManager): 包含 augment / dataset 配置段。
+            config_manager (TTConfigManager): 包含 augment / dataset 配置段。
         """
         super().__init__(config_manager)
         self._load_cfg()
@@ -38,7 +38,7 @@ class YOLODetectionAugmentation(BaseAugmentation):
         一次性把增强相关配置读入成员变量，方便后续构造 pipeline。
         """
         augment_cfg = self.config_manager.augment
-        self.target_size = make2tuple(self.config_manager.dataset["img_size"])
+        self.target_size = make_N_tuple(self.config_manager.dataset["img_size"])
         self.mean = augment_cfg["mean"]
         self.std = augment_cfg["std"]
         self.scale = augment_cfg["scale"]
@@ -130,7 +130,7 @@ class YOLODetectionAugmentation(BaseAugmentation):
         return sample
 
 
-class YOLOPoseAugmentation(BaseAugmentation):
+class YOLOPoseAugmentation(TTBaseAugmentation):
     """
     为 YOLO 系列姿态估计任务构建 **训练/验证** 数据增强流水线。
 
@@ -142,12 +142,12 @@ class YOLOPoseAugmentation(BaseAugmentation):
     4. **均值/方差 归一化延后**：为了加快 CPU→GPU 传输，归一化放在 device 端执行。
     """
 
-    def __init__(self, config_manager: ConfigManager):
+    def __init__(self, config_manager: TTConfigManager):
         """
         从配置文件中读取增强超参数。
 
         Args:
-            config_manager (ConfigManager): 包含 augment / dataset 配置段。
+            config_manager (TTConfigManager): 包含 augment / dataset 配置段。
         """
         super().__init__(config_manager)
         self._load_cfg()
@@ -157,7 +157,7 @@ class YOLOPoseAugmentation(BaseAugmentation):
         一次性把增强相关配置读入成员变量，方便后续构造 pipeline。
         """
         augment_cfg = self.config_manager.augment
-        self.target_size = make2tuple(self.config_manager.dataset["img_size"])
+        self.target_size = make_N_tuple(self.config_manager.dataset["img_size"])
         self.mean = augment_cfg["mean"]
         self.std = augment_cfg["std"]
         self.hflip = augment_cfg["hflip"]
@@ -246,7 +246,7 @@ class YOLOPoseAugmentation(BaseAugmentation):
         return sample
 
 
-class YOLOSegmentAugmentation(BaseAugmentation):
+class YOLOSegmentAugmentation(TTBaseAugmentation):
     """
     为 YOLO 系列实例分割任务构建 **训练/验证** 数据增强流水线。
 
@@ -258,12 +258,12 @@ class YOLOSegmentAugmentation(BaseAugmentation):
     4. **均值/方差 归一化延后**：为了加快 CPU→GPU 传输，归一化放在 device 端执行。
     """
 
-    def __init__(self, config_manager: ConfigManager):
+    def __init__(self, config_manager: TTConfigManager):
         """
         从配置文件中读取增强超参数。
 
         Args:
-            config_manager (ConfigManager): 包含 augment / dataset 配置段。
+            config_manager (TTConfigManager): 包含 augment / dataset 配置段。
         """
         super().__init__(config_manager)
         self._load_cfg()
@@ -273,7 +273,7 @@ class YOLOSegmentAugmentation(BaseAugmentation):
         一次性把增强相关配置读入成员变量，方便后续构造 pipeline。
         """
         augment_cfg = self.config_manager.augment
-        self.target_size = make2tuple(self.config_manager.dataset["img_size"])
+        self.target_size = make_N_tuple(self.config_manager.dataset["img_size"])
         self.mask_overlap = self.config_manager.dataset["overlap_mask"]
         self.mask_ratio = self.config_manager.dataset["mask_ratio"]
         self.mean = augment_cfg["mean"]

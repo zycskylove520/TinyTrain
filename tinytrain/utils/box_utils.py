@@ -88,41 +88,122 @@ def cxcywh_2_lxlywh(x):
     return y
 
 
-def box_iou_torch(box1, box2, eps=1e-7):
+def box_iou_torch(box1: torch.Tensor, box2: torch.Tensor, mode='IoU', eps=1e-7):
     """
-    Calculate intersection-over-union (IoU) of boxes. Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
-    Based on https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py.
-
-    Args:
-        box1 (torch.Tensor): A tensor of shape (N, 4) representing N bounding boxes.
-        box2 (torch.Tensor): A tensor of shape (M, 4) representing M bounding boxes.
-        eps (float, optional): A small value to avoid division by zero. Defaults to 1e-7.
-
-    Returns:
-        (torch.Tensor): An NxM tensor containing the pairwise IoU values for every element in box1 and box2.
+    与原 torchvision.ops.box_iou 接口 100 % 兼容，仅增加 mode 参数
+    mode : 'IoU' | 'GIoU' | 'DIoU' | 'CIoU'
+    返回 (N,M) 矩阵
     """
-    # NOTE: Need .float() to get accurate iou values
-    # inter(N,M) = (rb(N,M,2) - lt(N,M,2)).clamp(0).prod(2)
+    assert mode in {'IoU', 'GIoU', 'DIoU', 'CIoU'}
+    box1 = box1.clamp(min=0)
+    box2 = box2.clamp(min=0)
+
+    # 与原代码完全一致的张量布局
     (a1, a2), (b1, b2) = box1.float().unsqueeze(1).chunk(2, 2), box2.float().unsqueeze(0).chunk(2, 2)
-    inter = (torch.min(a2, b2) - torch.max(a1, b1)).clamp_(0).prod(2)
+    inter = (torch.min(a2, b2) - torch.max(a1, b1)).clamp_(0).prod(2)  # (N,M)
 
-    # IoU = inter / (area1 + area2 - inter)
-    return inter / ((a2 - a1).prod(2) + (b2 - b1).prod(2) - inter + eps)
+    # 面积
+    area1 = (a2 - a1).prod(2)  # (N,1)
+    area2 = (b2 - b1).prod(2)  # (1,M)
+    union = area1 + area2 - inter + eps
+    iou = inter / union
+
+    if mode == 'IoU':
+        return iou
+
+    # convex 对角线平方
+    c_wh = (torch.max(a2, b2) - torch.min(a1, b1)).clamp_min(0)  # (N,M,2)
+    c2 = c_wh.pow(2).sum(2) + eps  # (N,M)
+
+    if mode == 'GIoU':
+        c_area = c_wh.prod(2) + eps
+        return iou - (c_area - union) / c_area
+
+    # center distance
+    ctr1 = (a1 + a2) * 0.5  # (N,1,2)
+    ctr2 = (b1 + b2) * 0.5  # (1,M,2)
+    rho2 = (ctr1 - ctr2).pow(2).sum(2) / 4  # (N,M)
+
+    if mode == 'DIoU':
+        return iou - rho2 / c2
+
+    # CIoU
+    w1, h1 = (a2 - a1).unbind(-1)  # (N,1)
+    w2, h2 = (b2 - b1).unbind(-1)  # (1,M)
+    v = (4 / math.pi ** 2) * (w2.div(h2 + eps).atan() - w1.div(h1 + eps).atan()).pow(2)
+    with torch.no_grad():
+        alpha = v / (v - iou + (1 + eps))
+    return iou - (rho2 / c2 + v * alpha)  # (N,M)
 
 
-def bbox_iou_torch(box1: torch.Tensor, box2: torch.Tensor, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
+def box_iou_numpy(box1: np.ndarray, box2: np.ndarray, mode: str = 'IoU', eps: float = 1e-7):
+    """
+    NumPy 版 IoU 系列计算，与 box_iou_torch 完全对标。
+    输入: box1 (N,4), box2 (M,4)  格式 x1,y1,x2,y2
+    返回: (N,M) 矩阵
+    mode: 'IoU' | 'GIoU' | 'DIoU' | 'CIoU'
+    """
+    assert mode in {'IoU', 'GIoU', 'DIoU', 'CIoU'}
+    box1 = box1.clip(min=0)
+    box2 = box2.clip(min=0)
+
+    # 转成 (N,1,2) 与 (1,M,2) 方便广播
+    (a1, a2), (b1, b2) = np.split(box1[:, None, :], 2, axis=2), \
+        np.split(box2[None, :, :], 2, axis=2)
+
+    # 交集
+    inter_wh = (np.minimum(a2, b2) - np.maximum(a1, b1)).clip(min=0)
+    inter = inter_wh.prod(axis=2)  # (N,M)
+
+    # 面积
+    area1 = (a2 - a1).prod(axis=2)  # (N,1)
+    area2 = (b2 - b1).prod(axis=2)  # (1,M)
+    union = area1 + area2 - inter + eps
+    iou = inter / union
+
+    if mode == 'IoU':
+        return iou
+
+    # 最小外接框对角线平方
+    c_wh = (np.maximum(a2, b2) - np.minimum(a1, b1)).clip(min=0)
+    c2 = (c_wh ** 2).sum(axis=2) + eps  # (N,M)
+
+    if mode == 'GIoU':
+        c_area = c_wh.prod(axis=2) + eps
+        return iou - (c_area - union) / c_area
+
+    # 中心点距离平方
+    ctr1 = (a1 + a2) * 0.5  # (N,1,2)
+    ctr2 = (b1 + b2) * 0.5  # (1,M,2)
+    rho2 = ((ctr1 - ctr2) ** 2).sum(axis=2)  # (N,M)
+
+    if mode == 'DIoU':
+        return iou - rho2 / c2
+
+    # CIoU
+    w1, h1 = (a2 - a1)[..., 0], (a2 - a1)[..., 1]  # (N,1)
+    w2, h2 = (b2 - b1)[..., 0], (b2 - b1)[..., 1]  # (1,M)
+    v = (4 / np.pi ** 2) * (np.arctan(w2 / (h2 + eps)) -
+                            np.arctan(w1 / (h1 + eps))) ** 2
+    with np.errstate(invalid='ignore'):  # 防止 0/0 警告
+        alpha = v / (v - iou + (1 + eps))
+    alpha = np.where(np.isfinite(alpha), alpha, 0)  # 兜底
+    return iou - (rho2 / c2 + v * alpha)
+
+
+def box_iou_1v1(box1: torch.Tensor, box2: torch.Tensor, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
     """
     计算 IoU / GIoU / DIoU / CIoU (PyTorch 版)。
 
     Args:
-        box1: (1, 4) 或 (B, 4)
-        box2: (n, 4) 或 (B, n, 4)
+        box1: (n, 4)
+        box2: (n, 4)
         xywh: 若为 True，输入为 (cx, cy, w, h)；否则为 (x1, y1, x2, y2)
         GIoU/DIoU/CIoU: 仅可单选其一
         eps: 数值稳定项
 
     Returns:
-        Tensor: 对应指标 (IoU/GIoU/DIoU/CIoU)
+        Tensor: 计算box1和box2逐元素一一对应的iou值，shape为[n,1]，对应指标 (IoU/GIoU/DIoU/CIoU)
     """
     # Get the coordinates of bounding boxes
     if xywh:  # transform from xywh to xyxy
@@ -169,42 +250,6 @@ def bbox_iou_torch(box1: torch.Tensor, box2: torch.Tensor, xywh=True, GIoU=False
         c_area = cw * ch + eps  # convex area
         return iou - (c_area - union) / c_area  # GIoU https://arxiv.org/pdf/1902.09630.pdf
     return iou  # IoU
-
-
-def bbox_iou_numpy(box1, box2, eps=1e-7):
-    """
-    NumPy 版 IoU，输入为 (x1, y1, x2, y2)。
-
-    Args:
-        box1: (N, 4)
-        box2: (M, 4)
-        eps: 数值稳定项
-
-    Returns:
-        ndarray: (N, M) IoU
-    """
-    N = box1.shape[0]
-    M = box2.shape[0]
-
-    # reshape 成 (N,1,4) 和 (1,M,4) 以便广播
-    b1 = box1.reshape(N, 1, 4)
-    b2 = box2.reshape(1, M, 4)
-
-    # 分别取坐标
-    b1_x1, b1_y1, b1_x2, b1_y2 = b1[..., 0], b1[..., 1], b1[..., 2], b1[..., 3]
-    b2_x1, b2_y1, b2_x2, b2_y2 = b2[..., 0], b2[..., 1], b2[..., 2], b2[..., 3]
-
-    # 交集
-    inter_w = np.maximum(np.minimum(b1_x2, b2_x2) - np.maximum(b1_x1, b2_x1), 0)
-    inter_h = np.maximum(np.minimum(b1_y2, b2_y2) - np.maximum(b1_y1, b2_y1), 0)
-    inter = inter_w * inter_h
-
-    # 并集
-    area1 = (b1_x2 - b1_x1) * (b1_y2 - b1_y1)
-    area2 = (b2_x2 - b2_x1) * (b2_y2 - b2_y1)
-    union = area1 + area2 - inter + eps
-
-    return inter / union
 
 
 def kpt_iou(kpt1, kpt2, area, sigma, eps=1e-7):

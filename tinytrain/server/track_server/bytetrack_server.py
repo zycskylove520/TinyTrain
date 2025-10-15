@@ -4,31 +4,31 @@ import cv2
 
 from typing import TYPE_CHECKING
 
-from tinytrain.cfg import ConfigManager
+from tinytrain.cfg import TTConfigManager
 from tinytrain.data.data_format import DetectDataInfo
 from tinytrain.tracker import STrack, BYTETracker
 from tinytrain.utils import LOGGER
 from tinytrain.utils.callback import Callback
 
-from .base_track_server import BaseTrackServer
+from .base_track_server import TTBaseTrackServer
 
 if TYPE_CHECKING:
-    from tinytrain.engine import BasePredictor
+    from tinytrain.engine import TTBasePredictor
 
 
-class ByteTrackServer(BaseTrackServer):
+class ByteTrackServer(TTBaseTrackServer):
     """
-    ByteTrack 跟踪服务器实现，继承自 BaseTrackServer。
+    ByteTrack 跟踪服务器实现，继承自 TTBaseTrackServer。
     在预测器运行期间，实时更新轨迹、绘制结果并支持保存图片 / 视频 / 实时显示。
     """
 
-    def __init__(self, config_manager: ConfigManager, callback: Callback, **kwargs):
+    def __init__(self, config_manager: TTConfigManager, callback: Callback, **kwargs):
         """
         初始化 ByteTrack 跟踪服务器。
 
         Args
         ----
-        config_manager : ConfigManager
+        config_manager : TTConfigManager
             全局配置管理器，用于读取 tracker 超参（min_box_area、save_img 等）。
         callback : Callback
             回调注册器，用于挂载 on_predict_start / on_predict_batch_end / on_predict_end 钩子。
@@ -59,17 +59,17 @@ class ByteTrackServer(BaseTrackServer):
         callback.add_callback("on_predict_batch_end", self.update_track_results)
         callback.add_callback("on_predict_end", self.on_predict_end)
 
-    def logger_record(self, predictor: BasePredictor):
+    def logger_record(self, predictor: TTBasePredictor):
         """预测开始时记录日志。"""
         LOGGER.info("start tracking...")
 
-    def update_track_results(self, predictor: BasePredictor):
+    def update_track_results(self, predictor: TTBasePredictor):
         """
         每帧预测结束后执行跟踪更新、结果绘制与保存。
 
         Args
         ----
-        predictor : BasePredictor
+        predictor : TTBasePredictor
             当前正在运行的预测器实例，包含最新检测结果。
         """
         detect_info: DetectDataInfo = predictor.postprocess_result
@@ -105,13 +105,13 @@ class ByteTrackServer(BaseTrackServer):
 
         self.track_results = track_results
 
-    def on_predict_end(self, predictor: BasePredictor):
+    def on_predict_end(self, predictor: TTBasePredictor):
         """
         预测结束后整理跟踪结果并生成视频。
 
         Args
         ----
-        predictor : BasePredictor
+        predictor : TTBasePredictor
             预测器实例，用于获取输出目录等信息。
         """
         if self.video_writer is not None:

@@ -12,9 +12,9 @@ from pathlib import Path
 from tinytrain.utils import LOGGER
 
 
-class BaseTuner:
+class TTBaseTuner:
     """
-    BaseTuner 是基于遗传算法（Genetic Algorithm, GA）的超参数自动调优框架。
+    TTBaseTuner 是基于遗传算法（Genetic Algorithm, GA）的超参数自动调优框架。
     子类仅需覆写 build_param_tree() 即可灵活定义/扩展超参数搜索空间，
     其余 GA 流程（种群初始化、选择、交叉、变异、评估、精英保留等）已在基类完整实现。
 
@@ -29,7 +29,7 @@ class BaseTuner:
     示例
     ----
     >>> core = Core("link.toml") # type: ignore[arg-type]
-    >>> tuner = BaseTuner(core, model_scale="s")
+    >>> tuner = TTBaseTuner(core, model_scale="s")
     >>> result = tuner.tune(pop_size=30, generations=50)
     >>> best_cfg = result["best_config"]
     """

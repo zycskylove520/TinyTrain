@@ -7,13 +7,13 @@ TinyTrain 框架中 YOLO 检测、分割、关键点等任务的通用基类实�
 from copy import deepcopy
 from torch import nn
 
-from tinytrain.cfg import ConfigManager
-from tinytrain.engine import BaseModel
+from tinytrain.cfg import TTConfigManager
+from tinytrain.engine import TTBaseModel
 from tinytrain.utils import LOGGER
 from tinytrain.utils.any_utils import make_divisible
 
 
-class YOLOModel(BaseModel):
+class YOLOModel(TTBaseModel):
     """
     YOLOModel
     ~~~~~~~
@@ -27,31 +27,32 @@ class YOLOModel(BaseModel):
 
     设计要点
     --------
-    - 结构配置完全由 ConfigManager 驱动，**零硬编码**。
+    - 结构配置完全由 TTConfigManager 驱动，**零硬编码**。
     - 宽度增益统一调用 ``make_divisible()``，保证通道数为 8 / 16 的倍数，兼容 TensorRT。
     - 深度增益仅对 **in_channels == out_channels** 的模块生效，避免上采样 / 降采样层被误缩放。
     - 第 0 层强制为 entry 且 ``from = [-1]``，杜绝非法依赖。
     - 支持自定义解析钩子 ``custom_parse_model()``，子类可原地修改 ``module_info``。
     - 所有模块延迟实例化，先校验再构建，**配置错误立即抛异常**。
     """
-    def __init__(self, config_manager: ConfigManager, device, *args, **kwargs):
+
+    def __init__(self, config_manager: TTConfigManager, device, *args, **kwargs):
         """
         初始化 YOLO 基类。
 
         步骤
         ----
         1. 提前占位 ``WIDTH_GAIN``，供后续解析阶段写入。
-        2. 调用父类 ``BaseModel.__init__()``，触发 ``parse_model()`` 完成网络构建。
+        2. 调用父类 ``TTBaseModel.__init__()``，触发 ``parse_model()`` 完成网络构建。
         3. 子类（检测/分割/关键点）可在 ``super()`` 之后继续初始化 stride、loss 等。
 
         Args
         ----
-        config_manager : ConfigManager
+        config_manager : TTConfigManager
             必须包含 model.scales / model.network / dataset.nc 等字段。
         device : torch.device
             模型所在设备。
         *args, **kwargs
-            预留扩展参数，透传给 ``BaseModel``。
+            预留扩展参数，透传给 ``TTBaseModel``。
         """
         self.WIDTH_GAIN = None  # 宽度增益
         super().__init__(config_manager=config_manager, device=device, *args, **kwargs)
@@ -69,7 +70,7 @@ class YOLOModel(BaseModel):
 
         参数
         ----
-        config_manager : ConfigManager
+        config_manager : TTConfigManager
             包含 model / dataset / augment 等完整配置。
 
         返回
@@ -138,18 +139,23 @@ class YOLOModel(BaseModel):
                 if _args.get("nc", None) is not None:
                     _args["nc"] = self.config_manager.dataset["nc"]
 
+            # 用户可自定义模型解析方式
+            self.custom_parse_model(level, _info)
+
             # depth gain
-            if _type == "flow":
-                if _args.get("in_channels", None) is not None and _args.get("out_channels", None) is not None:
-                    if _args["in_channels"] == _args["out_channels"]:
-                        _repeat = max(round(_repeat * depth), 1) if _repeat > 1 or _allow_repeat else _repeat
-                    else:
-                        if _repeat > 1:
-                            _repeat = 1
-                            LOGGER.warning(f"level_{level}: {_module} not support 'repeat'! set repeat value to 1!")
+            # 如果custom_parse_model函数修改了repeat或allow_repeat，需要重新获取
+            _repeat = _info["repeat"]
+            _allow_repeat = _info.get("allow_repeat", False)
+            if _args.get("in_channels", None) is not None and _args.get("out_channels", None) is not None:
+                if _args["in_channels"] == _args["out_channels"]:
+                    _repeat = max(round(_repeat * depth), 1) if _repeat > 1 or _allow_repeat else _repeat
                 else:
                     if _repeat > 1:
-                        LOGGER.warning(f"'in_channels' or 'out_channels' not exist, set repeat value to {_repeat} maybe throw exception!")
+                        _repeat = 1
+                        LOGGER.warning(f"level_{level}: {_module} not support 'repeat'! set repeat value to 1!")
+            else:
+                if _repeat > 1:
+                    LOGGER.warning(f"'in_channels' or 'out_channels' not exist, set repeat value to {_repeat} maybe throw exception!")
 
             # width gain
             if _type == "entry":
@@ -163,9 +169,6 @@ class YOLOModel(BaseModel):
             elif _type == "head":
                 if _args.get("in_channels", None) is not None:
                     _args["in_channels"] = make_divisible(_args.get("in_channels") * width)
-
-            # 用户可自定义模型解析方式
-            self.custom_parse_model(level, _info)
 
             # 构造网络模块
             _layer = self.get_layer(_module)

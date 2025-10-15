@@ -14,47 +14,47 @@ import torch.distributed as dist
 
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Tuple, Union, Sequence, TypeVar
+from typing import Tuple, Union, Sequence
 
+from tinytrain.global_var.types import ElementType
 from tinytrain.utils import LOGGER
 
-T = TypeVar('T')
 
-
-def make2tuple(x: Union[T, Sequence[T]]) -> Tuple[T, T]:
+def make_N_tuple(x: Union[ElementType, Sequence[ElementType]], n: int = 2) -> Tuple[ElementType, ...]:
     """
-    将标量或长度为 2 的序列统一成二元组。
+    把标量或长度为 n 的序列统一成 n 元组。
 
     Args:
-        x: 单个值或长度为 2 的 list/tuple
+        x: 单个值或长度为 n 的 list/tuple
+        n: 目标元组长度
 
     Returns:
-        Tuple[T, T]: 保证返回两个元素的元组
+        Tuple[ElementType, ...]: 长度为 n 的元组
     """
     if isinstance(x, (tuple, list)):
-        # 此时 x 只能是 tuple 或 list；长度不为 2 时让运行时抛 ValueError
-        if len(x) != 2:
-            raise ValueError("Expected exactly 2 elements")
-        return x[0], x[1]
-    return x, x
+        if len(x) != n:
+            raise ValueError(f"Expected exactly {n} elements")
+        return tuple(x)
+    return (x,) * n
 
 
-def make2list(x: Union[T, Sequence[T]]) -> list[T]:
+def make_N_list(x: Union[ElementType, Sequence[ElementType]], n: int = 2) -> list[ElementType]:
     """
-    将标量或长度为 2 的序列统一成二元列表。
+    将标量或长度为 n 的序列统一成 n元列表。
 
     Args:
-        x: 单个值或长度为 2 的 list/tuple
+        x: 单个值或长度为 n 的 list/tuple
+        n: 目标列表长度
 
     Returns:
-        list[T]: 保证返回两个元素的列表
+        list[ElementType]: 长度为 n 的列表
     """
     if isinstance(x, (tuple, list)):
-        # 此时 x 只能是 tuple 或 list；长度不为 2 时让运行时抛 ValueError
-        if len(x) != 2:
-            raise ValueError("Expected exactly 2 elements")
+        # 此时 x 只能是 tuple 或 list；长度不为 n 时让运行时抛 ValueError
+        if len(x) != n:
+            raise ValueError("Expected exactly {n} elements")
         return list(x)
-    return [x, x]
+    return [x, ] * n
 
 
 def generate_unique_id(file_name, timestamp):

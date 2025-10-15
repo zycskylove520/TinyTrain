@@ -1,5 +1,5 @@
 # ==========================
-# YOLO姿态估计inference配置文件
+# YOLO实例分割inference配置文件
 # ==========================
 
 val_conf_threshold = 0.001

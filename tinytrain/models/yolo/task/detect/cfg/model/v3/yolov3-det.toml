@@ -303,7 +303,7 @@ from = [27, 22, 15]
 [[network]]
 # 29 Detect(P3, P4, P5)
 type = "head"
-module = "YOLODetect"
+module = "YOLODetectHead"
 repeat = 1
 from = [-1]
 args.nc = -1

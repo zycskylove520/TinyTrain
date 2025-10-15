@@ -3,20 +3,20 @@ from __future__ import annotations
 import torch
 import torch.distributed as dist
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from torch import nn
 
 from tinytrain.data.data_format import BaseBatchDataInfo
-from tinytrain.utils.TT_progress_bar import TTProgressBar
-from tinytrain.cfg import ConfigManager
+from tinytrain.utils.progress_bar import TTProgressBar
+from tinytrain.cfg import TTConfigManager
 
 if TYPE_CHECKING:
-    from .trainer import BaseTrainer
+    from .trainer import TTBaseTrainer
 
 
-class BaseValidator:
+class TTBaseValidator:
     """
-    BaseValidator 是验证器的抽象基类，负责在训练过程中或训练结束后对模型进行验证。
+    TTBaseValidator 是验证器的抽象基类，负责在训练过程中或训练结束后对模型进行验证。
     它提供了完整的验证流程骨架，包括数据预处理、推理、后处理以及指标计算与汇总。
     子类只需按需实现/重写特定方法即可快速适配不同任务（如分类、检测、分割等）。
 
@@ -38,18 +38,18 @@ class BaseValidator:
     # ------------------------------------------------------------------
     # 1. 构造与入口
     # ------------------------------------------------------------------
-    def __init__(self, trainer: BaseTrainer, world_size: int):
+    def __init__(self, trainer: TTBaseTrainer, world_size: int):
         """
         初始化验证器。
 
         Args:
-            trainer (BaseTrainer): 训练器实例，用于获取配置、模型、数据加载器等。
+            trainer (TTBaseTrainer): 训练器实例，用于获取配置、模型、数据加载器等。
             world_size (int): 分布式训练中的总进程数（用于 DDP）。
         """
 
-        self.trainer: BaseTrainer = trainer
+        self.trainer: TTBaseTrainer = trainer
         self.world_size = world_size
-        self.config_manager: ConfigManager = trainer.config_manager
+        self.config_manager: TTConfigManager = trainer.config_manager
         self.save_dir = trainer.save_dir
 
         # device
@@ -147,7 +147,7 @@ class BaseValidator:
         """
         return batch_samples
 
-    def postprocess(self, preds: list[torch.Tensor]) -> list[torch.Tensor]:
+    def postprocess(self, preds: list[torch.Tensor]) -> Any:
         """
         对模型原始输出进行后处理，如 NMS、阈值过滤、softmax 等。
 
@@ -155,7 +155,7 @@ class BaseValidator:
             preds (list[torch.Tensor]): 模型输出张量列表。
 
         Returns:
-            list[torch.Tensor]: 后处理后的张量列表。
+            Any: 后处理后的结果，将提交给 update_metrics_on_train_completed 函数或 update_metrics_on_training 函数。
         """
         return preds
 
@@ -171,12 +171,12 @@ class BaseValidator:
         """
         pass
 
-    def update_metrics_on_training(self, outputs: list[torch.Tensor], batch_samples: BaseBatchDataInfo, pbar: TTProgressBar):
+    def update_metrics_on_training(self, outputs: Any, batch_samples: BaseBatchDataInfo, pbar: TTProgressBar):
         """
         训练阶段验证过程中，每处理一个 batch 即更新指标。
 
         Args:
-            outputs (list[torch.Tensor]): 当前 batch 的后处理输出。
+            outputs (Any): 接收来自 postprocess函数 的输出。
             batch_samples (BaseBatchDataInfo): 当前 batch 的输入与标签。
             pbar (TTProgressBar): 进度条实例。
         """
@@ -213,12 +213,12 @@ class BaseValidator:
         """
         pass
 
-    def update_metrics_on_train_completed(self, outputs: list[torch.Tensor], batch_samples: BaseBatchDataInfo, pbar: TTProgressBar):
+    def update_metrics_on_train_completed(self, outputs: Any, batch_samples: BaseBatchDataInfo, pbar: TTProgressBar):
         """
         训练完成后验证过程中，每处理一个 batch 即更新指标。
 
         Args:
-            outputs (list[torch.Tensor]): 当前 batch 的后处理输出。
+            outputs (Any):  接收来自 postprocess函数 的输出。
             batch_samples (BaseBatchDataInfo): 当前 batch 的输入与标签。
             pbar (TTProgressBar): 进度条实例。
         """

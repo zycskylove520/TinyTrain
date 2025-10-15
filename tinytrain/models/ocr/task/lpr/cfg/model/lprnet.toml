@@ -1,0 +1,30 @@
+# ===================================
+# 车牌识别模型: LPRNet 模型配置文件
+# ===================================
+
+name = "LPRNet"
+scale = "l"
+
+# model_config compound scaling constants
+[scales.l]
+depth = 1
+summary = "526 layers, 8671296 parameters, 8671296 gradients, 4.59 GFLOPs, for a 112×112 input."
+
+# ----------------------------backbone---------------------------------
+[[network]]
+# 0-P1/2
+type = "entry"
+module = "LPRBackbone"
+repeat = 1
+from = [-1]
+args.nc = -1
+args.dropout_rate = 0.5
+
+# ----------------------------------head--------------------------------------
+[[network]]
+# 10
+type = "head"
+module = "LPRHead"
+repeat = 1
+from = [-1]
+args.nc = -1

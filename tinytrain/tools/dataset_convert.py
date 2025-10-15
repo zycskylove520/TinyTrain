@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from shutil import copy2
 from typing import List, Optional
@@ -97,9 +98,19 @@ def coco2yolo(coco_json_path: str,
             lbl_path = lbl_out_dir / f"{Path(img_name).stem}.txt"
             lbl_path.write_text('\n'.join(lines) + '\n')
 
+def coco_json2yolo(json_path: str,):
+    with open(json_path, 'r') as f:
+        data = json.load(f)
+
+    images = data['images']
+    annotations = data['annotations']
+    print('len(images)', len(annotations))
+
 
 if __name__ == '__main__':
-    coco2yolo(r'E:\coco\annotations_trainval2017\annotations\instances_val2017.json',
-              img_root=r'E:\coco\val2017',
-              out_root='E:\coco\yolo_cal',
-              keep_coco_ids=[1, 2, 3, 4, 6, 8])
+    # coco2yolo(r'E:\coco\annotations_trainval2017\annotations\instances_val2017.json',
+    #           img_root=r'E:\coco\val2017',
+    #           out_root='E:\coco\yolo_cal',
+    #           keep_coco_ids=[1, 2, 3, 4, 6, 8])
+
+    coco_json2yolo(r"C:\Users\86724\Downloads\train\labels\labels_my-project-name_2025-10-14-08-55-27.json")

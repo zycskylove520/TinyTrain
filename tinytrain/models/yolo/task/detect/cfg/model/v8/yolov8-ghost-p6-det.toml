@@ -46,7 +46,7 @@ args.stride = 2
 [[network]]
 # 1-P2/4
 type = "flow"
-module = "GhostConv"
+module = "GhostCBA"
 repeat = 1
 from = [-1]
 args.in_channels = 64
@@ -67,7 +67,7 @@ args.shortcut = true
 [[network]]
 # 3-P3/8
 type = "flow"
-module = "GhostConv"
+module = "GhostCBA"
 repeat = 1
 from = [-1]
 args.in_channels = 128
@@ -88,7 +88,7 @@ args.shortcut = true
 [[network]]
 # 5-P4/16
 type = "flow"
-module = "GhostConv"
+module = "GhostCBA"
 repeat = 1
 from = [-1]
 args.in_channels = 256
@@ -109,7 +109,7 @@ args.shortcut = true
 [[network]]
 # 7-P5/32
 type = "flow"
-module = "GhostConv"
+module = "GhostCBA"
 repeat = 1
 from = [-1]
 args.in_channels = 512
@@ -130,7 +130,7 @@ args.shortcut = true
 [[network]]
 # 9-P6/64
 type = "flow"
-module = "GhostConv"
+module = "GhostCBA"
 repeat = 1
 from = [-1]
 args.in_channels = 768
@@ -264,7 +264,7 @@ args.out_channels = 256
 [[network]]
 # 24
 type = "flow"
-module = "GhostConv"
+module = "GhostCBA"
 repeat = 1
 from = [-1]
 args.in_channels = 256
@@ -300,7 +300,7 @@ args.out_channels = 512
 [[network]]
 # 28
 type = "flow"
-module = "GhostConv"
+module = "GhostCBA"
 repeat = 1
 from = [-1]
 args.in_channels = 512
@@ -336,7 +336,7 @@ args.out_channels = 768
 [[network]]
 # 32
 type = "flow"
-module = "GhostConv"
+module = "GhostCBA"
 repeat = 1
 from = [-1]
 args.in_channels = 768
@@ -379,7 +379,7 @@ from = [23, 27, 31, 35]
 [[network]]
 # 37 Detect(P3, P4, P5, P6)
 type = "head"
-module = "YOLODetect"
+module = "YOLODetectHead"
 repeat = 1
 from = [-1]
 args.nc = -1

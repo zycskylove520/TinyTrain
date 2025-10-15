@@ -1,44 +1,39 @@
 **在阅读该md文件前，请确保您已阅读tinytrain目录下的README.md文件！**
 
-YOLO分类算法支持多个不同的模型结构，具体可查阅当前目录下的`cfg/model`目录，来切换不同的模型。
+# 简介
+***
+1. YOLO图像分类算法来自开源框架 *ultralytics*，链接：https://github.com/ultralytics/ultralytics
+2. 该算法支持多个不同的模型结构，具体可查阅该文件父目录下的`task/classify/cfg/model`目录，来切换不同的模型。
 
 # 数据集构建
 ***
-构建YOLO分类数据集时使用通用分类数据集格式，可以参考Pytorch的ImageFloder读取数据集的目录格式。
+1. 构建YOLO分类数据集时使用通用分类数据集格式，可以参考Pytorch的ImageFloder读取数据集的目录格式。
 
 数据集目录格式如下：
-dataset/
-├── train/
-│   ├── cat/
-│   │   ├── cat_001.jpg
-│   │   ├── cat_002.jpg
-│   │   └── ...
-│   ├── dog/
-│   │   ├── dog_001.jpg
-│   │   ├── dog_002.jpg
-│   │   └── ...
-│   ├── bird/
-│   │   ├── bird_001.jpg
-│   │   ├── bird_002.jpg
-│   │   └── ...
-│   └── ...
-│
-├── val/
-│   ├── cat/
-│   │   ├── cat_003.jpg
-│   │   ├── cat_004.jpg
-│   │   └── ...
-│   ├── dog/
-│   │   ├── dog_003.jpg
-│   │   ├── dog_004.jpg
-│   │   └── ...
-│   ├── bird/
-│   │   ├── bird_003.jpg
-│   │   ├── bird_004.jpg
-│   │   └── ...
-│   └── ...
+<div>dataset/</div>
+<div>├── train/</div>
+<div>│   ├── cat/</div>
+<div>│   │   ├── cat_001.jpg</div>
+<div>│   │   ├── cat_002.jpg</div>
+<div>│   │   └── ...</div>
+<div>│   ├── dog/</div>
+<div>│   │   ├── dog_001.jpg</div>
+<div>│   │   ├── dog_002.jpg</div>
+<div>│   │   └── ...</div>
+<div>│   └── ...</div>
+<div>│</div>
+<div>├── val/</div>
+<div>│   ├── cat/</div>
+<div>│   │   ├── cat_003.jpg</div>
+<div>│   │   ├── cat_004.jpg</div>
+<div>│   │   └── ...</div>
+<div>│   ├── dog/</div>
+<div>│   │   ├── dog_003.jpg</div>
+<div>│   │   ├── dog_004.jpg</div>
+<div>│   │   └── ...</div>
+<div>│   └── ...</div>
 
-## 说明
+说明
 - **`dataset/`**：数据集的根目录。
 - **`train/`**：训练集目录，包含所有用于训练的图像。
   - **`class1/`**：类别1的图像目录。
@@ -51,7 +46,6 @@ dataset/
 
 # 模型训练
 ***
-
 ```python
 from tinytrain import YOLOCore
 

@@ -8,7 +8,7 @@ from sklearn import metrics
 from sklearn.decomposition import PCA
 from sklearn.model_selection import KFold
 
-from .base import BaseMetric
+from .base import TTBaseMetric
 
 
 class LFold:
@@ -24,7 +24,7 @@ class LFold:
             return [(indices, indices)]
 
 
-class FaceRecognitionMetrics(BaseMetric):
+class FaceRecognitionMetrics(TTBaseMetric):
     """
     人脸识别1:1验证场景评测指标计算器。
 

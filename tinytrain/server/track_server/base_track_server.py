@@ -4,14 +4,14 @@ import numpy as np
 
 from typing import TYPE_CHECKING
 
-from tinytrain.cfg.config_manager import ConfigManager
+from tinytrain.cfg.config_manager import TTConfigManager
 from tinytrain.utils.callback import Callback
 
 if TYPE_CHECKING:
-    from tinytrain.engine import BasePredictor
+    from tinytrain.engine import TTBasePredictor
 
 
-class BaseTrackServer:
+class TTBaseTrackServer:
     """
     目标跟踪服务器基类。
 
@@ -22,13 +22,13 @@ class BaseTrackServer:
     3. 提供统一的接口 `update`，将检测框更新为跟踪轨迹。
     """
 
-    def __init__(self, config_manager: ConfigManager, callback: Callback, **kwargs):
+    def __init__(self, config_manager: TTConfigManager, callback: Callback, **kwargs):
         """
         初始化跟踪服务器。
 
         Args
         ----
-        config_manager : ConfigManager
+        config_manager : TTConfigManager
             全局配置，用于读取跟踪器超参。
         callback : Callback
             回调注册器，用于在 predictor 生命周期钩子中挂载自定义逻辑。
@@ -56,7 +56,7 @@ class BaseTrackServer:
         """
         callback.add_callback("on_predict_start", self.create_save_dir)
 
-    def create_save_dir(self, predictor: BasePredictor):
+    def create_save_dir(self, predictor: TTBasePredictor):
         """
         predictor 启动时被回调，创建跟踪结果保存目录。
 
@@ -69,7 +69,7 @@ class BaseTrackServer:
 
         Args
         ----
-        predictor : BasePredictor
+        predictor : TTBasePredictor
             正在运行的预测器实例，提供 output_dir 等信息。
         """
         # save dir

@@ -8,7 +8,7 @@ from pathlib import Path
 from queue import Queue
 from typing import TYPE_CHECKING, Any, Generator, Union
 
-from tinytrain.cfg import ConfigManager, TTEngineRegistry
+from tinytrain.cfg import TTConfigManager, TTEngineRegistry
 from tinytrain.data.data_format import BaseDataInfo
 from tinytrain.utils import LOGGER
 from tinytrain.utils.any_utils import create_iter_directory
@@ -16,15 +16,15 @@ from tinytrain.utils.callback import Callback
 
 if TYPE_CHECKING:
     from torch import nn
-    from tinytrain.server.inference_server import BaseInferenceServer
+    from tinytrain.server.inference_server import TTBaseInferenceServer
     from tinytrain.utils.source_loader import SourceParser, SourceParserHub
 
 
-class BasePredictor:
+class TTBasePredictor:
     """
-    BasePredictor 是一个通用推理基类，支持多种输入源（视频/图片/目录/摄像头/网络流等）
+    TTBasePredictor 是一个通用推理基类，支持多种输入源（视频/图片/目录/摄像头/网络流等）
     的实时或批量推理。特性包括：
-    - 支持本地 torch.nn.Module 或远程推理服务器（BaseInferenceServer）两种后端。
+    - 支持本地 torch.nn.Module 或远程推理服务器（TTBaseInferenceServer）两种后端。
     - 内置线程安全的数据流队列，支持多线程异步生产-消费模式。
     - 支持批量推理与逐条推理，可配置 batch_size、最大队列长度、线程池大小。
     - 提供完整的生命周期钩子（on_predict_start、on_predict_batch_* 等）。
@@ -41,7 +41,7 @@ class BasePredictor:
     # 1. 构造与入口
     # ------------------------------------------------------------------
     def __init__(self,
-                 config_manager: ConfigManager,
+                 config_manager: TTConfigManager,
                  device: torch.device,
                  model,
                  callback: Callback,
@@ -55,16 +55,16 @@ class BasePredictor:
         初始化推理器。
 
         Args:
-            config_manager (ConfigManager): 全局配置管理器。
+            config_manager (TTConfigManager): 全局配置管理器。
             model (nn.Module | str | Path):
                 - torch.nn.Module：本地模型实例。
-                - str / Path：模型文件路径或远程推理服务配置，将使用 BaseInferenceServer。
+                - str / Path：模型文件路径或远程推理服务配置，将使用 TTBaseInferenceServer。
             callback (Callback): 回调对象，用于插入生命周期钩子。
             backend (str | None, optional): 推理后端名称，仅对远程模型生效。默认 None。
             max_qsize (int, optional): 数据流队列最大长度。默认 64。
             max_workers (int, optional): 生产端线程池最大线程数。默认 4。
             batch_size (int, optional): 每批推理的样本数。默认 1。
-            **kwargs: 透传给 BaseInferenceServer 的额外参数。
+            **kwargs: 透传给 TTBaseInferenceServer 的额外参数。
         """
         self.config_manager = config_manager
         self.backend = backend
@@ -95,7 +95,7 @@ class BasePredictor:
         # save dir
         save_dir = Path(config_manager.core["save_dir"]).resolve()
         project_name = config_manager.core["project_name"] or "default_project"
-        self.save_dir = save_dir / project_name
+        self.save_dir = save_dir / project_name / config_manager.core["task"] / "predict"
         self.output_dir = None
 
     # ------------------------------------------------------------------
@@ -129,18 +129,18 @@ class BasePredictor:
     # ------------------------------------------------------------------
     # 3. 后端初始化（内部工具）
     # ------------------------------------------------------------------
-    def _setup_inference_server(self, model: Union[nn.Module, str, Path], **kwargs) -> Union[nn.Module, BaseInferenceServer]:
+    def _setup_inference_server(self, model: Union[nn.Module, str, Path], **kwargs) -> Union[nn.Module, TTBaseInferenceServer]:
         """
         根据输入类型初始化推理后端。
 
         Args:
             model (nn.Module | str | Path):
                 - nn.Module：本地模型，直接加载到 self.device。
-                - str / Path：模型文件路径或远程配置，交由 BaseInferenceServer 处理。
-            **kwargs: 透传给 BaseInferenceServer 的额外参数。
+                - str / Path：模型文件路径或远程配置，交由 TTBaseInferenceServer 处理。
+            **kwargs: 透传给 TTBaseInferenceServer 的额外参数。
 
         Returns:
-            nn.Module | BaseInferenceServer: 已就绪的推理后端。
+            nn.Module | TTBaseInferenceServer: 已就绪的推理后端。
 
         Raises:
             TypeError: 不支持的模型类型。
@@ -180,7 +180,7 @@ class BasePredictor:
     def inference(self, data: Any) -> Any:
         return self.model.inference(data)
 
-    def postprocess(self, data_info: BaseDataInfo, inference_result: list[torch.Tensor]):
+    def postprocess(self, data_info: BaseDataInfo, inference_result: list[torch.Tensor]) -> Any:
         """
         对模型输出进行后处理，如 softmax、NMS、阈值过滤、解码等。
 
@@ -252,7 +252,7 @@ class BasePredictor:
     def _infer_batch(self, batch: list[Any]) -> Generator[Any, None, None]:
         """
         执行真正的推理逻辑（逐条或批量）。
-        子类可重写以实现真正的批处理、异步调用或缓存合并。
+        默认逐条处理，子类可重写以实现真正的批处理、异步调用或缓存合并。
 
         Args:
             batch (list[Any]): BaseDataInfo 列表。

@@ -135,7 +135,7 @@ args.out_channels = 512
 [[network]]
 # 10
 type = "head"
-module = "GeneralFace"
+module = "GeneralFaceHead"
 repeat = 1
 from = [-1]
 args.in_channels = 512

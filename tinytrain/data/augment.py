@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tinytrain.cfg.config_manager import ConfigManager
-from tinytrain.utils.any_utils import make2tuple
+from tinytrain.cfg.config_manager import TTConfigManager
+from tinytrain.utils.any_utils import make_N_tuple
 
 from .data_format import ClassifyDataInfo
-from tinytrain.data.base.base_augment import BaseAugmentation
+from tinytrain.data.base.base_augment import TTBaseAugmentation
 
 if TYPE_CHECKING:
     pass
 
 
-class ClassificationAugmentation(BaseAugmentation):
+class ClassificationAugmentation(TTBaseAugmentation):
     """
     为图像分类任务构建 **训练/验证** 数据增强流水线。
 
@@ -29,13 +29,13 @@ class ClassificationAugmentation(BaseAugmentation):
     >>> val_pipe   = aug.transform()
     """
 
-    def __init__(self, config_manager: ConfigManager):
+    def __init__(self, config_manager: TTConfigManager):
         super().__init__(config_manager)
         self._load_cfg()
 
     def _load_cfg(self) -> None:
         augment_cfg = self.config_manager.augment
-        self.target_size = make2tuple(self.config_manager.dataset["img_size"])
+        self.target_size = make_N_tuple(self.config_manager.dataset["img_size"])
         self.mean = augment_cfg["mean"]
         self.std = augment_cfg["std"]
         self.scale = augment_cfg["scale"]

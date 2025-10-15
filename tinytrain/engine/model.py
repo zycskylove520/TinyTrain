@@ -1,25 +1,30 @@
+from __future__ import annotations
+
 import torch
 
 from torch import nn
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any, Dict, TYPE_CHECKING
 
-from tinytrain.cfg import ConfigManager, TTModuleRegistry
+from tinytrain.cfg import TTConfigManager, TTModuleRegistry
 from tinytrain.data.data_format import BaseBatchDataInfo
 from tinytrain.global_var import RANK
 from tinytrain.utils import LOGGER
 
+if TYPE_CHECKING:
+    from tinytrain.loss.base import BaseLoss
 
-class BaseModel(nn.Module):
+
+class TTBaseModel(nn.Module):
     """
-    BaseModel 是所有深度学习模型的统一基类，负责：
+    TTBaseModel 是所有深度学习模型的统一基类，负责：
     1. 根据配置文件动态解析网络结构（entry / flow / head）。
     2. 管理前向传播：支持推理模式（inference）与训练模式（loss）。
     3. 提供权重加载、初始化、日志打印等通用功能。
     4. 兼容绝大多数AI任务（视觉、自然语言处理等）。
 
     设计要点：
-    - 结构配置完全由 ConfigManager 驱动，无需硬编码。
+    - 结构配置完全由 TTConfigManager 驱动，无需硬编码。
     - 支持深度增益（depth gain）自动缩放重复模块。
     - 内置模块缓存机制（record_list + ask_set）确保数据流正确。
     - 支持自定义模块解析（custom_parse_model）。
@@ -29,12 +34,12 @@ class BaseModel(nn.Module):
     # ------------------------------------------------------------------
     # 1. 构造与入口
     # ------------------------------------------------------------------
-    def __init__(self, config_manager: ConfigManager = None, device: torch.device = None, *args, **kwargs):
+    def __init__(self, config_manager: TTConfigManager, device: torch.device = None, *args, **kwargs):
         """
         初始化模型。
 
         Args:
-            config_manager (ConfigManager): 配置管理器，包含模型结构、超参数、设备等信息。
+            config_manager (TTConfigManager): 配置管理器，包含模型结构、超参数、设备等信息。
             *args, **kwargs: 预留扩展参数，供子类使用。
         """
         super().__init__()
@@ -42,6 +47,7 @@ class BaseModel(nn.Module):
 
         self.config_manager = config_manager
         self.device = device
+
         self.module_list, self.record_list, self.ask_set, self.log_info = self.parse_model()
         self.criterion = None
 
@@ -52,17 +58,17 @@ class BaseModel(nn.Module):
     # ------------------------------------------------------------------
     # 2. 子类可重写钩子
     # ------------------------------------------------------------------
-    def init_criterion(self):
+    def init_criterion(self) -> BaseLoss:
         """
         初始化任务特定的损失函数。
 
         Returns:
-            nn.Module: 损失模块。
+            BaseLoss: 损失模块。
 
         Raises:
             NotImplementedError: 必须由子类实现。
         """
-        raise NotImplementedError("compute_loss() needs to be implemented by task heads")
+        raise NotImplementedError("init_criterion() needs to be implemented!")
 
     def loss(self, preds: list[torch.Tensor], batch_samples: BaseBatchDataInfo) -> tuple[float, dict]:
         """
@@ -134,7 +140,7 @@ class BaseModel(nn.Module):
         else:
             raise TypeError(f"type(data): {type(data)} is not supported")
 
-    def inference(self, data: torch.Tensor | list[torch.Tensor], extra_data: Dict[str, Dict[str, Any]] = None):
+    def inference(self, data: torch.Tensor | list[torch.Tensor], extra_data: Dict[str, Dict[str, Any]] = None) -> list[torch.Tensor]:
         """
         推理模式前向传播。
 
@@ -270,13 +276,15 @@ class BaseModel(nn.Module):
                     # 子类可定制
                     pass
 
-                # depth gain
-                if _type == "flow":
-                    if _repeat > 1 or _allow_repeat:
-                        _repeat = max(round(_repeat * depth), 1)
-
                 # 用户可自定义模型解析方式
                 self.custom_parse_model(level, _info)
+
+                # depth gain
+                # 如果custom_parse_model函数修改了repeat或allow_repeat，需要重新获取
+                _repeat = _info["repeat"]
+                _allow_repeat = _info.get("allow_repeat", False)
+                if _repeat > 1 or _allow_repeat:
+                    _repeat = max(round(_repeat * depth), 1)
 
                 # 构造网络模块
                 _layer = self.get_layer(_module)
@@ -319,9 +327,9 @@ class BaseModel(nn.Module):
             ValueError: 所有查找路径均未命中时抛出，提示检查拼写、补充候选包或使用 `@register_module` 注册。
 
         Examples:
-            >>> BaseModel.get_layer("ReLU")           # 返回 torch.nn.ReLU
-            >>> BaseModel.get_layer("my_pkg.MyBlock") # 返回自定义包中的 MyBlock
-            >>> BaseModel.get_layer("CustomBlock")    # 返回 @register_module 注册的 CustomBlock
+            >>> TTBaseModel.get_layer("ReLU")           # 返回 torch.nn.ReLU
+            >>> TTBaseModel.get_layer("my_pkg.MyBlock") # 返回自定义包中的 MyBlock
+            >>> TTBaseModel.get_layer("CustomBlock")    # 返回 @register_module 注册的 CustomBlock
         """
         import importlib
         module_str = module_str.strip()

@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 
 from tinytrain.utils import LOGGER
 
-from .base import BaseImgResult, BaseMetric
+from .base import BaseImgResult, TTBaseMetric
 
 
 class ClassesLabelHistogram:
@@ -255,7 +255,7 @@ class ClassifyImgResult(BaseImgResult):
         plt.close(self._fig)
 
 
-class ClassifyTopKAccuracy(BaseMetric):
+class ClassifyTopKAccuracy(TTBaseMetric):
     """
     分类任务 Top-k 准确率（Top-k Accuracy）指标。
 
@@ -310,7 +310,7 @@ class ClassifyTopKAccuracy(BaseMetric):
         return 100 * self.num_correct / self.num_total
 
 
-class ClassifySingleClassesAccuracy(BaseMetric):
+class ClassifySingleClassesAccuracy(TTBaseMetric):
     """
     逐类别准确率计算器。
 

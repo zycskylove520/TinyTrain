@@ -92,7 +92,7 @@ args.out_channels = 256
 [[network]]
 # 7
 type = "flow"
-module = "PAN"
+module = "SSHPAN"
 repeat = 1
 from = [-1]
 args.in_channels = 256
@@ -101,7 +101,7 @@ args.out_channels_list = [256, 512, 1024]
 [[network]]
 # 8
 type = "head"
-module = "YOLODetect"
+module = "YOLODetectHead"
 repeat = 1
 from = [-1]
 args.nc = -1

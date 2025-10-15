@@ -4,6 +4,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Dict, Any
 
+from tinytrain.global_var.types import BoxFormat
+
 if TYPE_CHECKING:
     import torch
     import numpy as np
@@ -131,7 +133,7 @@ class ClassifyDataInfo(ImgDataInfo):
     """
 
     def __init__(self,
-                 label: np.ndarray | None = None,
+                 label: np.ndarray | Any | None = None,
                  **kwargs
                  ) -> None:
         """
@@ -151,7 +153,7 @@ class DetectDataInfo(ClassifyDataInfo):
     def __init__(self,
                  scores: np.ndarray | None = None,
                  bboxes: np.ndarray | None = None,
-                 bbox_format: Literal["lxlyrxry", "lxlywh", "cxcywh"] = "cxcywh",
+                 bbox_format: BoxFormat = "cxcywh",
                  normalized: bool = True,
                  **kwargs
                  ) -> None:

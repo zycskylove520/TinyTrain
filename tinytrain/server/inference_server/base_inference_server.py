@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     import torch
 
 
-class BaseInferenceServer:
+class TTBaseInferenceServer:
     """
     推理服务器基类，定义所有后端实现必须遵循的统一接口。
 

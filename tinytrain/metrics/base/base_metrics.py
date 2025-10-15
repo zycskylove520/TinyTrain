@@ -1,4 +1,4 @@
-class BaseMetric(object):
+class TTBaseMetric(object):
     def __init__(self):
         pass
 

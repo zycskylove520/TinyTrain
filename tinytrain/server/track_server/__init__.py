@@ -1,2 +1,2 @@
-from .base_track_server import BaseTrackServer
+from .base_track_server import TTBaseTrackServer
 from .bytetrack_server import ByteTrackServer

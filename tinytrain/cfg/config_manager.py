@@ -6,7 +6,7 @@ from typing import Dict
 from tinytrain.utils.checks import check_file
 
 
-class ConfigManager(SimpleNamespace):
+class TTConfigManager(SimpleNamespace):
     """
     配置管理器，用于加载和解析配置文件。
 
@@ -20,14 +20,14 @@ class ConfigManager(SimpleNamespace):
         **kwargs: 其他初始化参数。
 
     示例：
-        >>> config = ConfigManager("config.toml")
+        >>> config = TTConfigManager("config.toml")
         >>> print(config.model)
         >>> print(config.dataset)
     """
 
     def __init__(self, link_file: str | Path, **kwargs):
         """
-        初始化 ConfigManager 实例。
+        初始化 TTConfigManager 实例。
 
         Args:
             link_file (str | Path): 链式配置文件路径。
@@ -97,11 +97,11 @@ class ConfigManager(SimpleNamespace):
 
         frame = inspect.currentframe()
         try:
-            # 向上查找调用栈，跳过 ConfigManager 自身的 __init__
+            # 向上查找调用栈，跳过 TTConfigManager 自身的 __init__
             while frame:
                 locals_dict = frame.f_locals
                 self_arg = locals_dict.get('self')
-                if self_arg and self_arg.__class__ is not ConfigManager:
+                if self_arg and self_arg.__class__ is not TTConfigManager:
                     return self_arg.__class__.__name__
                 frame = frame.f_back
         finally:
@@ -122,10 +122,10 @@ class ConfigManager(SimpleNamespace):
             memo: 深度拷贝的备忘录。
 
         Returns:
-            ConfigManager: 深度拷贝后的实例。
+            TTConfigManager: 深度拷贝后的实例。
         """
-        # 创建一个新的 ConfigManager 实例，并传递 link_file 参数
-        new_instance = ConfigManager(self.link_file)
+        # 创建一个新的 TTConfigManager 实例，并传递 link_file 参数
+        new_instance = TTConfigManager(self.link_file)
         memo[id(self)] = new_instance
 
         # 显式地复制所有属性

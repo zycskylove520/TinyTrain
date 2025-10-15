@@ -3,7 +3,7 @@ from __future__ import annotations
 from tinytrain.data.data_format import BaseDataInfo
 
 
-class BaseAugmentation:
+class TTBaseAugmentation:
     """
     所有数据增强/变换策略的抽象基类，定义统一接口：
     - augment : 通常返回一个 **离线增强流水线**（一次性生成多图，训练用）。
