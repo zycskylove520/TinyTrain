@@ -489,7 +489,7 @@ class DetectConfusionMatrix:
         LOGGER.info(f"plotting confusion matrix...")
         confusion_matrix = self.confusion_matrix.numpy()
 
-        class_names = self.class_names.values()
+        class_names = list(self.class_names.values())
         # 绘制混淆矩阵
         # 根据标签数量自适应图表宽度
         width = height = self.num_classes + 1
@@ -514,7 +514,7 @@ class DetectConfusionMatrix:
 
         plt.figure(figsize=(width * 2, height * 2))  # 设置图表大小
         sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
-                    xticklabels=self.class_names, yticklabels=self.class_names)
+                    xticklabels=class_names, yticklabels=class_names)
         plt.xlabel('Predicted')
         plt.ylabel('True')
         plt.title('Confusion Matrix (Normalized)')

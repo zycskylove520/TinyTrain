@@ -680,7 +680,8 @@ class TTBaseTrainer:
         self.model = self.model.to(self.device)
 
         # check AMP
-        self.check_amp(world_size)
+        if not self.config_manager.core["only_val"]:
+            self.check_amp(world_size)
 
         # convert to DDP model
         self.convert_ddp_model(world_size)

@@ -174,11 +174,9 @@ class SegmentImgResult(BaseImgResult):
                                        proto=self.protos[idx])
             ax_flat[idx].imshow(drawn if drawn.shape[-1] == 3 else drawn, cmap='gray')
 
-        try:
-            for idx in range(n_show, fill_len * fill_len):
-                self._axs.flat[idx].clear()
-        except IndexError:
-            print(1)
+        for idx in range(n_show, fill_len * fill_len):
+            self._axs.flat[idx].clear()
+            self._axs.flat[idx].axis('off')
 
         self._fig.savefig(
             self.save_dir / f'{self.mode}_img_result_{self.plot_tick}.png',

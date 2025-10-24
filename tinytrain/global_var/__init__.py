@@ -75,4 +75,4 @@ def localization(font: str = None):
     buf.close()  # 立即释放内存
 
 
-localization()  # 在这里修改自己喜欢的字体,比如xxx.otf,xxx.ttf
+localization("LXGWWenKai-Regular.ttf")  # 在这里修改自己喜欢的字体,比如xxx.otf,xxx.ttf

@@ -302,7 +302,61 @@ class Core:
         gc.collect()
 
     # ------------------------------------------------------------------
-    # 4. 设备与 DDP 相关（内部工具）
+    # 4. 模型获取
+    # ------------------------------------------------------------------
+    def get_model(self, model_scale: str | None = None, model: str | Path = None, force_load=True) -> TTBaseModel:
+        """
+        根据权重或配置文件获取模型。
+
+        Args:
+            model_scale (str | None): 规模标识，仅新建模型时生效。
+            model (str | Path | None): 权重文件（.pt/.pth）。
+            force_load (bool): 是否强制形状匹配。
+        """
+        # 提前获取resume，防止加载参数后被修改
+        resume = self.config_manager.core["resume"]
+
+        # load exist model
+        if model is not None:
+            assert Path(model).suffix in {".pt", ".pth"}, f"{Path(model).suffix} is not supported"
+
+            model = check_file(model)
+            checkpoint = torch.load(model.as_posix(), map_location="cpu", weights_only=False)
+            self.config_manager.link["model"] = Path(model)
+
+            if resume:
+                self.config_manager.core = checkpoint["core_args"]
+                # 要覆盖resume成指定的信息
+                self.config_manager.core["resume"] = resume
+
+            self.config_manager.model = checkpoint["model_args"]
+            self.model = TTEngineRegistry.get(self.config_manager, "model")(self.config_manager, self.device)
+            self.model.load_model_state_dict(checkpoint["model"], force_load)
+
+            LOGGER.info(f"load pt model: {model}")
+        # create new model
+        else:
+            if resume:
+                raise KeyError("Error: Detected resume=True, but no valid .pt or .pth file was provided.")
+
+            scales = list(self.config_manager.model["scales"].keys())  # 添加model的scale
+            if not scales:
+                raise KeyError("Error: Model.toml no scales were provided.")
+
+            if model_scale:
+                if model_scale not in scales:
+                    raise KeyError(f"{self.config_manager.link['model']} not support scale:{self.config_manager.model['scale']}")
+
+                self.config_manager.model["scale"] = model_scale
+            else:
+                self.config_manager.model["scale"] = scales[0]
+
+            self.model = TTEngineRegistry.get(self.config_manager, "model")(self.config_manager, self.device)
+
+        return self.model
+
+    # ------------------------------------------------------------------
+    # 5. 设备与 DDP 相关（内部工具）
     # ------------------------------------------------------------------
     def _check_device(self) -> torch.device:
         """
@@ -472,60 +526,6 @@ class Core:
 
         # train
         self.trainer.train()
-
-    # ------------------------------------------------------------------
-    # 5. 模型获取
-    # ------------------------------------------------------------------
-    def get_model(self, model_scale: str | None = None, model: str | Path = None, force_load=True) -> TTBaseModel:
-        """
-        根据权重或配置文件获取模型。
-
-        Args:
-            model_scale (str | None): 规模标识，仅新建模型时生效。
-            model (str | Path | None): 权重文件（.pt/.pth）。
-            force_load (bool): 是否强制形状匹配。
-        """
-        # 提前获取resume，防止加载参数后被修改
-        resume = self.config_manager.core["resume"]
-
-        # load exist model
-        if model is not None:
-            assert Path(model).suffix in {".pt", ".pth"}, f"{Path(model).suffix} is not supported"
-
-            model = check_file(model)
-            checkpoint = torch.load(model.as_posix(), map_location="cpu", weights_only=False)
-            self.config_manager.link["model"] = Path(model)
-
-            if resume:
-                self.config_manager.core = checkpoint["core_args"]
-                # 要覆盖resume成指定的信息
-                self.config_manager.core["resume"] = resume
-
-            self.config_manager.model = checkpoint["model_args"]
-            self.model = TTEngineRegistry.get(self.config_manager, "model")(self.config_manager, self.device)
-            self.model.load_model_state_dict(checkpoint["model"], force_load)
-
-            LOGGER.info(f"load pt model: {model}")
-        # create new model
-        else:
-            if resume:
-                raise KeyError("Error: Detected resume=True, but no valid .pt or .pth file was provided.")
-
-            scales = list(self.config_manager.model["scales"].keys())  # 添加model的scale
-            if not scales:
-                raise KeyError("Error: Model.toml no scales were provided.")
-
-            if model_scale:
-                if model_scale not in scales:
-                    raise KeyError(f"{self.config_manager.link['model']} not support scale:{self.config_manager.model['scale']}")
-
-                self.config_manager.model["scale"] = model_scale
-            else:
-                self.config_manager.model["scale"] = scales[0]
-
-            self.model = TTEngineRegistry.get(self.config_manager, "model")(self.config_manager, self.device)
-
-        return self.model
 
     # ------------------------------------------------------------------
     # 6. 各引擎绑定（内部工具）
