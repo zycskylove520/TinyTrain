@@ -459,7 +459,7 @@ class PerformanceMetrics(TTBaseMetric):
         method = "interp"  # methods: 'continuous', 'interp'
         if method == "interp":
             x = np.linspace(0, 1, 101)  # 101-point interp (COCO)
-            ap = np.trapezoid(np.interp(x, mrec, mpre), x)  # integrate
+            ap = np.trapz(np.interp(x, mrec, mpre), x)  # integrate
         else:  # 'continuous'
             i = np.where(mrec[1:] != mrec[:-1])[0]  # points where x-axis (recall) changes
             ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])  # area under curve

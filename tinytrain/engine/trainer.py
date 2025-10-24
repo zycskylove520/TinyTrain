@@ -1218,7 +1218,7 @@ class TTBaseTrainer:
             LOGGER.info(f"Since EMA has been enabled, the saved model is EMA model, and its actual prediction results may differ from the true results.")
         LOGGER.info(f"current best epoch: {self.best_epoch}, Load best.pt model to final validate...")
         checkpoint = torch.load(self.best_pt, map_location=self.device, weights_only=False)
-        self.load_best_model_state_dict(world_size, checkpoint)
+        self.load_model_to_final_eval(world_size, checkpoint)
 
         if world_size > 1:
             dist.barrier()
@@ -1433,7 +1433,7 @@ class TTBaseTrainer:
         model = self.model if world_size <= 1 else self.model.module
         return model
 
-    def load_best_model_state_dict(self, world_size, checkpoint) -> None:
+    def load_model_to_final_eval(self, world_size, checkpoint) -> None:
         """
         将 best.pt/last.pt 中的模型权重加载到当前网络。
 

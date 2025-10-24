@@ -12,7 +12,7 @@ from tinytrain.utils.data_utils import cv_imread, load_image_cache_file
 
 class LPRNetDataset(TTYOLOVisionDataset):
     def __init__(self, config_manager, img_path: Path | list[Path], mode: str = "train"):
-        super().__init__(config_manager, img_path, mode, check_img_size=False)
+        super().__init__(config_manager, img_path, mode)
         self.lpr_max_len = self.config_manager.dataset["lpr_max_len"]
         self.rgb: bool = self.config_manager.augment["rgb"]
         self.chars_dict = {char: int(idx) for idx, char in self.config_manager.dataset["names"].items()}

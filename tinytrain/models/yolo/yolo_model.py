@@ -11,6 +11,7 @@ from tinytrain.cfg import TTConfigManager
 from tinytrain.engine import TTBaseModel
 from tinytrain.utils import LOGGER
 from tinytrain.utils.any_utils import make_divisible
+from tinytrain.utils.checks import check_img_size
 
 
 class YOLOModel(TTBaseModel):
@@ -56,6 +57,9 @@ class YOLOModel(TTBaseModel):
         """
         self.WIDTH_GAIN = None  # 宽度增益
         super().__init__(config_manager=config_manager, device=device, *args, **kwargs)
+
+        # 调整输入图片尺寸，以满足YOLO要求
+        self.config_manager.dataset["img_size"] = check_img_size(self.config_manager.dataset["img_size"])
 
     def parse_model(self):
         """

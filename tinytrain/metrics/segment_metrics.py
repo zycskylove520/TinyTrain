@@ -155,30 +155,30 @@ class SegmentImgResult(BaseImgResult):
         fill_len = min(self.max_sub_len, math.ceil(B ** 0.5))
         n_show = min(B, fill_len * fill_len)
 
-        if self._fig is None:
-            dpi = 100
-            figsize = (fill_len * W / dpi, fill_len * H / dpi)
-            self._fig, self._axs = plt.subplots(
-                fill_len, fill_len,
-                figsize=figsize, dpi=dpi,
-                constrained_layout=True,
-                gridspec_kw={'wspace': 0.05, 'hspace': 0.05})
-            for ax in self._axs.flat:
-                ax.axis('off')
+        dpi = 100
+        figsize = (fill_len * W / dpi, fill_len * H / dpi)
+        self._fig, self._axs = plt.subplots(
+            fill_len, fill_len,
+            figsize=figsize, dpi=dpi,
+            constrained_layout=True,
+            gridspec_kw={'wspace': 0.05, 'hspace': 0.05})
+        for ax in self._axs.flat:
+            ax.axis('off')
 
+        ax_flat = self._axs.flat
         for idx in range(n_show):
-            row, col = divmod(idx, fill_len)
-            ax = self._axs[row, col]
+            if idx >= len(ax_flat):  # 保险闸
+                break
             drawn = self._draw_one_img(imgs_np[idx],
                                        self.preds[idx],
                                        proto=self.protos[idx])
-            ax.imshow(drawn if drawn.shape[-1] == 3 else drawn, cmap='gray')
-            ax.set_xticks([])
-            ax.set_yticks([])
+            ax_flat[idx].imshow(drawn if drawn.shape[-1] == 3 else drawn, cmap='gray')
 
-        for idx in range(n_show, fill_len * fill_len):
-            self._axs.flat[idx].clear()
-            self._axs.flat[idx].axis('off')
+        try:
+            for idx in range(n_show, fill_len * fill_len):
+                self._axs.flat[idx].clear()
+        except IndexError:
+            print(1)
 
         self._fig.savefig(
             self.save_dir / f'{self.mode}_img_result_{self.plot_tick}.png',

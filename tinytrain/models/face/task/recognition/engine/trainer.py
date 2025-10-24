@@ -147,5 +147,5 @@ class FaceRecognitionTrainer(TTBaseTrainer):
 
         torch.save(checkpoint, self.simplified_pt.as_posix())
 
-    def load_best_model_state_dict(self, world_size, checkpoint):
+    def load_model_to_final_eval(self, world_size, checkpoint):
         self.model.load_state_dict(self.ddp_model_state_dict)

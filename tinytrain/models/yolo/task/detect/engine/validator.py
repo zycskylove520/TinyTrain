@@ -150,10 +150,10 @@ class YOLODetectionValidator(TTBaseValidator):
         batch_boxes = batch_samples.bboxes
         target_shapes = batch_samples.target_shapes.to(self.device, non_blocking=True)
         # target_shapes[bboxes_idx] 已经对齐，直接广播乘法
-        target_shapes = target_shapes[batch_samples.bboxes_idx]  # [N, 2]
-        # 广播到 [N,4]
-        target_shapes = target_shapes.repeat_interleave(2, dim=1)
-        return batch_boxes * target_shapes
+        wh = target_shapes[batch_samples.bboxes_idx]  # [N, 2]
+        # 构造 [w,h,w,h] 并转成同 dtype/device
+        wh4 = torch.stack([wh[:, 0], wh[:, 1], wh[:, 0], wh[:, 1]], dim=1)
+        return batch_boxes * wh4
 
     def batch_samples_split(self, batch_samples: DetectBatchDataInfo):
         """

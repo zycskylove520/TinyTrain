@@ -55,13 +55,12 @@ class TTYOLOVisionDataset(TTBaseMapDataset):
     4. 支持 **背景图**（无标签）与 **正样本图**（有标签）分离。
     """
 
-    def __init__(self, config_manager, img_path: Path | list[Path], mode: str = "train", check_img_size=True):
+    def __init__(self, config_manager, img_path: Path | list[Path], mode: str = "train"):
         """
         Args:
             config_manager (TTConfigManager): 全局配置。
             img_path (Path | list[Path]): 单个或多个满足YOLO格式的图片根目录或列表。
             mode (str): 模式, "train"/"val"/"test"。
-            check_img_size (bool): 是否检查图像的尺寸，如果不满足检查条件将会自动调整图像尺寸。
         """
         super().__init__(config_manager=config_manager)
         self.img_path = img_path
@@ -111,8 +110,6 @@ class TTYOLOVisionDataset(TTBaseMapDataset):
 
     def init(self):
         """统一入口：检查尺寸、类别、图片、标签、缓存。"""
-        if self.check_img_size:
-            self.img_size = self.config_manager.dataset["img_size"] = check_img_size(self.img_size, mode=self.mode)
         self.check_class_names()
         self.check_images_and_labels()
 

@@ -90,7 +90,7 @@ def check_file(file: str | Path) -> Path:
     return found_files[0].resolve()
 
 
-def check_img_size(img_size: int | list[int] | tuple[int, int], divisor=32, mode="train") -> tuple[int, int]:
+def check_img_size(img_size: int | list[int] | tuple[int, int], divisor=32) -> tuple[int, int]:
     """
     确保输入尺寸是 divisor 的倍数；不足时自动向上取整。
 
@@ -114,7 +114,7 @@ def check_img_size(img_size: int | list[int] | tuple[int, int], divisor=32, mode
 
     # 检查是否已经是 divisor 的倍数
     if original_w % divisor == 0 and original_h % divisor == 0:
-        LOGGER.info(f"{mode}: input image size (w, h) is: {img_size}")
+        LOGGER.info(f"input image size (w, h) is: {img_size}")
         return img_size
 
     # 调整图像尺寸
@@ -122,7 +122,7 @@ def check_img_size(img_size: int | list[int] | tuple[int, int], divisor=32, mode
     new_h = divisor if original_h < divisor else round(original_h / divisor) * divisor
 
     # 输出警告信息
-    LOGGER.info(f"{mode}: The image size (w, h) specified during training [{original_w}, {original_h}] must be a multiple of {divisor}! "
+    LOGGER.info(f"The image size (w, h) specified during training [{original_w}, {original_h}] must be a multiple of {divisor}! "
                 f"The training size is automatically adjusted to: [{new_w}, {new_h}]")
     return new_w, new_h
 

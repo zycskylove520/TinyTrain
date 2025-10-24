@@ -259,7 +259,7 @@ class Core:
         执行流程：
         1. 若设备未初始化，先调用 _set_device()。
         2. 若指定进程名，调用 setproctitle 修改。
-        3. 若 self.model 尚未绑定，调用 _bind_model() 加载或创建学生模型。
+        3. 若 self.model 尚未绑定，调用 get_model() 加载或创建学生模型。
         4. 加载教师权重，重建教师模型实例（deepcopy 配置防止冲突）。
         5. 调用 _bind_distiller() 实例化蒸馏器。
         6. 启动蒸馏训练：self.distiller.train()。
@@ -279,7 +279,7 @@ class Core:
 
         # bind student model
         if self.model is None:
-            self._bind_model(student_model_scale, student_model)
+            self.get_model(student_model_scale, student_model)
 
         # bind distiller
         if self.distiller is None:
@@ -449,7 +449,7 @@ class Core:
 
         步骤：
         1. 若 use_last_pt 为真，调用 _find_last_pt_file() 自动定位权重。
-        2. 若 self.model 尚未实例化，调用 _bind_model() 加载或新建模型。
+        2. 若 self.model 尚未实例化，调用 get_model() 加载或新建模型。
         3. 若 self.trainer 尚未实例化，调用 _bind_trainer() 绑定训练器。
         4. 执行 self.trainer.train() 开始训练迭代。
 
@@ -464,7 +464,7 @@ class Core:
 
         # bind model
         if self.model is None:
-            self._bind_model(model_scale, model)
+            self.get_model(model_scale, model)
 
         # bind trainer
         if self.trainer is None:
@@ -474,11 +474,11 @@ class Core:
         self.trainer.train()
 
     # ------------------------------------------------------------------
-    # 5. 模型绑定（内部工具）
+    # 5. 模型获取
     # ------------------------------------------------------------------
-    def _bind_model(self, model_scale: str | None = None, model: str | Path = None, force_load=True) -> None:
+    def get_model(self, model_scale: str | None = None, model: str | Path = None, force_load=True) -> TTBaseModel:
         """
-        根据权重或配置文件绑定模型。
+        根据权重或配置文件获取模型。
 
         Args:
             model_scale (str | None): 规模标识，仅新建模型时生效。
@@ -525,6 +525,8 @@ class Core:
 
             self.model = TTEngineRegistry.get(self.config_manager, "model")(self.config_manager, self.device)
 
+        return self.model
+
     # ------------------------------------------------------------------
     # 6. 各引擎绑定（内部工具）
     # ------------------------------------------------------------------
@@ -568,7 +570,7 @@ class Core:
 
         # 场景 2：权重文件 → 先绑定模型
         if model_path.suffix in {".pt", ".pth"}:
-            self._bind_model(model=model_path, force_load=False)
+            self.get_model(model=model_path, force_load=False)
             self.predictor = TTEngineRegistry.get(self.config_manager, "predictor")(
                 config_manager=self.config_manager,
                 device=self.device,
@@ -613,7 +615,7 @@ class Core:
         # 没有传递模型权重文件，此时导出将是未训练的模型
         if model is None:
             # 构建新模型，默认使用最小的scale
-            self._bind_model()
+            self.get_model()
             LOGGER.warning("No model weights file provided. Exporting an untrained model.")
         else:
             model_path = Path(check_file(model))
@@ -624,7 +626,7 @@ class Core:
                 raise TypeError(f"export only supports '.pt' or '.pth' model files, got {model_path.suffix}")
 
             # 加载权重并绑定模型
-            self._bind_model(model=model_path, force_load=False)
+            self.get_model(model=model_path, force_load=False)
 
         self.exporter = TTEngineRegistry.get(self.config_manager, "exporter")(
             config_manager=self.config_manager,

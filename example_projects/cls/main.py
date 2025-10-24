@@ -52,7 +52,8 @@ def tune(model):
 
 
 if __name__ == '__main__':
-    yolo = YOLOCore(link_file=r"link.toml")
-    train(yolo)
+    yolo = YOLOCore(link_file=r"D:\project\python_code\TinyTrain-main\example_projects\cls_copy\link.toml")
+    model = yolo.get_model()
+    # train(yolo)
     # predict(yolo)
     # export(yolo)

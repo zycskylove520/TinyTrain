@@ -1,6 +1,8 @@
 # ---------- 全局注册器 ----------
 from __future__ import annotations
 
+import os
+
 from torch import nn
 from typing import Dict, Iterable, Set, Type, List, Tuple, Optional, ClassVar, Callable, Union
 
@@ -348,33 +350,46 @@ class TTModuleRegistry:
         cls._CLASS2ALIASES.clear()
 
     @classmethod
-    def register_plugin(cls, target: Union[str, object]) -> None:
+    def register_plugin(cls, root: str = "tinytrain", exclude: Union[str, Iterable[str], None] = None, ) -> None:
         """
         扫描并导入用户模块/包，从而触发 @TTModuleRegistry.register 装饰器。
 
         用法：
             TTModuleRegistry.register_plugin("my_models.blocks")  # 整包
-            TTModuleRegistry.register_plugin("my_models.block")   # 单模块
+            TTModuleRegistry.register_plugin("my_models.blocks.block")   # 单模块
+            TTModuleRegistry.register_plugin("my_models.blocks.block.block.py")   # 单文件
         """
         import importlib
         import pkgutil
 
-        if isinstance(target, str):
-            mod = importlib.import_module(target)
-            # 如果是包，继续递归扫子模块
-            if hasattr(mod, "__path__"):
-                for _, subname, _ in pkgutil.walk_packages(
-                        mod.__path__, mod.__name__ + "."
-                ):
-                    importlib.import_module(subname)
+        # 1. 归一化
+        if exclude is None:
+            exclude = set()
+        elif isinstance(exclude, str):
+            exclude = {exclude}
+        else:
+            exclude = set(exclude)
 
-    @classmethod
-    def auto_discover(cls, root_pkg: str = "tinytrain") -> None:
-        """自动扫描并导入 root_pkg 所有子模块"""
-        import importlib, pkgutil
-        mod = importlib.import_module(root_pkg)
-        if hasattr(mod, "__path__"):
+        # 2. 导入 root
+        root_mod = importlib.import_module(root)
+        root_dir = os.path.dirname(root_mod.__file__)
+
+        # 3. 存在性检查（只要磁盘没有该子目录就报错）
+        missing = {d for d in exclude if not os.path.isdir(os.path.join(root_dir, d))}
+        if missing:
+            raise FileNotFoundError(f"root 目录 '{root_dir}' 中不存在排除文件夹：{missing}")
+
+        # 4. 构造要排除的“模块前缀”集合
+        exclude_prefixes = {f"{root}.{d}" for d in exclude}
+
+        # 5. 遍历并导入
+        if hasattr(root_mod, "__path__"):  # 包
             for _, subname, _ in pkgutil.walk_packages(
-                    mod.__path__, mod.__name__ + "."
+                    root_mod.__path__, root_mod.__name__ + "."
             ):
+                # 只要子包以任意排除前缀开头就跳过
+                if any(subname == pfx or subname.startswith(pfx + ".") for pfx in exclude_prefixes):
+                    continue
                 importlib.import_module(subname)
+        else:  # 单文件模块，直接导入自身
+            importlib.import_module(root)

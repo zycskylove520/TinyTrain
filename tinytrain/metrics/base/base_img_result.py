@@ -91,16 +91,15 @@ class BaseImgResult(ABC):
         n_show = min(B, fill_len * fill_len)
 
         # 复用 Figure
-        if self._fig is None:
-            dpi = 100
-            figsize = (fill_len * W / dpi, fill_len * H / dpi)
-            self._fig, self._axs = plt.subplots(
-                fill_len, fill_len,
-                figsize=figsize, dpi=dpi,
-                constrained_layout=True,  # 取代 tight_layout
-                gridspec_kw={'wspace': 0.05, 'hspace': 0.05})
-            for ax in self._axs.flat:
-                ax.axis('off')
+        dpi = 100
+        figsize = (fill_len * W / dpi, fill_len * H / dpi)
+        self._fig, self._axs = plt.subplots(
+            fill_len, fill_len,
+            figsize=figsize, dpi=dpi,
+            constrained_layout=True,  # 取代 tight_layout
+            gridspec_kw={'wspace': 0.05, 'hspace': 0.05})
+        for ax in self._axs.flat:
+            ax.axis('off')
 
         # 画子图
         for idx in range(n_show):

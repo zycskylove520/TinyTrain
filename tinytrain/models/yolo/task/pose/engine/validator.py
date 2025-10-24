@@ -222,13 +222,13 @@ class YOLOPoseValidator(TTBaseValidator):
     def decode_boxes(self, batch_samples: PoseBatchDataInfo):
         target_shapes = batch_samples.target_shapes.to(self.device, non_blocking=True)
 
-        target_shapes_2 = target_shapes[batch_samples.bboxes_idx]  # [N, 2]
-        target_shapes_4 = target_shapes_2.repeat_interleave(2, dim=1)  # 广播到 [N,4]
+        wh = target_shapes[batch_samples.bboxes_idx]  # [N, 2]
+        wh4 = torch.stack([wh[:, 0], wh[:, 1], wh[:, 0], wh[:, 1]], dim=1)  # 广播到 [N,4]
 
-        batch_samples.bboxes = batch_samples.bboxes * target_shapes_4
+        batch_samples.bboxes = batch_samples.bboxes * wh4
 
         # 缩放关键点
-        batch_samples.batch_keypoints[..., :2] *= target_shapes_2.unsqueeze(1)
+        batch_samples.batch_keypoints[..., :2] *= wh.unsqueeze(1)
 
     def calculate_tp(self, gt_cls, pred_cls, gt_keypoint, pred_keypoint, area, sigma):
         iou = kpt_iou(gt_keypoint, pred_keypoint, area=area, sigma=sigma)
