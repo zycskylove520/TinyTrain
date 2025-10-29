@@ -2,7 +2,7 @@
 OCRCore
 ========
 OCRCore 是 TinyTrain 针对 OCR 系列任务的专用门面类。
-它在 Core 的基础上，通过 TTEngineRegistry 完成 OCR相关的一系列任务
+它在 TTCore 的基础上，通过 TTEngineRegistry 完成 OCR相关的一系列任务
 所有核心组件（model / trainer / validator / predictor / exporter / server）
 的自动注册与快速索引，实现「一行代码」切换任务与后端。
 
@@ -10,14 +10,14 @@ OCRCore 是 TinyTrain 针对 OCR 系列任务的专用门面类。
 --------
 1. 统一注册
    - 每个任务在类定义阶段即通过装饰器完成注册，
-     保证后续 Core 内部 `TTEngineRegistry.get(task, component)` 能够
+     保证后续 TTCore 内部 `TTEngineRegistry.get(task, component)` 能够
      零反射、零硬编码地实例化正确组件。
 2. 多后端支持
    - 支持 onnx / tensorrt / torchscript 等多种导出与推理后端，
      通过 `"export_server"` / `"inference_server"` / `"track_server"` 等
      三级命名空间实现细粒度索引。
 3. 链式配置
-   - 继承 Core 的 TTConfigManager，支持 link 配置文件链式继承，
+   - 继承 TTCore 的 TTConfigManager，支持 link 配置文件链式继承，
      用户仅需改动少量字段即可切换模型规模、数据集路径、训练超参。
 
 
@@ -36,7 +36,7 @@ lpr
         └── onnx       -> YOLOClassificationOnnxInferenceServer
 """
 
-from tinytrain.engine import Core, TTBaseExporter
+from tinytrain.engine import TTCore, TTBaseExporter
 from tinytrain.cfg import TTEngineRegistry
 from tinytrain.models.ocr.task.lpr import (
     LPRModel,
@@ -48,7 +48,7 @@ from tinytrain.server.export_server import TTBaseOnnxExportServer
 from tinytrain.server.inference_server import TTBaseOnnxInferenceServer
 
 
-class OCRCore(Core):
+class OCRCore(TTCore):
     @classmethod
     def register_components(cls):
         # ---------- classify ----------

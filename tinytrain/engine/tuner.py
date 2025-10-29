@@ -28,7 +28,7 @@ class TTBaseTuner:
 
     示例
     ----
-    >>> core = Core("link.toml") # type: ignore[arg-type]
+    >>> core = TTCore("link.toml") # type: ignore[arg-type]
     >>> tuner = TTBaseTuner(core, model_scale="s")
     >>> result = tuner.tune(pop_size=30, generations=50)
     >>> best_cfg = result["best_config"]

@@ -17,7 +17,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 @TTModuleRegistry.register
 class CBA(nn.Module):
-    """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+    """Standard convolution combined with {Conv2d、BatchNorm2d、Activation}."""
 
     def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=None, groups=1, dilation=1, act: bool | str | nn.Module = True, bn=True):
         """Initialize CBA layer with given arguments including activation."""

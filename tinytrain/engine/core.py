@@ -20,9 +20,9 @@ if TYPE_CHECKING:
     from .model import TTBaseModel
 
 
-class Core:
+class TTCore:
     """
-    Core 是 TinyTrain 的核心门面类，负责把「配置、模型、训练器、推理器、导出器」
+    TTCore 是 TinyTrain 的核心门面类，负责把「配置、模型、训练器、推理器、导出器」
     等所有 engine 统一调度起来，对外暴露简洁的 train / predict / export 等接口。
 
     主要功能：
@@ -40,7 +40,7 @@ class Core:
     # ------------------------------------------------------------------
     def __init__(self, link_file: str | Path, callback: Callback = None, *args, **kwargs) -> None:
         """
-        初始化 Core，加载 link 配置并注册各 engine 的占位符。
+        初始化 TTCore，加载 link 配置并注册各 engine 的占位符。
 
         Args:
             link_file (str | Path, optional): link 配置文件路径（yaml / toml）。
@@ -71,12 +71,12 @@ class Core:
     @classmethod
     def register_components(cls):
         """
-        类级钩子：一次性地把该 Core 所支持的全部 (task, engine_type, backend) → 实现类的映射注册到 TTEngineRegistry。
+        类级钩子：一次性地把该 TTCore 所支持的全部 (task, engine_type, backend) → 实现类的映射注册到 TTEngineRegistry。
 
-        任何继承自 Core 的子类 **必须** 实现此方法，否则在基类里会抛出NotImplementedError。
+        任何继承自 TTCore 的子类 **必须** 实现此方法，否则在基类里会抛出NotImplementedError。
 
         示例：
-        >>> class MyCore(Core):
+        >>> class MyCore(TTCore):
         ...     @classmethod
         ...     def register_components(cls):
         ...         TTEngineRegistry.register(cls, "classify", "model", MyClassificationModel)
@@ -183,7 +183,7 @@ class Core:
 
     def __call__(self, source, model: str | Path | None = None, **kwargs) -> Generator[Any, None, None]:
         """
-        允许 Core 实例直接当函数用：core(source) 等价于 predict(source)。
+        允许 TTCore 实例直接当函数用：core(source) 等价于 predict(source)。
         """
         yield from self.predict(source, model, **kwargs)
 
@@ -431,7 +431,7 @@ class Core:
 
     def _set_device(self):
         """
-        根据配置文件及当前硬件环境，为 Core 实例设置 self.device。
+        根据配置文件及当前硬件环境，为 TTCore 实例设置 self.device。
 
         步骤：
         1. 调用 _check_device() 获取最合适的 torch.device（cpu / cuda / mps）。

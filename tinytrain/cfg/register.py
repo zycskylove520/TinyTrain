@@ -69,7 +69,7 @@ class TTEngineRegistry:
             ValueError: 如果该核心已被注册。
         """
         if core_name in cls._cores:
-            raise ValueError(f"Core {core_name} already registered")
+            raise ValueError(f"TTCore {core_name} already registered")
         cls._cores.add(core_name)
 
     # ---------- 2. 类装饰器 ----------
@@ -151,7 +151,7 @@ class TTEngineRegistry:
         core_name = config_manager.register_name
         task = config_manager.core["task"]
         if core_name not in cls._cores:
-            raise KeyError(f"Core {core_name} has not been registered")
+            raise KeyError(f"TTCore {core_name} has not been registered")
 
         bucket = (
             cls._impl

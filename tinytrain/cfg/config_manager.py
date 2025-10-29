@@ -90,7 +90,7 @@ class TTConfigManager(SimpleNamespace):
     @staticmethod
     def _infer_register_name() -> str | None:
         """
-        自动推断调用者类名（例如 Core 的子类）。
+        自动推断调用者类名（例如 TTCore 的子类）。
         如果无法推断，返回 None。
         """
         import inspect
@@ -101,7 +101,7 @@ class TTConfigManager(SimpleNamespace):
             while frame:
                 locals_dict = frame.f_locals
                 self_arg = locals_dict.get('self')
-                if self_arg and self_arg.__class__ is not TTConfigManager:
+                if self_arg and  not isinstance(self_arg, TTConfigManager):
                     return self_arg.__class__.__name__
                 frame = frame.f_back
         finally:
