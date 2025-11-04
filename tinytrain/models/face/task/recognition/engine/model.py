@@ -14,13 +14,13 @@ class FaceRecognitionModel(TTBaseModel):
     职责：
     1. 根据配置动态选用 MobileFaceNet / YOLOv11-FaceNet / ResFaceNet 等骨架。
     2. 组合 CombinedMargin + PartialFC 作为训练损失。
-    3. 通过 custom_parse_model 钩子对不同尺度（n/s/m/l/x）自动缩放通道数、深度及模块开关。
+    3. 通过 custom_parse_model_level 钩子对不同尺度（n/s/m/l/x）自动缩放通道数、深度及模块开关。
     4. 统一对外提供 forward → loss / inference 两种调用模式，无需关心底层细节。
 
     设计要点：
     - 所有网络差异均由配置文件驱动，子类仅需关注“如何根据 scale 微调模块参数”。
     - init_criterion 返回的是 PartialFCLoss，已内置 margin-based 分类损失。
-    - custom_parse_model 中仅原地修改 module_info，不返回任何值；解析完成后由基类统一构建网络。
+    - custom_parse_model_level 中仅原地修改 module_info，不返回任何值；解析完成后由基类统一构建网络。
     """
 
     def __init__(self, config_manager: TTConfigManager, device, *args, **kwargs):
@@ -74,7 +74,7 @@ class FaceRecognitionModel(TTBaseModel):
         """
         return self.criterion(preds[0], batch_samples)
 
-    def custom_parse_model(self, layer, module_info):
+    def custom_parse_model_level(self, layer, module_info):
         """
         根据不同网络与尺度，原地修改模块配置（通道数、重复次数、开关等）。
 

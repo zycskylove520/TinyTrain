@@ -3,7 +3,7 @@ from __future__ import annotations
 import torch
 import torch.distributed as dist
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict
 from torch import nn
 
 from tinytrain.data.data_format import BaseBatchDataInfo
@@ -125,12 +125,8 @@ class TTBaseValidator:
             dist.barrier()
         return fitness
 
-    def inference(self, model: nn.Module, batch_samples: BaseBatchDataInfo) -> list[torch.Tensor]:
-        if batch_samples.extra_data:
-            preds = model.inference(batch_samples.data, batch_samples.extra_data)
-        else:
-            preds = model.inference(batch_samples.data)
-        return preds
+    def inference(self, model: nn.Module, batch_samples: BaseBatchDataInfo, extra_data: Dict[str, Dict[str, Any]] | None = None) -> list[torch.Tensor]:
+        return model.inference(batch_samples.data, extra_data)
 
     # ------------------------------------------------------------------
     # 3. 数据流水（子类需重写）

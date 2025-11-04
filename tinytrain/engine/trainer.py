@@ -98,7 +98,7 @@ class TTBaseTrainer:
         self.device: torch.device = device
 
         # amp
-        self.amp: bool = self.config_manager.core["amp"]
+        self.amp: bool | str = self.config_manager.core["amp"]
         self.scaler: torch.amp.GradScaler | None = None
 
         # seed
@@ -447,7 +447,13 @@ class TTBaseTrainer:
         """
         LOGGER.info(f"Checking AMP...")
 
-        if self.amp:
+        if isinstance(self.amp, str):
+            assert self.amp == "force", f"amp must be [true、 false、'force'], got {self.amp}"
+
+        if self.amp == "force":
+            # 强制开启amp
+            self.amp = True
+        elif self.amp is True:
             do_amp = False
             if self.device.type == "cpu":
                 LOGGER.warning("CPU does not support AMP. Disabling AMP.")
@@ -716,11 +722,19 @@ class TTBaseTrainer:
             gradient_as_bucket_view=True
         )
 
-    def set_optimizer(self, world_size: int):
+    def set_optimizer(self, world_size: int, optimizer=None):
         """
         构建优化器，支持参数分组、学习率缩放、多种优化器选择。
+
+        Args:
+            world_size (int): 当前分布式进程总数。
+            optimizer : 支持传入指定的优化器。
         """
         LOGGER.info(f"Setting optimizer...")
+
+        if optimizer:
+            self.optimizer = optimizer
+            return
 
         # ---------------- 1. 超参 ----------------
         optimizer_name = self.config_manager.core["optimizer"]
@@ -836,15 +850,22 @@ class TTBaseTrainer:
                 LOGGER.info(f"Training has been completed: {self.start_epoch}/{self.epochs}")
                 sys.exit()
 
-    def set_warmup_scheduler(self):
+    def set_warmup_scheduler(self, warmup_scheduler=None):
         """
         设置预热阶段的学习率调度器。
+
+        Args:
+            warmup_scheduler : 支持传入指定的warmup学习率调度器。
         """
         LOGGER.info(f"Setting warmup scheduler...")
 
         if self.warmup_epochs <= 0:
             return
         if self.start_epoch >= self.warmup_epochs:
+            return
+
+        if warmup_scheduler:
+            self.warmup_scheduler = warmup_scheduler
             return
 
         warmup_scheduler_name = self.config_manager.core["warmup_scheduler"]
@@ -904,13 +925,20 @@ class TTBaseTrainer:
                 last_epoch=last_epoch
             )
 
-    def set_normal_scheduler(self):
+    def set_normal_scheduler(self, normal_scheduler=None):
         """
         设置正式训练阶段的学习率调度器。
+
+        Args:
+            normal_scheduler : 支持传入指定的学习率调度器。
         """
         LOGGER.info(f"Setting normal scheduler...")
 
         if self.epochs <= self.warmup_epochs:
+            return
+
+        if normal_scheduler:
+            self.normal_scheduler = normal_scheduler
             return
 
         scheduler_name = self.config_manager.core["scheduler"]

@@ -349,16 +349,13 @@ class BaseBatchDataInfo:
     """
 
     def __init__(self,
-                 data: torch.Tensor | list[torch.Tensor] | Any | None = None,
-                 extra_data: Dict[str, Dict[str, Any]] | None = None
+                 data: torch.Tensor | list[torch.Tensor] | Any | None = None
                  ):
         """
         Args:
             data: 模型的输入数据。
-            extra_data: 模型的额外输入数据。
         """
         self.data = data
-        self.extra_data = extra_data
 
 
 class ImgBatchDataInfo(BaseBatchDataInfo):

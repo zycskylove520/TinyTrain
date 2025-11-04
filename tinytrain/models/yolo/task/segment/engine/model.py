@@ -16,7 +16,7 @@ class YOLOSegmentModel(YOLOModel):
     --------
     1. 完全复用 YOLO 的 backbone + neck，仅将 head 替换为 YOLOSegmentHead，实现检测+掩码联合输出。
     2. 采用 YOLOV8SegmentLoss，同时优化 cls / box / dfl / seg 四项损失。
-    3. 通过 custom_parse_model 完成深度、宽度增益缩放，并依据尺度开启 c3k 分支。
+    3. 通过 custom_parse_model_level 完成深度、宽度增益缩放，并依据尺度开启 c3k 分支。
     4. 对外保持 TTBaseModel 统一接口：forward(data) 自动返回 loss 或推理结果。
     """
     def __init__(self, config_manager: TTConfigManager, device, *args, **kwargs):
@@ -112,7 +112,7 @@ class YOLOSegmentModel(YOLOModel):
         """
         return self.criterion(preds[0], batch_samples)
 
-    def custom_parse_model(self, level, module_info):
+    def custom_parse_model_level(self, level, module_info):
         """
         实例分割任务专属解析逻辑，在通用解析完成后、模块实例化前调用。
 

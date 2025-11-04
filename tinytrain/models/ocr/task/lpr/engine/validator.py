@@ -26,9 +26,7 @@ class LPRValidator(TTBaseValidator):
         self.acc = 0.
 
     def preprocess(self, batch_samples: LPRBatchDataInfo) -> LPRBatchDataInfo:
-        mean = self.config_manager.augment["mean"]
-        std = self.config_manager.augment["std"] + 1e-8
-        batch_samples.data = ((batch_samples.data.to(self.device, non_blocking=True).float() / 255.0) - mean) / std
+        batch_samples.data = batch_samples.data.to(self.device, non_blocking=True)
         batch_samples.target = batch_samples.target.to(self.device, non_blocking=True)
         return batch_samples
 
@@ -43,7 +41,8 @@ class LPRValidator(TTBaseValidator):
         self.acc = 0.
 
     def update_metrics_on_training(self, outputs: torch.Tensor, batch_samples: LPRBatchDataInfo, pbar: TTProgressBar):
-        tp, tn_len, tn_chr = self.eval_batch(outputs, batch_samples.target, batch_samples.lengths, blank_id=len(self.chars) - 1)
+        tp, tn_len, tn_chr = self.greedy_decode_eval(outputs,batch_samples)
+        # tp, tn_len, tn_chr = self.eval_batch(outputs, batch_samples.target, batch_samples.lengths, blank_id=len(self.chars) - 1)
         self.tp += tp
         self.tn_len += tn_len
         self.tn_chr += tn_chr
@@ -139,3 +138,51 @@ class LPRValidator(TTBaseValidator):
             else:
                 tn_chr += 1
         return tp, tn_len, tn_chr
+
+    def greedy_decode_eval(self, preds, batch_samples: LPRBatchDataInfo):
+        Tp = 0
+        Tn_1 = 0
+        Tn_2 = 0
+
+        # load train data
+        labels, lengths = batch_samples.target, batch_samples.lengths
+        start = 0
+        targets = []
+        for length in lengths:
+            label = labels[start:start + length]
+            targets.append(label)
+            start += length
+        targets = np.array([el.cpu().numpy() for el in targets])
+
+        # greedy decode
+        prebs = preds.cpu().detach().numpy()
+        preb_labels = list()
+        for i in range(prebs.shape[0]):
+            preb = prebs[i, :, :]
+            preb_label = list()
+            for j in range(preb.shape[1]):
+                preb_label.append(np.argmax(preb[:, j], axis=0))
+            no_repeat_blank_label = list()
+            pre_c = preb_label[0]
+            if pre_c != len(self.chars) - 1:
+                no_repeat_blank_label.append(pre_c)
+            for c in preb_label:  # dropout repeate label and blank label
+                if (pre_c == c) or (c == len(self.chars) - 1):
+                    if c == len(self.chars) - 1:
+                        pre_c = c
+                    continue
+                no_repeat_blank_label.append(c)
+                pre_c = c
+            preb_labels.append(no_repeat_blank_label)
+        for i, label in enumerate(preb_labels):
+            if len(label) != len(targets[i]):
+                Tn_1 += 1
+                continue
+            if (np.asarray(targets[i]) == np.asarray(label)).all():
+                Tp += 1
+            else:
+                Tn_2 += 1
+
+        # Acc = Tp * 1.0 / (Tp + Tn_1 + Tn_2)
+        # print("[Info] Test Accuracy: {} [{}:{}:{}:{}]".format(Acc, Tp, Tn_1, Tn_2, (Tp + Tn_1 + Tn_2)))
+        return Tp, Tn_1, Tn_2

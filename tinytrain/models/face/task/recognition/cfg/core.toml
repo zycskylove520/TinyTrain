@@ -56,11 +56,12 @@ resume = false
 # 断点续训，是否从上次中断的训练进度继续训练。
 
 amp = false
-# type: [bool]
+# type: bool | "force"
 # 自动混合精度（AMP），用于节省内存并加速训练，开启后显存≈减半，速度+20~50%，但可能影响精度。
+# 如果为true，将检查模型开启是否会有精度损失，如果精度损失过大，则会关闭amp。为force则不进行检查，强制开启。
 # 关闭场景：
 #   - 出现 NaN/loss 爆炸，先关 amp 排查
-#   - CPU/MPS 训练框架自动强制 false
+#   - CPU/MPS 设备，训练框架自动强制 false
 
 accumulate = 1
 # type: int

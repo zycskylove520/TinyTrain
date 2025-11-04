@@ -69,3 +69,33 @@ class GhostCBA(nn.Module):
         """Forward propagation through a Ghost Bottleneck layer with skip connection."""
         y = self.cv1(x)
         return torch.cat((y, self.cv2(y)), 1)
+
+
+@TTModuleRegistry.register
+class AsymmetricConv2d(nn.Module):
+    """
+    训练时：3×1 + 1×3 两个卷积
+    推理时：可 fuse 成单个 3×3 卷积
+    """
+
+    def __init__(self, in_channels, out_channels, kernel=3, stride=1, padding=1, groups=1, relu=True):
+        super().__init__()
+        # 只在第一条卷积里降采样；第二条 stride=1
+        self.h_conv = nn.Conv2d(in_channels, out_channels,
+                                kernel_size=(kernel, 1),
+                                stride=stride,
+                                padding=(padding, 0),
+                                groups=groups, bias=True)
+        self.v_conv = nn.Conv2d(out_channels, out_channels,
+                                kernel_size=(1, kernel),
+                                stride=1,
+                                padding=(0, padding),
+                                groups=groups, bias=True)
+        self.relu = nn.ReLU(inplace=True) if relu else None
+
+    def forward(self, x):
+        x = self.h_conv(x)
+        x = self.v_conv(x)
+        if self.relu is not None:
+            x = self.relu(x)
+        return x

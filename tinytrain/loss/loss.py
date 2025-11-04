@@ -119,19 +119,19 @@ class ClassificationWithFocalLoss(BaseLoss):
 
 
 class LPRCTCLoss(BaseLoss):
-    def __init__(self, max_time_steps: int, blank: int, reduction: str = "mean"):
+    def __init__(self, lpr_loss_gain: float, blank: int, reduction: str = "mean"):
         super().__init__()
-        self.max_time_steps = max_time_steps
         self.criterion = nn.CTCLoss(blank=blank, reduction=reduction)
+        self.lpr_loss_gain = lpr_loss_gain
 
     def forward(self, pred: torch.Tensor, batch: LPRBatchDataInfo):
-        lengths = batch.lengths
-        input_lengths, target_lengths = self.sparse_tuple_for_ctc(self.max_time_steps, lengths)
-
         log_probs = pred.permute(2, 0, 1)  # for ctc loss: T x N x C
-        log_probs = log_probs.log_softmax(dim=-1)
+        log_probs = log_probs.log_softmax(dim=-1).requires_grad_()
 
-        loss = self.criterion(log_probs, batch.target, input_lengths=input_lengths, target_lengths=target_lengths)
+        lengths = batch.lengths
+        input_lengths, target_lengths = self.sparse_tuple_for_ctc(log_probs.size(0), lengths)
+
+        loss = self.criterion(log_probs, batch.target, input_lengths=input_lengths, target_lengths=target_lengths) * self.lpr_loss_gain
         loss_items = {"lpr_loss": loss.detach()}
         return loss, loss_items
 

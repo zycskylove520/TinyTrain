@@ -1,3 +1,5 @@
+from typing import Dict, Any
+
 import torch
 from torch import nn
 
@@ -28,7 +30,7 @@ class FaceRecognitionValidator(TTBaseValidator):
         batch_samples.data = ((images1, images2), (flip_images1, flip_images2), match_tensor)
         return batch_samples
 
-    def inference(self, model: nn.Module, batch_samples: BaseBatchDataInfo):
+    def inference(self, model: nn.Module, batch_samples: BaseBatchDataInfo, extra_data: Dict[str, Dict[str, Any]] | None = None):
         (images1, images2), (flip_images1, flip_images2), match_tensor = batch_samples.data
 
         # 合并成一次推理，加快效率，减小抖动

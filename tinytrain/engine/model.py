@@ -27,7 +27,7 @@ class TTBaseModel(nn.Module):
     - 结构配置完全由 TTConfigManager 驱动，无需硬编码。
     - 支持深度增益（depth gain）自动缩放重复模块。
     - 内置模块缓存机制（record_list + ask_set）确保数据流正确。
-    - 支持自定义模块解析（custom_parse_model）。
+    - 支持自定义模块解析（custom_parse_model_level）。
     - 自动初始化权重（initialize_weights），支持 Kaiming / BN / ReLU 等。
     """
 
@@ -83,9 +83,19 @@ class TTBaseModel(nn.Module):
         """
         return self.criterion(preds, batch_samples)
 
-    def custom_parse_model(self, level, module_info):
+    def custom_modify_model(self, network):
         """
-        钩子：子类可重写以动态修改模块配置。
+        钩子：子类可重写以动态修改整个模型结构，包括增加或删减模块，以及修改模块参数等操作。
+        注意，这是一个危险的操作，除非你知道你在做什么。
+
+        Args:
+            network (dict): 整个模型结构的字典。
+        """
+        pass
+
+    def custom_parse_model_level(self, level, module_info):
+        """
+        钩子：子类可重写以动态修改模块每一层的参数配置。
 
         Args:
             level (int): 当前模块属于第几层
@@ -119,7 +129,7 @@ class TTBaseModel(nn.Module):
     # ------------------------------------------------------------------
     # 3. 统一前向入口（不建议重写）
     # ------------------------------------------------------------------
-    def forward(self, data: BaseBatchDataInfo | torch.Tensor | list[torch.Tensor]):
+    def forward(self, data: BaseBatchDataInfo | torch.Tensor | list[torch.Tensor], extra_data: Dict[str, Dict[str, Any]] | None = None):
         """
         统一入口：根据输入类型自动选择推理或训练模式。
 
@@ -127,20 +137,34 @@ class TTBaseModel(nn.Module):
             data:
                 - BaseBatchDataInfo：训练/验证模式，计算 loss。
                 - torch.Tensor | list[torch.Tensor]：推理模式，执行 inference。
+            extra_data:
+                - (dict[str | int, dict[str, Any]] | None, optional): 按 **层级索引** 或 **模块名** 精准投递的额外关键字参数。
+                外层字典的 key 为模型结构的层级索引或目标模块的注册名（注册的自定义模块或第三方模块），
+                内层字典即为该模块 ``forward`` 接收的额外关键字参数。例如：
+                    >>> mask_tensor = torch.ones(3, 3)
+                    >>> embed_tensor = torch.ones(2)
+                    >>> extra_data = {
+                    >>>     4: {"p": 0.2},  # 仅第4层的forward函数会收到 p 参数
+                    >>>     "MyModule1": {"scale": 1.5, "mask": mask_tensor},  # 仅 MyModule1的forward函数会收到 scale 和 mask参数
+                    >>>     "MyModule2": {"embed": embed_tensor},               # 仅 MyModule2的forward函数会收到 embed参数
+                    >>> }
+                若某模块在 ``extra_data`` 中没有对应条目，则调用时不会传入任何额外参数。
+                层级索引的优先级大于模块名，如果存在层级索引和模块名共用于同一个层级，则使用层级索引对应的参数
+                默认值为 ``None``，表示不向任何模块投递额外参数。
 
         Returns:
             Union[list[torch.Tensor], tuple]: 推理输出或 (loss, loss_items)。
         """
 
         if isinstance(data, BaseBatchDataInfo):
-            outputs = self.inference(data.data, data.extra_data)
+            outputs = self.inference(data.data, extra_data)
             return self.loss(outputs, data)
         elif isinstance(data, (torch.Tensor, list[torch.Tensor])):
-            return self.inference(data)
+            return self.inference(data, extra_data)
         else:
             raise TypeError(f"type(data): {type(data)} is not supported")
 
-    def inference(self, data: torch.Tensor | list[torch.Tensor], extra_data: Dict[str, Dict[str, Any]] = None) -> list[torch.Tensor]:
+    def inference(self, data: torch.Tensor | list[torch.Tensor], extra_data: Dict[str | int, Dict[str, Any]] = None) -> list[torch.Tensor]:
         """
         推理模式前向传播。
 
@@ -148,16 +172,18 @@ class TTBaseModel(nn.Module):
             data (torch.Tensor | list[torch.Tensor]): 模型输入。
                 单输入时可直接传入 ``torch.Tensor``；
                 多输入时请传入 ``list[torch.Tensor]``，列表顺序需与模型配置中 ``entry`` 层的顺序一一对应。
-            extra_data (dict[str, dict[str, Any]] | None, optional): **按模块名** 精准投递的额外关键字参数。
-                外层字典的 key 为目标模块的注册名（注册的自定义模块或第三方模块），
+            extra_data (dict[str | int, dict[str, Any]] | None, optional): 按 **层级索引** 或 **模块名** 精准投递的额外关键字参数。
+                外层字典的 key 为模型结构的层级索引或目标模块的注册名（注册的自定义模块或第三方模块），
                 内层字典即为该模块 ``forward`` 接收的额外关键字参数。例如：
                     >>> mask_tensor = torch.ones(3, 3)
                     >>> embed_tensor = torch.ones(2)
                     >>> extra_data = {
+                    >>>     4: {"p": 0.2},  # 仅第4层的forward函数会收到 p 参数
                     >>>     "MyModule1": {"scale": 1.5, "mask": mask_tensor},  # 仅 MyModule1的forward函数会收到 scale 和 mask参数
                     >>>     "MyModule2": {"embed": embed_tensor},               # 仅 MyModule2的forward函数会收到 embed参数
                     >>> }
                 若某模块在 ``extra_data`` 中没有对应条目，则调用时不会传入任何额外参数。
+                层级索引的优先级大于模块名，如果存在层级索引和模块名共用于同一个层级，则使用层级索引对应的参数
                 默认值为 ``None``，表示不向任何模块投递额外参数。
 
         Returns:
@@ -200,7 +226,12 @@ class TTBaseModel(nn.Module):
                         current_data = tuple(current_data if rf == -1 else self.record_list[rf]["data"] for rf in frm)
 
                 if extra_data:
-                    current_data = layer(current_data, **extra_data.get(module_name, {}))
+                    # 先根据层级索引获取额外数据，拿不到的情况下再考虑模块名获取额外数据
+                    level_extra_data = extra_data.get(i, {})
+                    if level_extra_data:
+                        current_data = layer(current_data, **level_extra_data)
+                    else:
+                        current_data = layer(current_data, **extra_data.get(module_name, {}))
                 else:
                     current_data = layer(current_data)
 
@@ -242,9 +273,10 @@ class TTBaseModel(nn.Module):
         # 直接读取变量
         depth = self.DEPTH_GAIN
 
-        for level, info in enumerate(self.config_manager.model["network"]):
+        # deepcopy防止修改原始配置文件导致加载模型异常
+        network = deepcopy(self.config_manager.model["network"])
+        for level, info in enumerate(network):
             try:
-                # deepcopy防止修改原始配置文件导致加载模型异常
                 _info = deepcopy(info)
                 _type: str = _info["type"]  # 当前模块的位置类型，目前三种:"entry"、"flow"、"head"
                 _from: list = _info["from"]
@@ -267,8 +299,8 @@ class TTBaseModel(nn.Module):
                         _from = [-1]
 
                 if _type == "entry":  # entry层
-                    assert -1 in _from, f"entry layer_{level} must depend on from index: -1."
                     # 子类可定制
+                    pass
                 elif _type == "flow":  # flow层
                     # 子类可定制
                     pass
@@ -276,11 +308,11 @@ class TTBaseModel(nn.Module):
                     # 子类可定制
                     pass
 
-                # 用户可自定义模型解析方式
-                self.custom_parse_model(level, _info)
+                # 用户可自定义每一层的模型参数解析方式
+                self.custom_parse_model_level(level, _info)
 
                 # depth gain
-                # 如果custom_parse_model函数修改了repeat或allow_repeat，需要重新获取
+                # 如果custom_parse_model_level函数修改了repeat或allow_repeat，需要重新获取
                 _repeat = _info["repeat"]
                 _allow_repeat = _info.get("allow_repeat", False)
                 if _repeat > 1 or _allow_repeat:

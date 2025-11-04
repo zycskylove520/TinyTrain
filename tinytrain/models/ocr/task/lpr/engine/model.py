@@ -10,18 +10,26 @@ class LPRModel(TTBaseModel):
 
     def init_criterion(self):
         return LPRCTCLoss(
-            max_time_steps=self.config_manager.loss["max_time_steps"],
+            lpr_loss_gain=self.config_manager.loss['lpr_loss_gain'],
             blank=self.config_manager.dataset["nc"] - 1
         )
 
     def loss(self, preds: torch.Tensor, batch_samples: LPRBatchDataInfo) -> tuple[float, dict]:
         return self.criterion(preds[0], batch_samples)
 
-    def custom_parse_model(self, level, module_info):
+    def custom_parse_model_level(self, level, module_info):
         if self.config_manager.model["name"] == "LPRNet":
             if module_info["module"] == "LPRBackbone":
                 module_info["args"]["nc"] = self.config_manager.dataset["nc"]
                 module_info["args"]["dropout_rate"] = self.config_manager.loss["dropout_rate"]
 
-            if module_info["module"] == "LPRHead":
+            elif module_info["module"] == "LPRHead":
+                module_info["args"]["in_channels"] = 448 + self.config_manager.dataset["nc"]
+                module_info["args"]["nc"] = self.config_manager.dataset["nc"]
+
+        elif self.config_manager.model["name"] == "TTLPRNet":
+            if module_info["module"] == "torch.nn.Dropout":
+                module_info["args"]["p"] = self.config_manager.loss["dropout_rate"]
+
+            elif module_info["module"] == "LPRHead":
                 module_info["args"]["nc"] = self.config_manager.dataset["nc"]

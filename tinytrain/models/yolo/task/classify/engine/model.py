@@ -15,7 +15,7 @@ class YOLOClassificationModel(YOLOModel):
     --------
     1. 复用 YOLOModel 的 backbone+neck（可选）结构，仅将 head 替换为 ClassificationHead。
     2. 损失函数采用 ClassificationLoss，支持类别权重与增益调节。
-    3. 通过 custom_parse_model 钩子对 C3k2 / A2C2f 模块进行深度增益与分支开关的自动缩放，
+    3. 通过 custom_parse_model_level 钩子对 C3k2 / A2C2f 模块进行深度增益与分支开关的自动缩放，
        保证 n/s/m/l/x 五个尺度在分类任务上的一致性与最佳性价比。
     4. 对外接口与 TTBaseModel 保持一致：forward(data) 自动区分训练/推理模式。
     """
@@ -50,7 +50,7 @@ class YOLOClassificationModel(YOLOModel):
         """
         return self.criterion(preds[0], batch_samples)
 
-    def custom_parse_model(self, level, module_info):
+    def custom_parse_model_level(self, level, module_info):
         """
         分类任务专属解析逻辑，在通用解析完成后、模块实例化前调用。
 

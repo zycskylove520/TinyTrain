@@ -32,7 +32,7 @@ class YOLOModel(TTBaseModel):
     - 宽度增益统一调用 ``make_divisible()``，保证通道数为 8 / 16 的倍数，兼容 TensorRT。
     - 深度增益仅对 **in_channels == out_channels** 的模块生效，避免上采样 / 降采样层被误缩放。
     - 第 0 层强制为 entry 且 ``from = [-1]``，杜绝非法依赖。
-    - 支持自定义解析钩子 ``custom_parse_model()``，子类可原地修改 ``module_info``。
+    - 支持自定义解析钩子 ``custom_parse_model_level()``，子类可原地修改 ``module_info``。
     - 所有模块延迟实例化，先校验再构建，**配置错误立即抛异常**。
     """
 
@@ -144,7 +144,7 @@ class YOLOModel(TTBaseModel):
                     _args["nc"] = self.config_manager.dataset["nc"]
 
             # 用户可自定义模型解析方式
-            self.custom_parse_model(level, _info)
+            self.custom_parse_model_level(level, _info)
 
             # depth gain
             # 如果custom_parse_model函数修改了repeat或allow_repeat，需要重新获取

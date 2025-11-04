@@ -18,8 +18,8 @@ val = "datasets/mnist/val"
 test = ""
 # 测试集图像路径，留空表示没有测试集
 
-lpr_max_len = 18
-# 车牌字符最大长度，要求：lpr_max_len <= img_size_w // 4
+lpr_max_len = 8
+# 车牌字符最大长度
 
 nc = 76
 # 数据集的类别数量

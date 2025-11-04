@@ -28,7 +28,7 @@ class LPRAugmentation(TTBaseAugmentation):
         构建 **训练阶段** 增强流水线。
         """
         # Dynamic filling augmentation
-        df = DynamicFilling(target_size=self.target_size, p=0.5)
+        df = DynamicFilling(target_size=self.target_size, p=1)
 
         albumentations_compose = A.Compose([
             A.ColorJitter(brightness=self.hsv_v, contrast=self.hsv_v, saturation=self.hsv_s, hue=self.hsv_h, p=self.color_jitter),
@@ -45,7 +45,7 @@ class LPRAugmentation(TTBaseAugmentation):
         """
 
         # Dynamic filling augmentation
-        df = DynamicFilling(target_size=self.target_size, p=0.5)
+        df = DynamicFilling(target_size=self.target_size, p=1)
 
         self.transform = df
 

@@ -52,19 +52,27 @@ class TTConfigManager(SimpleNamespace):
         # 检查文件是否存在
         link_file = check_file(link_file)
 
-        if link_file.suffix == ".toml":
-            self.link = self.load_toml(link_file)
-            for key, value in self.link.items():
-                if not isinstance(value, str):
-                    raise ValueError(f"{key} must be a valid file")
-                value = check_file(value)
-                self.link[key] = value
-                if value.suffix != ".toml":
-                    raise ValueError(f"{key} must be '.toml' file")
-                data = self.load_toml(value)
-                setattr(self, key, data)
+        self.link = self.load_config_file(link_file)
+        # 检查是否提供了core.toml
+        if "core" not in self.link:
+            data = self.load_config_file("./core.toml")
+            setattr(self, "core", data)
+
+        for key, value in self.link.items():
+            if not isinstance(value, str):
+                raise ValueError(f"{key} must be a valid file")
+            value = check_file(value)
+            self.link[key] = value
+            data = self.load_config_file(value)
+            setattr(self, key, data)
+
+    def load_config_file(self, config_file: str | Path):
+        if config_file.suffix == ".toml":
+            return self.load_toml(config_file)
+        elif config_file.suffix == ".yaml" or config_file.suffix == ".yml":
+            return self.load_yaml(config_file)
         else:
-            raise ValueError(f"Unsupported file type: {link_file.suffix}")
+            raise ValueError(f"TTConfigManager unsupported file type: {config_file.suffix}")
 
     @staticmethod
     def load_toml(toml_file: str | Path) -> Dict:
@@ -88,6 +96,22 @@ class TTConfigManager(SimpleNamespace):
             raise ValueError(f"Error loading TOML file {toml_file}: {e}")
 
     @staticmethod
+    def load_yaml(yaml_file: str | Path) -> Dict:
+        """
+        加载 YAML 文件。
+
+        Args:
+            yaml_file (str | Path): YAML 文件路径。
+
+        Returns:
+            Dict: 加载后的数据。
+        """
+        import yaml
+        with open(yaml_file, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        return data
+
+    @staticmethod
     def _infer_register_name() -> str | None:
         """
         自动推断调用者类名（例如 TTCore 的子类）。
@@ -101,7 +125,7 @@ class TTConfigManager(SimpleNamespace):
             while frame:
                 locals_dict = frame.f_locals
                 self_arg = locals_dict.get('self')
-                if self_arg and  not isinstance(self_arg, TTConfigManager):
+                if self_arg and not isinstance(self_arg, TTConfigManager):
                     return self_arg.__class__.__name__
                 frame = frame.f_back
         finally:

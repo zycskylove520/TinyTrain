@@ -19,10 +19,6 @@ class LPRTrainer(TTBaseTrainer):
             raise NotImplementedError
 
     def preprocess_data(self, batch_samples: LPRBatchDataInfo) -> LPRBatchDataInfo:
-        # 在这里做归一化速度提升
-        mean = self.config_manager.augment["mean"]
-        std = self.config_manager.augment["std"] + 1e-8
-        # batch_samples.data = (batch_samples.data.to(self.device, non_blocking=True).float() - 127.5) * 0.0078125
-        batch_samples.data = ((batch_samples.data.to(self.device, non_blocking=True).float() / 255.0) - mean) / std
+        batch_samples.data = batch_samples.data.to(self.device, non_blocking=True)
         batch_samples.target = batch_samples.target.to(self.device, non_blocking=True)
         return batch_samples

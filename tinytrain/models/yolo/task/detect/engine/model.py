@@ -16,7 +16,7 @@ class YOLODetectionModel(YOLOModel):
     --------
     1. 在构造阶段即完成 stride 的自动推算，避免后续训练/推理阶段重复计算。
     2. 采用 YOLOV8DetectionLoss，支持 cls / box / dfl 三项损失加权。
-    3. 通过 custom_parse_model 对 C3k2 / A2C2f / YOLODetectHead 进行宽度&深度增益缩放，
+    3. 通过 custom_parse_model_level 对 C3k2 / A2C2f / YOLODetectHead 进行宽度&深度增益缩放，
        并依据尺度 {n, s, m, l, x} 开启不同高级分支（c3k、residual、mlp_ratio）。
     4. 对外保持 TTBaseModel 统一接口：forward(data) 自动返回 loss 或推理结果。
     """
@@ -111,7 +111,7 @@ class YOLODetectionModel(YOLOModel):
         """
         return self.criterion(preds[0], batch_samples)
 
-    def custom_parse_model(self, level, module_info):
+    def custom_parse_model_level(self, level, module_info):
         """
         检测任务专属解析逻辑，在通用解析完成后、模块实例化前调用。
 

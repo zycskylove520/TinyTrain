@@ -5,7 +5,6 @@ import torch
 from pathlib import Path
 
 from tinytrain.data.dataset import TTYOLOVisionDataset
-from tinytrain.models.ocr.ocr_augment import LPRAugmentation
 from tinytrain.models.ocr.ocr_data_format import LPRDataInfo, LPRBatchDataInfo
 from tinytrain.utils.data_utils import cv_imread, load_image_cache_file
 
@@ -35,6 +34,11 @@ class LPRNetDataset(TTYOLOVisionDataset):
 
         origin_shape = img.shape[:2][::-1]  # w,h
 
+        # transform
+        if origin_shape[0] != self.img_size[0] or origin_shape[1] != self.img_size[1]:
+            img = cv2.resize(img, self.img_size)
+        img = self.transforms(img)
+
         plate_name = self.plates[index]
         label = list()
         for c in plate_name:
@@ -54,22 +58,13 @@ class LPRNetDataset(TTYOLOVisionDataset):
             origin_shape=origin_shape,
             target_shape=self.img_size,
         )
-
-        # use transform
-        if self.mode == "train":
-            sample = self.transform.do_augment(sample)
-        else:
-            sample = self.transform.do_transform(sample)
         return sample
 
-    def set_transform(self):
-        """根据模式返回增强流水线。"""
-        lpr_augmentation = LPRAugmentation(self.config_manager, target_size=self.img_size)
-        if self.mode == "train":
-            lpr_augmentation.set_augment()
-        else:
-            lpr_augmentation.set_transform()
-        return lpr_augmentation
+    def transforms(self, img):
+        img = img.astype('float32')
+        img -= 127.5
+        img *= 0.0078125
+        return img
 
     def prepare_data(self):
         plates = []

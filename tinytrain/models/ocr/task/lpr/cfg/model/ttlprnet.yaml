@@ -1,0 +1,29 @@
+# ===================================
+# 车牌识别模型: TTLPRNet 模型配置文件
+# ===================================
+
+name: TTLPRNet
+scale: n
+
+# model_config compound scaling constants
+scales:
+  n: { depth: 0.25, summary: "185 layers, 4322060 parameters, 4322060 gradients, 7.53 GFLOPs, for a 94×24 input." }
+  s: { depth: 0.5, summary: "215 layers, 4398108 parameters, 4398108 gradients, 7.65 GFLOPs, for a 94×24 input." }
+  m: { depth: 1, summary: "269 layers, 4550204 parameters, 4550204 gradients, 7.89 GFLOPs, for a 94×24 input." }
+  l: { depth: 1.5, summary: "323 layers, 4702300 parameters, 4702300 gradients, 8.12 GFLOPs, for a 94×24 input." }
+  x: { depth: 2, summary: "377 layers, 4854396 parameters, 4854396 gradients, 8.35 GFLOPs, for a 94×24 input." }
+
+network:
+  - { type: entry, from: [ -1 ], module: CBA, repeat: 1,  args: { in_channels: 3, out_channels: 32, kernel_size: 3, stride: 1 } }
+  - { type: flow, from: [ -1 ], module: LPRBaseBlock, repeat: 1,  args: { in_channels: 32, out_channels: 64 } }
+  - { type: flow, from: [ -1 ], module: LPRBaseBlock, repeat: 4,  args: { in_channels: 64, out_channels: 64 } }
+  - { type: flow, from: [ -1 ], module: torch.nn.MaxPool2d, repeat: 1, args: { kernel_size: 3, stride: [ 1, 2 ], dilation: [ 1, 1 ], padding: 1 } }
+  - { type: flow, from: [ -1 ], module: LPRBaseBlock, repeat: 1,  args: { in_channels: 64, out_channels: 128 } }
+  - { type: flow, from: [ -1 ], module: LPRBaseBlock, repeat: 4,  args: { in_channels: 128, out_channels: 128 } }
+  - { type: flow, from: [ -1 ], module: CBA, repeat: 1,  args: { in_channels: 128, out_channels: 128, kernel_size: [ 1, 3 ], stride: [ 1, 2 ] } }
+  - { type: flow, from: [ -1 ], module: LPRBaseBlock, repeat: 1,  args: { in_channels: 128, out_channels: 256 } }
+  - { type: flow, from: [ -1 ], module: LPRBaseBlock, repeat: 4,  args: { in_channels: 256, out_channels: 256 } }
+  - { type: flow, from: [ 0, 2, 5, 8 ], module: Combine, repeat: 1 }
+  - { type: flow, from: [ -1 ], module: HalfPAFPN, repeat: 1, args: { in_channels_list: [ 32, 64, 128, 256 ], out_channels: 256 } }
+  - { type: flow, from: [ -1 ], module: torch.nn.Dropout, repeat: 1,  args: { p: 0.2 } }
+  - { type: head, from: [ -1 ], module: LPRHead, repeat: 1,  args: { in_channels: 256, nc: 76 } }

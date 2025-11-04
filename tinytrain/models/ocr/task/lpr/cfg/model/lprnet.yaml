@@ -1,0 +1,17 @@
+# ===================================
+# 车牌识别模型: LPRNet 模型配置文件
+# 注意：该模型仅支持输入图像尺寸：w,h=[94,24] !!!
+# CTC max_time_steps <=18
+# ===================================
+
+name: LPRNet
+scale: l
+
+# model_config compound scaling constants
+scales:
+    l: {depth: 1, summary: "53 layers, 478368 parameters, 478368 gradients, 0.31 GFLOPs, for a 94×24 input."}
+
+# model network struct
+network:
+    - {type: entry, from: [-1], module: LPRBackbone, repeat: 1,  args: {nc: -1, dropout_rate: 0.5}}
+    - {type: head, from: [-1], module: LPRHead, repeat: 1, args: {nc: -1}}

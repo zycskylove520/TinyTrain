@@ -277,6 +277,8 @@ class SSHPAN(nn.Module):
         self.ssh2 = SSH(in_channels, out_channels_list[1])
         self.ssh3 = SSH(in_channels, out_channels_list[2])
 
+        # self.pan = PAN(in_channels_list=out_channels_list, out_channels=)
+
     def forward(self, x: list[torch.Tensor]):
         out1 = self.ssh1(x[0])
         out2 = self.ssh2(x[1])

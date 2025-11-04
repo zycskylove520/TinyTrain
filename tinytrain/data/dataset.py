@@ -254,7 +254,7 @@ class TTYOLOVisionDataset(TTBaseMapDataset):
 
     def set_transform(self):
         """子类可重写，返回增强流水线。"""
-        raise NotImplementedError(f"set_transform is not implemented.")
+        pass
 
     def collate_fn(self, batch):
         """子类必须实现：将样本列表整理为批数据。"""
