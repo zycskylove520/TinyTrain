@@ -51,7 +51,7 @@ class FaceRecognitionTrainDataset(ImageFolder):
         # 1. 仅支持单目录，多目录时给出警告并取第 0 个
         if isinstance(root, list):
             if len(root) > 1:
-                LOGGER.warning(f"Face recognition datasets do not support multiple directories! Only loaded: {root[0]}")
+                LOGGER.warning(f"Face recognition train datasets do not support multiple directories! Only loaded: {root[0]}")
             root = root[0]
 
         # 2. 父类 ImageFolder 完成样本扫描：self.samples = [(path, class_id), ...]

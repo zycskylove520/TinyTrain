@@ -3,7 +3,8 @@ import torch
 from tinytrain.cfg import TTConfigManager
 from tinytrain.data.data_format import BaseBatchDataInfo
 from tinytrain.engine import TTBaseModel
-from tinytrain.models.face.face_loss import PartialFCLoss
+from tinytrain.global_var import WORLD_SIZE
+from tinytrain.models.face.face_loss import PartialFCLoss, FCLoss
 from tinytrain.models.face.task.recognition.margin import CombinedMargin
 
 
@@ -52,13 +53,24 @@ class FaceRecognitionModel(TTBaseModel):
             m_cos=self.config_manager.loss["m_cos"],
             interclass_filtering_threshold=self.config_manager.loss["interclass_filtering_threshold"],
         )
-        return PartialFCLoss(
-            margin_loss=margin_loss,
-            device=self.device,
-            embedding_size=self.config_manager.loss["embedding_size"],
-            num_classes=self.config_manager.dataset["nc"],
-            sample_rate=self.config_manager.loss["sample_rate"],
-            cls_loss_gain=self.config_manager.loss["cls_loss_gain"])
+
+        if WORLD_SIZE > 1:
+            return PartialFCLoss(
+                margin_loss=margin_loss,
+                device=self.device,
+                embedding_size=self.config_manager.loss["embedding_size"],
+                num_classes=self.config_manager.dataset["nc"],
+                sample_rate=self.config_manager.loss["sample_rate"],
+                cls_loss_gain=self.config_manager.loss["cls_loss_gain"]
+            )
+        else:
+            return FCLoss(
+                margin_loss=margin_loss,
+                device=self.device,
+                embedding_size=self.config_manager.loss["embedding_size"],
+                num_classes=self.config_manager.dataset["nc"],
+                cls_loss_gain=self.config_manager.loss["cls_loss_gain"]
+            )
 
     def loss(self, preds: list[torch.Tensor], batch_samples: BaseBatchDataInfo) -> tuple[float, dict]:
         """

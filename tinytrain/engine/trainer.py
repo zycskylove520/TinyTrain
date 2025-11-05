@@ -306,10 +306,13 @@ class TTBaseTrainer:
         """
         self.callbacks.run_callback(self, "on_prepare_train_start")
 
-        # set save dir and dataset dir and train result
+        # set save dir
         self.set_save_dir(world_size)
+
+        # set dataset dir
         self.set_dataset_dir()
 
+        # set train result
         if RANK in {-1, 0}:
             self.train_result = TrainResult(save_dir=self.save_dir, launch_tb=self.config_manager.core["launch_tb"])
 
@@ -451,6 +454,9 @@ class TTBaseTrainer:
             assert self.amp == "force", f"amp must be [true、 false、'force'], got {self.amp}"
 
         if self.amp == "force":
+            LOGGER.warning(f"Forcing AMP activation may result in precision loss."
+                           f" It is recommended to set amp=True to check if AMP is available, ensuring no significant precision loss occurs.")
+            LOGGER.info("AMP: force passed ✅")
             # 强制开启amp
             self.amp = True
         elif self.amp is True:
@@ -1409,8 +1415,8 @@ class TTBaseTrainer:
             # 按周期保存模型
             save_period = self.config_manager.core["save_period"]
             if save_period > 0 and (current_epoch + 1) % save_period == 0:
-                epoch_checkpoint_path = Path(self.weight_dir / f"epoch_{current_epoch + 1}.pt")
-                torch.save(checkpoint, epoch_checkpoint_path.as_posix())
+                epoch_pt = Path(self.weight_dir / f"epoch_{current_epoch + 1}.pt")
+                torch.save(checkpoint, epoch_pt.as_posix())
 
         except Exception as e:
             LOGGER.error(f"Error occurred while saving model: {e}")
@@ -1459,8 +1465,7 @@ class TTBaseTrainer:
         Returns:
             nn.Module: 模型实例。
         """
-        model = self.model if world_size <= 1 else self.model.module
-        return model
+        return self.model.module if world_size > 1 else self.model
 
     def load_model_to_final_eval(self, world_size, checkpoint) -> None:
         """

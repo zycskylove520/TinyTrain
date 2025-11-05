@@ -48,7 +48,7 @@ class LPRValidator(TTBaseValidator):
         self.tn_chr += tn_chr
 
         # log update
-        desc = f"{'val':^5}|{'classes':^15}|{'Acc':^15}|{"tn_len":^15}|{"tn_chr":^15}|"
+        desc = f"{'val':^5}|{'classes':^15}|{'Acc':^15}|{'tn_len':^15}|{'tn_chr':^15}|"
         pbar.set_description(desc)
 
     def end_metrics_on_training(self, pbar: TTProgressBar):

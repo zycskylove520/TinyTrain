@@ -12,7 +12,7 @@ cls_loss_gain = 1
 # 例如 0.5 会把分类 loss 缩小一半，适用于分类 loss 占比过大、挤压回归/度量损失的场合。
 
 sample_rate = 1.0
-# 用于 PartialFC 采样：每迭代只激活 sample_rate * num_classes 个负类中心。
+# 用于 PartialFC 采样(多卡训练有效)：每迭代只激活 sample_rate * num_classes 个负类中心。
 # 1.0 表示不采样（使用全部类别）；0.1 表示只随机保留 10 % 负类中心参与计算。
 # 当类别数非常大（百万级）时，适当降低可减少 GPU 内存与通信开销。
 

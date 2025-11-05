@@ -1,0 +1,28 @@
+# ===================================
+# 人脸识别模型: MobileFaceNet 模型配置文件
+# ===================================
+
+name: MobileFaceNet
+scale: n
+
+# model_config compound scaling constants
+scales:
+  n: { depth: 0.5, summary: "161 layers, 888576 parameters, 888576 gradients, 0.37 GFLOPs, for a 112×112 input." }
+  s: { depth: 1, summary: "246 layers, 2066752 parameters, 2066752 gradients, 0.99 GFLOPs, for a 112×112 input." }
+  m: { depth: 2, summary: "429 layers, 4768320 parameters, 4768320 gradients, 2.47 GFLOPs, for a 112×112 input." }
+  l: { depth: 3, summary: "611 layers, 8671296 parameters, 8671296 gradients, 4.59 GFLOPs, for a 112×112 input." }
+  x: { depth: 4, summary: "793 layers, 13775680 parameters, 13775680 gradients, 7.36 GFLOPs, for a 112×112 input." }
+  xl: { depth: 5, summary: "975 layers, 20081472 parameters, 20081472 gradients, 10.77 GFLOPs, for a 112×112 input." }
+  xxl: { depth: 6, summary: "1157 layers, 27588672 parameters, 27588672 gradients, 14.83 GFLOPs, for a 112×112 input." }
+
+# model network struct
+network:
+  - { type: entry, from: [ -1 ], module: CBA, repeat: 1,  args: { in_channels: 3, out_channels: 64, kernel_size: 3, stride: 2, padding: 1 } } # 0-P1/2
+  - { type: flow, from: [ -1 ], module: BottleneckDW, repeat: 1, allow_repeat: True, args: { in_channels: 64, out_channels: 64, kernel_size: 3, stride: 1, padding: 1, groups: 64 } } # 1
+  - { type: flow, from: [ -1 ], module: BottleneckDW, repeat: 1, args: { in_channels: 64, out_channels: 64, kernel_size: 3, stride: 2, padding: 1, groups: 128 } } # 2-P2/4
+  - { type: flow, from: [ -1 ], module: BottleneckDW, repeat: 4, args: { in_channels: 64, out_channels: 64, kernel_size: 3, stride: 1, padding: 1, groups: 128, residual: True } } # 3
+  - { type: flow, from: [ -1 ], module: BottleneckDW, repeat: 1, args: { in_channels: 64, out_channels: 128, kernel_size: 3, stride: 2, padding: 1, groups: 256 } } # 4-P3/8
+  - { type: flow, from: [ -1 ], module: BottleneckDW, repeat: 6, args: { in_channels: 128, out_channels: 128, kernel_size: 3, stride: 1, padding: 1, groups: 256, residual: True } } # 5
+  - { type: flow, from: [ -1 ], module: BottleneckDW, repeat: 1, args: { in_channels: 128, out_channels: 128, kernel_size: 3, stride: 2, padding: 1, groups: 512 } } # 6-P4/16
+  - { type: flow, from: [ -1 ], module: BottleneckDW, repeat: 2, args: { in_channels: 128, out_channels: 128, kernel_size: 3, stride: 1, padding: 1, groups: 256, residual: True } } # 7
+  - { type: head, from: [ -1 ], module: GDCHead, repeat: 1, args: { in_channels: 128, embedding_size: 512 } } # 8

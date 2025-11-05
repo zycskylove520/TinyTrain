@@ -32,9 +32,10 @@ recognition
   └── inference_server
         └── onnx       -> TTBaseOnnxInferenceServer
 """
+from pathlib import Path
 
 from tinytrain.cfg import TTEngineRegistry
-from tinytrain.engine import TTCore, TTBaseExporter
+from tinytrain.engine import TTCore, TTBaseExporter, TTBaseModel
 from tinytrain.models.face.task.recognition import (
     FaceRecognitionModel,
     FaceRecognitionTrainer,

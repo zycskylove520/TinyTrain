@@ -8,7 +8,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from tinytrain.data.data_format import ClassifyBatchDataInfo
 from tinytrain.engine import TTBaseModel, TTBaseModel
 from tinytrain.engine.trainer import TTBaseTrainer
-from tinytrain.global_var import LOCAL_RANK
+from tinytrain.global_var import LOCAL_RANK, WORLD_SIZE
 from tinytrain.models.face.face_dataset import FaceRecognitionTrainDataset, FaceRecognitionValidDataset
 from tinytrain.utils import LOGGER
 
@@ -52,12 +52,15 @@ class FaceRecognitionTrainer(TTBaseTrainer):
             self.model.module_list[i] = DDP(self.model.module_list[i], device_ids=[LOCAL_RANK], gradient_as_bucket_view=True)
 
     def get_model_instance(self, world_size: int) -> TTBaseModel:
-        model: TTBaseModel = deepcopy(self.model)
-        for i in range(len(model.module_list)):
-            if isinstance(model.module_list[i], torch.nn.parallel.DistributedDataParallel):
-                model.module_list[i] = model.module_list[i].module
+        if world_size > 1:
+            model: TTBaseModel = deepcopy(self.model)
+            for i in range(len(model.module_list)):
+                if isinstance(model.module_list[i], torch.nn.parallel.DistributedDataParallel):
+                    model.module_list[i] = model.module_list[i].module
 
-        return model
+            return model
+        else:
+            return super().get_model_instance(world_size)
 
     def save_model(self, world_size: int, current_epoch: int):
         """
@@ -68,19 +71,17 @@ class FaceRecognitionTrainer(TTBaseTrainer):
             current_epoch (int): 当前训练轮次。
         """
         # 保存当前模型的DDP模式下的参数
-        self.ddp_model_state_dict = deepcopy(self.model.state_dict())
-
-        if LOCAL_RANK not in {-1, 0}:
-            return
+        if world_size > 1:
+            self.ddp_model_state_dict = deepcopy(self.model.state_dict())
 
         try:
-            # 保存非DDP模型参数
+            # 保存模型参数
             model: TTBaseModel = self.get_model_instance(world_size)
             model.eval()
 
             # 剔除criterion.weight参数
             new_state_dict = model.state_dict()
-            new_state_dict.pop("criterion.weight")
+            criterion_state_dict = new_state_dict.pop("criterion.weight")
 
             # 构建检查点
             checkpoint = {
@@ -94,18 +95,30 @@ class FaceRecognitionTrainer(TTBaseTrainer):
                 "model_args": {k: (v.as_posix() if isinstance(v, Path) else v) for k, v in self.config_manager.model.items()}
             }
 
+            criterion_checkpoint = {
+                'criterion': criterion_state_dict,  # PartialFC下不同进程的该参数shape不一致，需单独保存
+            }
+
             # 保存最新的模型
             torch.save(checkpoint, self.last_pt.as_posix())
+
+            last_criterion_pt = self.weight_dir / f"last_criterion_{LOCAL_RANK}.pt"
+            torch.save(criterion_checkpoint, last_criterion_pt.as_posix())
 
             # 保存最佳模型
             if self.best_fitness == self.fitness:
                 torch.save(checkpoint, self.best_pt.as_posix())
 
+                best_criterion_pt = self.weight_dir / f"best_criterion_{LOCAL_RANK}.pt"
+                torch.save(criterion_checkpoint, best_criterion_pt.as_posix())
+
             # 按周期保存模型（仅主进程）
             save_period = self.config_manager.core["save_period"]
             if save_period > 0 and (current_epoch + 1) % save_period == 0:
-                epoch_checkpoint_path = Path(self.weight_dir / f"epoch_{current_epoch + 1}.pt")
-                torch.save(checkpoint, epoch_checkpoint_path.as_posix())
+                epoch_pt = Path(self.weight_dir / f"epoch_{current_epoch + 1}.pt")
+                epoch_criterion_pt = Path(self.weight_dir / f"epoch_criterion_{current_epoch + 1}_{LOCAL_RANK}.pt")
+                torch.save(checkpoint, epoch_pt.as_posix())
+                torch.save(criterion_checkpoint, epoch_criterion_pt.as_posix())
 
         except Exception as e:
             LOGGER.error(f"Error occurred while saving model: {e}")
@@ -147,5 +160,63 @@ class FaceRecognitionTrainer(TTBaseTrainer):
 
         torch.save(checkpoint, self.simplified_pt.as_posix())
 
+    def load_extra_save_params(self, model: TTBaseModel) -> None:
+        """
+        加载额外保存的参数，如 criterion.weight。
+
+        Args:
+            model (TTBaseModel): 模型实例。
+        """
+
+        # 验证模式下不要加载额外参数
+        if self.config_manager.core["only_val"]:
+            return
+
+        model_pt: Path = self.config_manager.link["model"]
+        model_pt_stem = model_pt.stem
+
+        # 根据不同的权重文件类型加载criterion weight
+        if model_pt_stem.startswith("best"):
+            # 加载最佳模型对应的 criterion.weight
+            name = f"best_criterion_{LOCAL_RANK}.pt"
+            criterion_pt = model_pt.parent / name
+            if not criterion_pt.exists():
+                LOGGER.warning(f"{name} does not exist, LOCAL_RANK: {LOCAL_RANK} skip loading extra parameters.")
+                return
+            ckpt = torch.load(criterion_pt.as_posix(), map_location="cpu", weights_only=False)
+            criterion_state_dict = {'weight': ckpt['criterion']}
+            model.criterion.load_state_dict(criterion_state_dict, strict=True)
+
+        elif model_pt_stem.startswith("last"):
+            # 加载最新模型对应的 criterion.weight
+            name = f"last_criterion_{LOCAL_RANK}.pt"
+            criterion_pt = model_pt.parent / name
+            if not criterion_pt.exists():
+                LOGGER.warning(f"{name} does not exist, LOCAL_RANK: {LOCAL_RANK} skip loading extra parameters.")
+                return
+            ckpt = torch.load(criterion_pt.as_posix(), map_location="cpu", weights_only=False)
+            criterion_state_dict = {'weight': ckpt['criterion']}
+            model.criterion.load_state_dict(criterion_state_dict, strict=True)
+
+        elif model_pt_stem.startswith("epoch_criterion_"):
+            # 加载按周期保存的模型对应的 criterion.weight
+            epoch_num = model_pt_stem.split('_')[-1]
+            name = f"epoch_criterion_{epoch_num}_{LOCAL_RANK}.pt"
+            criterion_pt = model_pt.parent / name
+            if not criterion_pt.exists():
+                LOGGER.warning(f"{name} does not exist, LOCAL_RANK: {LOCAL_RANK} skip loading extra parameters.")
+                return
+            ckpt = torch.load(criterion_pt.as_posix(), map_location="cpu", weights_only=False)
+            criterion_state_dict = {'weight': ckpt['criterion']}
+            model.criterion.load_state_dict(criterion_state_dict, strict=True)
+
+        else:
+            # 如果权重文件类型不匹配，跳过加载
+            LOGGER.warning(f"Unknown model file type: {model_pt_stem}, skip loading extra parameters.")
+            return
+
     def load_model_to_final_eval(self, world_size, checkpoint):
-        self.model.load_state_dict(self.ddp_model_state_dict)
+        if world_size > 1:
+            self.model.load_state_dict(self.ddp_model_state_dict)
+        else:
+            super().load_model_to_final_eval(world_size, checkpoint)

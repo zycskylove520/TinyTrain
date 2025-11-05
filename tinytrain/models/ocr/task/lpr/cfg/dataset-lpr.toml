@@ -9,10 +9,10 @@ img_size = [94, 24]
 cache = false
 # 是否使用缓存，设置为 false 表示不使用缓存
 
-train = "datasets/mnist/train"
+train = "lpr_dataset/images/train"
 # 训练集图像路径
 
-val = "datasets/mnist/val"
+val = "lpr_dataset/images/val"
 # 验证集图像路径
 
 test = ""
