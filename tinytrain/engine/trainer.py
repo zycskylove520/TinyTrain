@@ -314,7 +314,7 @@ class TTBaseTrainer:
 
         # set train result
         if RANK in {-1, 0}:
-            self.train_result = TrainResult(save_dir=self.save_dir, launch_tb=self.config_manager.core["launch_tb"])
+            self.train_result = TrainResult(config_manager=self.config_manager, save_dir=self.save_dir)
 
         # check batch size
         self.check_batch_size(world_size)
@@ -1051,7 +1051,7 @@ class TTBaseTrainer:
             except Exception as e:
                 raise e
 
-        LOGGER.info(f"Save all config files in directory: {self.args_dir}")
+        LOGGER.info(f"All config files saved in directory -> {self.args_dir}")
 
     # ------------------------------------------------------------------
     # 4. 训练主循环
@@ -1415,7 +1415,7 @@ class TTBaseTrainer:
             # 按周期保存模型
             save_period = self.config_manager.core["save_period"]
             if save_period > 0 and (current_epoch + 1) % save_period == 0:
-                epoch_pt = Path(self.weight_dir / f"epoch_{current_epoch + 1}.pt")
+                epoch_pt = self.weight_dir / f"epoch_{current_epoch + 1}.pt"
                 torch.save(checkpoint, epoch_pt.as_posix())
 
         except Exception as e:

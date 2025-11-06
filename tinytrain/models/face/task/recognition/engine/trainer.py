@@ -75,6 +75,9 @@ class FaceRecognitionTrainer(TTBaseTrainer):
             self.ddp_model_state_dict = deepcopy(self.model.state_dict())
 
         try:
+            loss_weight_dir = self.weight_dir / "loss"
+            loss_weight_dir.mkdir(parents=True, exist_ok=True)
+
             # 保存模型参数
             model: TTBaseModel = self.get_model_instance(world_size)
             model.eval()
@@ -100,24 +103,28 @@ class FaceRecognitionTrainer(TTBaseTrainer):
             }
 
             # 保存最新的模型
-            torch.save(checkpoint, self.last_pt.as_posix())
+            if LOCAL_RANK in {-1, 0}:
+                torch.save(checkpoint, self.last_pt.as_posix())
 
-            last_criterion_pt = self.weight_dir / f"last_criterion_{LOCAL_RANK}.pt"
+            last_criterion_pt = loss_weight_dir / f"last_criterion_{LOCAL_RANK}.pt"
             torch.save(criterion_checkpoint, last_criterion_pt.as_posix())
 
             # 保存最佳模型
             if self.best_fitness == self.fitness:
-                torch.save(checkpoint, self.best_pt.as_posix())
+                if LOCAL_RANK in {-1, 0}:
+                    torch.save(checkpoint, self.best_pt.as_posix())
 
-                best_criterion_pt = self.weight_dir / f"best_criterion_{LOCAL_RANK}.pt"
+                best_criterion_pt = loss_weight_dir / f"best_criterion_{LOCAL_RANK}.pt"
                 torch.save(criterion_checkpoint, best_criterion_pt.as_posix())
 
             # 按周期保存模型（仅主进程）
             save_period = self.config_manager.core["save_period"]
             if save_period > 0 and (current_epoch + 1) % save_period == 0:
-                epoch_pt = Path(self.weight_dir / f"epoch_{current_epoch + 1}.pt")
-                epoch_criterion_pt = Path(self.weight_dir / f"epoch_criterion_{current_epoch + 1}_{LOCAL_RANK}.pt")
-                torch.save(checkpoint, epoch_pt.as_posix())
+                if LOCAL_RANK in {-1, 0}:
+                    epoch_pt = self.weight_dir / f"epoch_{current_epoch + 1}.pt"
+                    torch.save(checkpoint, epoch_pt.as_posix())
+
+                epoch_criterion_pt = loss_weight_dir / f"epoch_criterion_{current_epoch + 1}_{LOCAL_RANK}.pt"
                 torch.save(criterion_checkpoint, epoch_criterion_pt.as_posix())
 
         except Exception as e:
@@ -175,14 +182,19 @@ class FaceRecognitionTrainer(TTBaseTrainer):
         model_pt: Path = self.config_manager.link["model"]
         model_pt_stem = model_pt.stem
 
+        loss_weight_dir = model_pt.parent / "loss"
+        loss_weight_dir.mkdir(parents=True, exist_ok=True)
+
         # 根据不同的权重文件类型加载criterion weight
         if model_pt_stem.startswith("best"):
             # 加载最佳模型对应的 criterion.weight
             name = f"best_criterion_{LOCAL_RANK}.pt"
-            criterion_pt = model_pt.parent / name
+            criterion_pt = loss_weight_dir / name
+
             if not criterion_pt.exists():
                 LOGGER.warning(f"{name} does not exist, LOCAL_RANK: {LOCAL_RANK} skip loading extra parameters.")
                 return
+
             ckpt = torch.load(criterion_pt.as_posix(), map_location="cpu", weights_only=False)
             criterion_state_dict = {'weight': ckpt['criterion']}
             model.criterion.load_state_dict(criterion_state_dict, strict=True)
@@ -190,10 +202,12 @@ class FaceRecognitionTrainer(TTBaseTrainer):
         elif model_pt_stem.startswith("last"):
             # 加载最新模型对应的 criterion.weight
             name = f"last_criterion_{LOCAL_RANK}.pt"
-            criterion_pt = model_pt.parent / name
+            criterion_pt = loss_weight_dir / name
+
             if not criterion_pt.exists():
                 LOGGER.warning(f"{name} does not exist, LOCAL_RANK: {LOCAL_RANK} skip loading extra parameters.")
                 return
+
             ckpt = torch.load(criterion_pt.as_posix(), map_location="cpu", weights_only=False)
             criterion_state_dict = {'weight': ckpt['criterion']}
             model.criterion.load_state_dict(criterion_state_dict, strict=True)
@@ -202,10 +216,12 @@ class FaceRecognitionTrainer(TTBaseTrainer):
             # 加载按周期保存的模型对应的 criterion.weight
             epoch_num = model_pt_stem.split('_')[-1]
             name = f"epoch_criterion_{epoch_num}_{LOCAL_RANK}.pt"
-            criterion_pt = model_pt.parent / name
+            criterion_pt = loss_weight_dir / name
+
             if not criterion_pt.exists():
                 LOGGER.warning(f"{name} does not exist, LOCAL_RANK: {LOCAL_RANK} skip loading extra parameters.")
                 return
+
             ckpt = torch.load(criterion_pt.as_posix(), map_location="cpu", weights_only=False)
             criterion_state_dict = {'weight': ckpt['criterion']}
             model.criterion.load_state_dict(criterion_state_dict, strict=True)

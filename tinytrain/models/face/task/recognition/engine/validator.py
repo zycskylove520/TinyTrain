@@ -75,7 +75,7 @@ class FaceRecognitionValidator(TTBaseValidator):
             if self.trainer.train_result is not None:
                 self.trainer.train_result.add("Accuracy", acc)
                 self.trainer.train_result.add("TPR@FAR=1e-3", tpr_1e3)
-                self.trainer.train_result.add("TPR@FAR=1e-3", tpr_1e4)
+                self.trainer.train_result.add("TPR@FAR=1e-4", tpr_1e4)
                 self.trainer.train_result.add("best_threshold", best_threshold)
 
     def start_metrics_on_train_completed(self, pbar: TTProgressBar):

@@ -9,6 +9,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Generator, Any, Dict
 
+from torch.fx.experimental.symbolic_shapes import lru_cache
+
 from tinytrain.cfg import TTEngineRegistry, TTConfigManager
 from tinytrain.utils import LOGGER
 from tinytrain.utils.callback import Callback
@@ -113,6 +115,35 @@ class TTCore:
             setattr(self.config_manager, link_type, config)
         except AttributeError:
             raise AttributeError(f"Config type '{link_type}' is not supported.")
+
+    @staticmethod
+    def exclude_from_resume():
+        exclude_list = [
+            "launch_tb",
+            "amp",
+            "batch_size",
+            "workers",
+            "device",
+            "accumulate",
+            "patience",
+            "save_period",
+            "time",
+            "seed",
+            "deterministic",
+            "ema",
+            "grad_clip",
+            "bf16",
+            "fp16_pt",
+            "l1_norm",
+
+            # DDP
+            "use_torchrun",
+            "master_addr",
+            "master_port",
+            "nnodes",
+            "node_rank",
+        ]
+        return exclude_list
 
     # ------------------------------------------------------------------
     # 3. 对外主要 API
@@ -325,7 +356,10 @@ class TTCore:
             self.config_manager.link["model"] = Path(model)
 
             if resume:
-                self.config_manager.core = checkpoint["core_args"]
+                for k, v in checkpoint["core_args"].items():
+                    if k not in self.exclude_from_resume():
+                        self.config_manager.core[k] = v
+                # self.config_manager.core = checkpoint["core_args"]
                 # 要覆盖resume成指定的信息
                 self.config_manager.core["resume"] = resume
 
@@ -709,7 +743,7 @@ class TTCore:
 
         if pt_model is None:
             raise FileNotFoundError(
-                f"在 {task_dir} 及其子目录中均未找到可用的 last.pt"
+                f"No usable last.pt found in {task_dir} or its subdirectories"
             )
         return pt_model
 
