@@ -207,7 +207,6 @@ class TrainResult:
         - 首次写入自动生成表头。
         - 后续追加行，支持断点续训。
         """
-        self.save_dir.mkdir(parents=True, exist_ok=True)
         csv_file_path = self.save_dir / "result.csv"
 
         # 计算当前 epoch/step
@@ -222,7 +221,6 @@ class TrainResult:
             row_data[key] = val
 
         # 写文件
-        import csv
         write_header = not csv_file_path.exists()  # 文件不存在时才写表头
         with csv_file_path.open('a', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=[self.row_name] + list(self.data.keys()))
