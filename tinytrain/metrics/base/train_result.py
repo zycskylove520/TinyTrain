@@ -124,8 +124,8 @@ class TrainResult:
         记录单个指标值，并同步写入 TensorBoard。
 
         Args:
-            key (str): 指标名称，如 "loss_cls"。
-            value (int | float | Tensor): 数值或 0-D Tensor。
+            key (str): 指标名称，如 "lr"。
+            value (int | float | Tensor | str): 数值或 0-D Tensor 或字符串。
         """
         self.data.setdefault(key, []).append(value)
 
