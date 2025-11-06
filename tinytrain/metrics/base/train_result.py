@@ -52,6 +52,73 @@ class TrainResult:
             # 自动拉起 TensorBoard
             self._launch_tensorboard(tb_log_dir)
 
+        # 获取上次训练的result.csv文件，加载进来
+        if config_manager.core["resume"]:
+            self.resume_data()
+
+    def resume_data(self):
+        """
+        从 result.csv 中恢复历史指标，并调用 self.add() 写回 data 字典。
+        支持断点续训，重复调用本函数不会重复追加。
+        """
+        # 获取模型文件路径
+        model_pt: Path = self.config_manager.link["model"]
+        old_csv_file_path = model_pt.parent.parent / "result.csv"
+
+        if not old_csv_file_path.exists():
+            LOGGER.warning(f"{old_csv_file_path} not found, skip resume 'result.csv'.")
+            return
+
+        with old_csv_file_path.open(newline='') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)  # 全部读出来
+
+        if not rows:
+            LOGGER.warning("result.csv is empty, nothing to resume.")
+            return
+
+        # 先清空旧数据，防止重复累加
+        self.data.clear()
+
+        # 按列组织数据：{key: [val_row0, val_row1, ...]}
+        keys = reader.fieldnames
+        if not keys:
+            LOGGER.warning("CSV header is empty, skip resume.")
+            return
+
+        # 去掉第一列（通常是 epoch / step 索引列）
+        keys = [k for k in keys if k != self.row_name]
+
+        # 逐列恢复
+        for key in keys:
+            for row in rows:
+                raw = row.get(key, '')
+                if raw == '' or raw.lower() == 'nan':
+                    # 对 NaN / 空值统一用 float('nan') 占位
+                    self.add(key, float('nan'))
+                else:
+                    try:
+                        self.add(key, float(raw))
+                    except ValueError:
+                        # 如果转 float 失败，保留原始字符串
+                        self.add(key, raw)
+
+        # 写入保存到csv文件中
+        new_csv_file_path = self.save_dir / "result.csv"
+        with new_csv_file_path.open('w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=[self.row_name] + list(self.data.keys()))
+            writer.writeheader()
+
+            # 按行写入数据
+            num_rows = max(len(v) for v in self.data.values())
+            for i in range(num_rows):
+                row = {self.row_name: i + 1}  # 从 1 开始
+                for key, values in self.data.items():
+                    row[key] = values[i] if i < len(values) else float('nan')
+                writer.writerow(row)
+
+        LOGGER.info(f"Resumed {len(rows)} rows × {len(keys)} metrics from {old_csv_file_path}.")
+
     def add(self, key, value):
         """
         记录单个指标值，并同步写入 TensorBoard。
