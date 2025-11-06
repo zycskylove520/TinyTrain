@@ -35,12 +35,14 @@ class TrainResult:
         self.save_dir = save_dir
         self.data = {}
         self.row_name = row_name
-        self.launch_tb = launch_tb
+        self.launch_tb = self.config_manager.core["launch_tb"]
+
+        save_dir.mkdir(parents=True, exist_ok=True)
 
         # tensorboard visualize
         self.writer = None
         self.tb_proc = None
-        if launch_tb:
+        if self.launch_tb:
             # 创建 SummaryWriter
             tb_log_dir = save_dir / 'log'
             self.writer = SummaryWriter(tb_log_dir.as_posix())
