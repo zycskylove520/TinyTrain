@@ -2,15 +2,15 @@ import torch
 
 from tinytrain.cfg import TTConfigManager
 from tinytrain.data.data_format import BaseBatchDataInfo
-from tinytrain.engine import TTBaseModel
+from tinytrain.engine import TTConfigModel
 from tinytrain.global_var import WORLD_SIZE
 from tinytrain.models.face.face_loss import PartialFCLoss, FCLoss
 from tinytrain.models.face.task.recognition.margin import CombinedMargin
 
 
-class FaceRecognitionModel(TTBaseModel):
+class FaceRecognitionModel(TTConfigModel):
     """
-    人脸识别专用模型，继承自 TTBaseModel。
+    人脸识别专用模型，继承自 TTConfigModel。
 
     职责：
     1. 根据配置动态选用 MobileFaceNet / YOLOv11-FaceNet / ResFaceNet 等骨架。
@@ -23,23 +23,6 @@ class FaceRecognitionModel(TTBaseModel):
     - init_criterion 返回的是 PartialFCLoss，已内置 margin-based 分类损失。
     - custom_parse_model_level 中仅原地修改 module_info，不返回任何值；解析完成后由基类统一构建网络。
     """
-
-    def __init__(self, config_manager: TTConfigManager, device, *args, **kwargs):
-        """
-        初始化人脸识别模型。
-
-        Args:
-            config_manager (TTConfigManager): 全局配置管理器，需包含
-                model.name    – 网络名称 {MobileFaceNet | YOLOv11_FaceNet | ResFaceNet}
-                model.scale   – 模型尺度 {n/s/m/l/x}
-                model.scales  – 各尺度对应的 depth / width 系数
-                loss.*        – PartialFCLoss & CombinedMargin 所需超参
-                dataset.nc    – 类别数（身份数）
-            device (torch.device): 模型所在设备。
-            *args, **kwargs: 预留扩展字段，透传给 TTBaseModel。
-        """
-        super().__init__(config_manager=config_manager, device=device, *args, **kwargs)
-
     def init_criterion(self):
         """
         构建人脸识别专用损失函数（PartialFC + CombinedMargin）。

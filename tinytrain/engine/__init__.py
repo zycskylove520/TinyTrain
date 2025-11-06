@@ -1,7 +1,7 @@
 from .core import TTCore
 from .distiller import TTBaseDistiller
 from .exporter import TTBaseExporter
-from .model import TTBaseModel
+from .model import TTBaseModel, TTConfigModel, TTEasyModel
 from .predictor import TTBasePredictor
 from .trainer import TTBaseTrainer
 from .tuner import TTBaseTuner

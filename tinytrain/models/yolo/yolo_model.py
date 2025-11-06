@@ -8,13 +8,13 @@ from copy import deepcopy
 from torch import nn
 
 from tinytrain.cfg import TTConfigManager
-from tinytrain.engine import TTBaseModel
+from tinytrain.engine import TTConfigModel
 from tinytrain.utils import LOGGER
 from tinytrain.utils.any_utils import make_divisible
 from tinytrain.utils.checks import check_img_size
 
 
-class YOLOModel(TTBaseModel):
+class YOLOModel(TTConfigModel):
     """
     YOLOModel
     ~~~~~~~
@@ -36,7 +36,7 @@ class YOLOModel(TTBaseModel):
     - 所有模块延迟实例化，先校验再构建，**配置错误立即抛异常**。
     """
 
-    def __init__(self, config_manager: TTConfigManager, device, *args, **kwargs):
+    def __init__(self, config_manager: TTConfigManager, device):
         """
         初始化 YOLO 基类。
 
@@ -52,11 +52,9 @@ class YOLOModel(TTBaseModel):
             必须包含 model.scales / model.network / dataset.nc 等字段。
         device : torch.device
             模型所在设备。
-        *args, **kwargs
-            预留扩展参数，透传给 ``TTBaseModel``。
         """
         self.WIDTH_GAIN = None  # 宽度增益
-        super().__init__(config_manager=config_manager, device=device, *args, **kwargs)
+        super().__init__(config_manager=config_manager, device=device)
 
         # 调整输入图片尺寸，以满足YOLO要求
         self.config_manager.dataset["img_size"] = check_img_size(self.config_manager.dataset["img_size"])

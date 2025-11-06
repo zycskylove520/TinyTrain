@@ -1,13 +1,12 @@
 import torch
 
-from tinytrain.engine import TTBaseModel
+from tinytrain.engine import TTConfigModel
 from tinytrain.loss import LPRCTCLoss
 from tinytrain.models.ocr.ocr_data_format import LPRBatchDataInfo
 
 
-class LPRModel(TTBaseModel):
+class LPRModel(TTConfigModel):
     """LPRNet 车牌识别模型"""
-
     def init_criterion(self):
         return LPRCTCLoss(
             lpr_loss_gain=self.config_manager.loss['lpr_loss_gain'],

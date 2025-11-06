@@ -19,7 +19,7 @@ class YOLOPoseModel(YOLOModel):
     3. 通过 custom_parse_model_level 完成深度、宽度增益缩放，并依据尺度开启 c3k 分支。
     4. 对外保持 TTBaseModel 统一接口：forward(data) 自动返回 loss 或推理结果。
     """
-    def __init__(self, config_manager: TTConfigManager, device, *args, **kwargs):
+    def __init__(self, config_manager: TTConfigManager, device):
         """
         初始化关键点检测模型。
 
@@ -36,7 +36,7 @@ class YOLOPoseModel(YOLOModel):
             模型所在设备。
         """
         self.reg_max = None
-        super().__init__(config_manager=config_manager, device=device, *args, **kwargs)
+        super().__init__(config_manager=config_manager, device=device)
         self.initialize_weights()
 
         input_channel = config_manager.model["network"][0]["args"]["in_channels"]

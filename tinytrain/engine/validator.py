@@ -125,8 +125,8 @@ class TTBaseValidator:
             dist.barrier()
         return fitness
 
-    def inference(self, model: nn.Module, batch_samples: BaseBatchDataInfo, extra_data: Dict[str, Dict[str, Any]] | None = None) -> list[torch.Tensor]:
-        return model.inference(batch_samples.data, extra_data)
+    def inference(self, model: nn.Module, batch_samples: BaseBatchDataInfo) -> list[torch.Tensor]:
+        return model.inference(batch_samples.data)
 
     # ------------------------------------------------------------------
     # 3. 数据流水（子类需重写）

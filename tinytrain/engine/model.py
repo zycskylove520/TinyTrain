@@ -17,46 +17,44 @@ if TYPE_CHECKING:
 
 class TTBaseModel(nn.Module):
     """
-    TTBaseModel 是所有深度学习模型的统一基类，负责：
-    1. 根据配置文件动态解析网络结构（entry / flow / head）。
-    2. 管理前向传播：支持推理模式（inference）与训练模式（loss）。
-    3. 提供权重加载、初始化、日志打印等通用功能。
-    4. 兼容绝大多数AI任务（视觉、自然语言处理等）。
+    TinyTrain 框架中所有模型的抽象基类，承担统一建模规范、训练-推理流程控制、权重管理与初始化策略定义的核心职责。
 
-    设计要点：
-    - 结构配置完全由 TTConfigManager 驱动，无需硬编码。
-    - 支持深度增益（depth gain）自动缩放重复模块。
-    - 内置模块缓存机制（record_list + ask_set）确保数据流正确。
-    - 支持自定义模块解析（custom_parse_model_level）。
-    - 自动初始化权重（initialize_weights），支持 Kaiming / BN / ReLU 等。
+    本类通过定义标准化接口，将模型结构定义、损失函数构造、前向传播行为、权重加载与初始化等关键能力解耦，使得子类仅需关注任务相关的网络结构实现与损失定义，即可自动获得完整的训练与推理能力。
+
+    主要设计目标包括：
+    - 提供统一的 forward 入口，根据输入类型自动区分训练与推理模式；
+    - 规范损失函数初始化流程，确保与模型结构解耦；
+    - 支持非严格权重加载机制，实现跨模型结构迁移与微调；
+    - 内置通用权重初始化策略，覆盖卷积、批归一化与激活函数等常用模块；
+    - 支持激活函数原地（inplace）化，降低显存占用。
+
+    子类必须实现以下抽象方法：
+    - `init_criterion()`: 返回任务特定的损失函数实例；
+    - `inference()`: 定义模型在推理模式下的前向传播逻辑。
+
+    本类不建议被直接实例化，仅应作为所有任务模型的公共父类使用。
     """
 
     # ------------------------------------------------------------------
     # 1. 构造与入口
     # ------------------------------------------------------------------
-    def __init__(self, config_manager: TTConfigManager, device: torch.device = None, *args, **kwargs):
+    def __init__(self, config_manager: TTConfigManager, device: torch.device = None):
         """
         初始化模型。
 
         Args:
             config_manager (TTConfigManager): 配置管理器，包含模型结构、超参数、设备等信息。
-            *args, **kwargs: 预留扩展参数，供子类使用。
+            device (torch.device | None): 目标设备，仅做保存，不参与内部逻辑。
         """
-        super().__init__()
-        self.DEPTH_GAIN = None  # 深度增益
+        super(TTBaseModel, self).__init__()
 
         self.config_manager = config_manager
         self.device = device
 
-        self.module_list, self.record_list, self.ask_set, self.log_info = self.parse_model()
         self.criterion = None
 
-        # 只有第一次启动时打印模型信息
-        if RANK in {-1, 0}:
-            self._model_log()
-
     # ------------------------------------------------------------------
-    # 2. 子类可重写钩子
+    # 2. 子类必须实现的钩子
     # ------------------------------------------------------------------
     def init_criterion(self) -> BaseLoss:
         """
@@ -69,6 +67,43 @@ class TTBaseModel(nn.Module):
             NotImplementedError: 必须由子类实现。
         """
         raise NotImplementedError("init_criterion() needs to be implemented!")
+
+    def inference(self, *args, **kwargs):
+        """
+        推理模式前向传播。
+
+        Args:
+            *args, **kwargs: 子类自定义输入。
+
+        Returns:
+            任意类型: 模型推理输出。
+
+        Raises:
+            NotImplementedError: 必须由子类实现。
+        """
+        raise NotImplementedError("inference() needs to be implemented!")
+
+    # ------------------------------------------------------------------
+    # 3. 统一前向入口（不建议重写）
+    # ------------------------------------------------------------------
+    def forward(self, data: BaseBatchDataInfo | torch.Tensor | list[torch.Tensor] | Any | list[Any]):
+        """
+        统一入口：根据输入类型自动选择推理或训练模式。
+
+        Args:
+            data:
+                - BaseBatchDataInfo：训练/验证模式，计算 loss。
+                - torch.Tensor | list[torch.Tensor] | Any | list[Any]：推理模式，执行 inference函数。如果为torch.Tensor|Any，则表示模型单输入，如果为list[torch.Tensor]|list[Any]，表示模型多输入
+
+        Returns:
+            Union[list[torch.Tensor], tuple]: 推理输出或 (loss, loss_items)。
+        """
+
+        if isinstance(data, BaseBatchDataInfo):
+            outputs = self.inference(data.data)
+            return self.loss(outputs, data)
+        else:
+            return self.inference(data)
 
     def loss(self, preds: list[torch.Tensor], batch_samples: BaseBatchDataInfo) -> tuple[float, dict]:
         """
@@ -83,26 +118,39 @@ class TTBaseModel(nn.Module):
         """
         return self.criterion(preds, batch_samples)
 
-    def custom_modify_model(self, network):
+    # ------------------------------------------------------------------
+    # 4. 权重管理
+    # ------------------------------------------------------------------
+    def load_model_state_dict(self, state_dict, force_load=True):
         """
-        钩子：子类可重写以动态修改整个模型结构，包括增加或删减模块，以及修改模块参数等操作。
-        注意，这是一个危险的操作，除非你知道你在做什么。
+        加载权重，支持强制匹配或宽松匹配。
 
         Args:
-            network (dict): 整个模型结构的字典。
-        """
-        pass
+            state_dict (dict[str, torch.Tensor]): 待加载的权重字典。
+            force_load (bool, optional): True 时要求形状完全匹配，否则跳过；False 时抛出异常。默认 True。
 
-    def custom_parse_model_level(self, level, module_info):
+        Raises:
+            KeyError: force_load=False 且形状不匹配时抛出。
         """
-        钩子：子类可重写以动态修改模块每一层的参数配置。
+        model_state_dict = self.state_dict()
 
-        Args:
-            level (int): 当前模块属于第几层
-            module_info (dict): 当前模块的配置字典。
-        """
-        pass
+        match_state_dict = {}
+        for key in state_dict:
+            if key in self.state_dict():
+                if state_dict[key].shape == model_state_dict[key].shape:
+                    match_state_dict[key] = state_dict[key]
+                else:
+                    if not force_load:
+                        raise KeyError(f"no match key:{key}, pt key shape:{state_dict[key].shape}, model key shape:{model_state_dict[key].shape}")
+                    LOGGER.warning(f"no match key:{key}, pt key shape:{state_dict[key].shape}, model key shape:{model_state_dict[key].shape}")
+            else:
+                LOGGER.warning(f"not exist key:{key}")
 
+        self.load_state_dict(match_state_dict, strict=False)
+
+    # ------------------------------------------------------------------
+    # 5. 权重初始化
+    # ------------------------------------------------------------------
     def initialize_weights(self):
         """
         初始化模型权重：
@@ -126,65 +174,85 @@ class TTBaseModel(nn.Module):
             elif t in {nn.Hardswish, nn.LeakyReLU, nn.ReLU, nn.ReLU6, nn.SiLU}:
                 m.inplace = True
 
+
+class TTConfigModel(TTBaseModel):
+    """
+    面向配置文件驱动的结构化模型构建基类，支持通过配置描述文件（TOML/YAML）动态解析并构建深度学习模型，适用于绝大多数计算机视觉与自然语言处理任务。
+
+    本类继承自 `TTBaseModel`，在保留其统一训练-推理流程与权重管理能力的基础上，进一步引入配置化建模能力。模型结构完全由 `TTConfigManager` 提供的配置数据驱动，无需硬编码网络定义，从而实现模型结构的声明式描述与高度可复现性。
+
+    核心职责包括：
+    - 解析配置中定义的 entry、flow、head 三类模块，构建有向无环计算图；
+    - 支持深度增益（depth gain）自动缩放机制，实现模型复杂度的灵活调整；
+    - 提供模块级缓存机制，确保多分支结构下的中间结果正确复用；
+    - 支持自定义模块解析钩子（`custom_parse_model_level`）与结构修改钩子（`custom_modify_model`），允许子类在不破坏配置完整性的前提下干预模型构建过程；
+    - 内置模块动态加载机制，支持从 `torch.nn`、`torchvision.ops`、`transformers` 等标准库或用户注册表中加载模块类；
+    - 提供结构化日志输出，便于开发者审查模型构建结果与模块参数。
+
+    配置语法要求：
+    - 第 0 层必须为 entry 类型，且其输入来源必须为 `[-1]`；
+    - 所有层必须声明其输入来源（`from` 字段），支持多输入融合；
+    - head 类型模块为模型输出节点，至少需存在一个；
+    - 支持 `repeat` 字段定义模块重复次数，并结合 `depth_gain` 自动缩放；
+    - 支持 `allow_repeat` 字段允许宽度维度上的重复扩展。
+
+    本类适用于需要高度可配置、可扩展、可复现的建模场景，尤其适合科研实验、模型结构搜索与多任务统一训练框架。
+    """
+
+    # ------------------------------------------------------------------
+    # 1. 构造与入口
+    # ------------------------------------------------------------------
+    def __init__(self, config_manager: TTConfigManager, device: torch.device = None):
+        """
+        初始化模型。
+
+        Args:
+            config_manager (TTConfigManager): 配置管理器，包含模型结构、超参数、设备等信息。
+            device (torch.device | None): 目标设备，仅做保存，不参与内部逻辑。
+        """
+        super().__init__(config_manager, device)
+        self.DEPTH_GAIN = None  # 深度增益
+
+        self.module_list, self.record_list, self.ask_set, self.log_info = self.parse_model()
+
+        # 只有第一次启动时打印模型信息
+        if RANK in {-1, 0}:
+            self._model_log()
+
+    # ------------------------------------------------------------------
+    # 2. 子类可重写钩子
+    # ------------------------------------------------------------------
+    def custom_modify_model(self, network):
+        """
+        钩子：子类可重写以动态修改整个模型结构，包括增加或删减模块，以及修改模块参数等操作。
+        注意，这是一个危险的操作，除非你知道你在做什么。
+
+        Args:
+            network (dict): 整个模型结构的字典。
+        """
+        pass
+
+    def custom_parse_model_level(self, level, module_info):
+        """
+        钩子：子类可重写以动态修改模块每一层的参数配置。
+
+        Args:
+            level (int): 当前模块属于第几层
+            module_info (dict): 当前模块的配置字典。
+        """
+        pass
+
     # ------------------------------------------------------------------
     # 3. 统一前向入口（不建议重写）
     # ------------------------------------------------------------------
-    def forward(self, data: BaseBatchDataInfo | torch.Tensor | list[torch.Tensor], extra_data: Dict[str, Dict[str, Any]] | None = None):
-        """
-        统一入口：根据输入类型自动选择推理或训练模式。
-
-        Args:
-            data:
-                - BaseBatchDataInfo：训练/验证模式，计算 loss。
-                - torch.Tensor | list[torch.Tensor]：推理模式，执行 inference。
-            extra_data:
-                - (dict[str | int, dict[str, Any]] | None, optional): 按 **层级索引** 或 **模块名** 精准投递的额外关键字参数。
-                外层字典的 key 为模型结构的层级索引或目标模块的注册名（注册的自定义模块或第三方模块），
-                内层字典即为该模块 ``forward`` 接收的额外关键字参数。例如：
-                    >>> mask_tensor = torch.ones(3, 3)
-                    >>> embed_tensor = torch.ones(2)
-                    >>> extra_data = {
-                    >>>     4: {"p": 0.2},  # 仅第4层的forward函数会收到 p 参数
-                    >>>     "MyModule1": {"scale": 1.5, "mask": mask_tensor},  # 仅 MyModule1的forward函数会收到 scale 和 mask参数
-                    >>>     "MyModule2": {"embed": embed_tensor},               # 仅 MyModule2的forward函数会收到 embed参数
-                    >>> }
-                若某模块在 ``extra_data`` 中没有对应条目，则调用时不会传入任何额外参数。
-                层级索引的优先级大于模块名，如果存在层级索引和模块名共用于同一个层级，则使用层级索引对应的参数
-                默认值为 ``None``，表示不向任何模块投递额外参数。
-
-        Returns:
-            Union[list[torch.Tensor], tuple]: 推理输出或 (loss, loss_items)。
-        """
-
-        if isinstance(data, BaseBatchDataInfo):
-            outputs = self.inference(data.data, extra_data)
-            return self.loss(outputs, data)
-        elif isinstance(data, (torch.Tensor, list[torch.Tensor])):
-            return self.inference(data, extra_data)
-        else:
-            raise TypeError(f"type(data): {type(data)} is not supported")
-
-    def inference(self, data: torch.Tensor | list[torch.Tensor], extra_data: Dict[str | int, Dict[str, Any]] = None) -> list[torch.Tensor]:
+    def inference(self, data: torch.Tensor | list[torch.Tensor] | Any | list[Any]) -> list[torch.Tensor]:
         """
         推理模式前向传播。
 
         Args:
-            data (torch.Tensor | list[torch.Tensor]): 模型输入。
-                单输入时可直接传入 ``torch.Tensor``；
-                多输入时请传入 ``list[torch.Tensor]``，列表顺序需与模型配置中 ``entry`` 层的顺序一一对应。
-            extra_data (dict[str | int, dict[str, Any]] | None, optional): 按 **层级索引** 或 **模块名** 精准投递的额外关键字参数。
-                外层字典的 key 为模型结构的层级索引或目标模块的注册名（注册的自定义模块或第三方模块），
-                内层字典即为该模块 ``forward`` 接收的额外关键字参数。例如：
-                    >>> mask_tensor = torch.ones(3, 3)
-                    >>> embed_tensor = torch.ones(2)
-                    >>> extra_data = {
-                    >>>     4: {"p": 0.2},  # 仅第4层的forward函数会收到 p 参数
-                    >>>     "MyModule1": {"scale": 1.5, "mask": mask_tensor},  # 仅 MyModule1的forward函数会收到 scale 和 mask参数
-                    >>>     "MyModule2": {"embed": embed_tensor},               # 仅 MyModule2的forward函数会收到 embed参数
-                    >>> }
-                若某模块在 ``extra_data`` 中没有对应条目，则调用时不会传入任何额外参数。
-                层级索引的优先级大于模块名，如果存在层级索引和模块名共用于同一个层级，则使用层级索引对应的参数
-                默认值为 ``None``，表示不向任何模块投递额外参数。
+            data (torch.Tensor | list[torch.Tensor] | Any | list[Any]): 模型输入。
+                单输入时可直接传入 ``torch.Tensor | Any``；
+                多输入时请传入 ``list[torch.Tensor] | list[Any]``，列表顺序需与模型配置中 ``entry`` 层的顺序一一对应。
 
         Returns:
             list[torch.Tensor]: 模型输出列表（每个 head 对应一个输出）。
@@ -225,15 +293,7 @@ class TTBaseModel(nn.Module):
                     else:
                         current_data = tuple(current_data if rf == -1 else self.record_list[rf]["data"] for rf in frm)
 
-                if extra_data:
-                    # 先根据层级索引获取额外数据，拿不到的情况下再考虑模块名获取额外数据
-                    level_extra_data = extra_data.get(i, {})
-                    if level_extra_data:
-                        current_data = layer(current_data, **level_extra_data)
-                    else:
-                        current_data = layer(current_data, **extra_data.get(module_name, {}))
-                else:
-                    current_data = layer(current_data)
+                current_data = layer(current_data)
 
                 if module_type == "head":
                     outputs.append(current_data)
@@ -359,9 +419,9 @@ class TTBaseModel(nn.Module):
             ValueError: 所有查找路径均未命中时抛出，提示检查拼写、补充候选包或使用 `@register_module` 注册。
 
         Examples:
-            >>> TTBaseModel.get_layer("ReLU")           # 返回 torch.nn.ReLU
-            >>> TTBaseModel.get_layer("my_pkg.MyBlock") # 返回自定义包中的 MyBlock
-            >>> TTBaseModel.get_layer("CustomBlock")    # 返回 @register_module 注册的 CustomBlock
+            >>> TTConfigModel.get_layer("ReLU")           # 返回 torch.nn.ReLU
+            >>> TTConfigModel.get_layer("my_pkg.MyBlock") # 返回自定义包中的 MyBlock
+            >>> TTConfigModel.get_layer("CustomBlock")    # 返回 @register_module 注册的 CustomBlock
         """
         import importlib
         module_str = module_str.strip()
@@ -468,32 +528,75 @@ class TTBaseModel(nn.Module):
             )
         print(f"model summary: {scale_info['summary']}\n")
 
+
+class TTEasyModel(TTBaseModel):
+    """
+    极简手动建模基类，专为无需配置、快速原型开发、教学演示或高度定制化模型结构设计的轻量级建模入口。
+
+    本类继承自 `TTBaseModel`，在保留其统一前向传播、权重加载与初始化能力的前提下，移除配置驱动的模型构建逻辑，允许开发者以最直接的方式定义模型结构。子类仅需在 `setup_model()` 方法中返回一个标准的 `torch.nn.Module` 实例，即可自动获得完整的训练与推理能力。
+
+    核心设计目标包括：
+    - 最小化建模开销，适用于脚本式开发、单元测试、算法验证等场景；
+    - 完全兼容 `TTBaseModel` 的权重管理、初始化和训练流程；
+    - 不引入任何配置依赖，模型结构由开发者显式定义，确保最大灵活性；
+    - 支持任意复杂度的模型结构，包括多输入、多输出、动态图等高级特性。
+
+    使用方式：
+    - 子类继承 `TTEasyModel`；
+    - 实现 `setup_model()` 方法，返回一个 `nn.Module` 实例；
+    - 实现 `init_criterion()` 定义损失函数；
+    - 模型将自动具备训练、推理、权重加载与初始化能力。
+
+    本类适用于以下场景：
+    - 快速验证算法可行性；
+    - 构建无法通过配置描述的复杂结构；
+    - 教学或演示目的，降低框架使用门槛；
+    - 需要完全控制模型构建过程的高级开发者。
+
+    注意：本类不提供结构化日志或配置解析能力，模型结构完全由开发者负责维护。
+    """
+
     # ------------------------------------------------------------------
-    # 5. 权重参数加载
+    # 1. 构造与入口
     # ------------------------------------------------------------------
-    def load_model_state_dict(self, state_dict, force_load=True):
+    def __init__(self, config_manager: TTConfigManager, device: torch.device = None):
         """
-        加载权重，支持强制匹配或宽松匹配。
+        初始化模型。
 
         Args:
-            state_dict (dict[str, torch.Tensor]): 待加载的权重字典。
-            force_load (bool, optional): True 时要求形状完全匹配，否则跳过；False 时抛出异常。默认 True。
+            config_manager (TTConfigManager | None): 预留参数，始终可传 None。
+            device (torch.device | None): 目标设备，仅做保存，不参与内部逻辑。
+        """
+        super().__init__(config_manager, device)
+
+        self.model = self.setup_model()
+
+    # ------------------------------------------------------------------
+    # 2. 子类必须实现的钩子
+    # ------------------------------------------------------------------
+    def setup_model(self) -> nn.Module:
+        """
+        子类在此返回一个现成的 nn.Module，作为推理核心。
+
+        Returns:
+            nn.Module: 任意 PyTorch 模型。
 
         Raises:
-            KeyError: force_load=False 且形状不匹配时抛出。
+            NotImplementedError: 必须由子类实现。
         """
-        model_state_dict = self.state_dict()
+        raise NotImplementedError("set_model() needs to be implemented!")
 
-        match_state_dict = {}
-        for key in state_dict:
-            if key in self.state_dict():
-                if state_dict[key].shape == model_state_dict[key].shape:
-                    match_state_dict[key] = state_dict[key]
-                else:
-                    if not force_load:
-                        raise KeyError(f"no match key:{key}, pt key shape:{state_dict[key].shape}, model key shape:{model_state_dict[key].shape}")
-                    LOGGER.warning(f"no match key:{key}, pt key shape:{state_dict[key].shape}, model key shape:{model_state_dict[key].shape}")
-            else:
-                LOGGER.warning(f"not exist key:{key}")
+    # ------------------------------------------------------------------
+    # 3. 统一前向入口（不建议重写）
+    # ------------------------------------------------------------------
+    def inference(self, data: Any) -> Any:
+        """
+        推理模式：直接调用内部模型。
 
-        self.load_state_dict(match_state_dict, strict=False)
+        Args:
+            data (Any): 任意输入，会被原样传给 `self.model`。
+
+        Returns:
+            Any: `self.model(data)` 的返回值。
+        """
+        return self.model(data)

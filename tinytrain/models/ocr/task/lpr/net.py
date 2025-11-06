@@ -46,7 +46,7 @@ class LPRBackbone(nn.Module):
         super(LPRBackbone, self).__init__()
         self.backbone = nn.Sequential(
             nn.Conv2d(in_channels=3, out_channels=64, kernel_size=3, stride=1),  # 0
-            nn.BatchNorm2d(num_features=64), # 1
+            nn.BatchNorm2d(num_features=64),  # 1
             nn.ReLU(),  # 2
             nn.MaxPool3d(kernel_size=(1, 3, 3), stride=(1, 1, 1), dilation=(1, 1, 1)),  # 3
             LPRBaseBlock(in_channels=64, out_channels=128),  # 4
