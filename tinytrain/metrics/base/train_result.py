@@ -24,13 +24,14 @@ class TrainResult:
     5. 追加写入 CSV，兼容中断续写。
     """
 
-    def __init__(self, save_dir: Path, row_name='epoch', launch_tb: bool = True):
+    def __init__(self, config_manager, save_dir: Path, row_name='epoch'):
         """
         Args:
             save_dir (Path): 结果保存目录，内部创建子目录 `log/` 和文件。
             row_name (str): 横轴名称，默认 "epoch"，可改为 "step"。
             launch_tb (bool): 是否自动启动 TensorBoard。
         """
+        self.config_manager = config_manager
         self.save_dir = save_dir
         self.data = {}
         self.row_name = row_name
