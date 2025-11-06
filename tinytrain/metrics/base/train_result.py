@@ -212,7 +212,7 @@ class TrainResult:
 
         # 计算当前 epoch/step
         row_num = max(len(v) for v in self.data.values())  # 当前行号
-        epoch = row_num                     # 与旧版本保持一致，从 1 开始
+        epoch = row_num  # 从 1 开始
         row_data = {self.row_name: epoch}
 
         # 组装这一行的所有列
