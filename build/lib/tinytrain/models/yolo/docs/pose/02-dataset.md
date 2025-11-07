@@ -1,3 +1,0 @@
-yolo姿态估计的dataset.toml文件支持以下约定：
-1. keypoint_shape参数的第二个维度指定的值如果为2，则读取数据集时，默认为所有的关键点添加mask值，并且mask值全部为0。
-2. keypoint_shape参数的第二个维度指定的值如果大于3，则默认默认以第三个维度为mask。

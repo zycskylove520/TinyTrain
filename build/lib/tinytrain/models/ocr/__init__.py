@@ -1,1 +1,0 @@
-from .ocr_core import OCRCore
