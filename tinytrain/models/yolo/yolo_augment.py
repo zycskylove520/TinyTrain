@@ -7,7 +7,7 @@ from tinytrain.cfg import TTConfigManager
 from tinytrain.data.data_format import DetectDataInfo, PoseDataInfo, SegmentDataInfo
 from tinytrain.data.base import TTBaseAugmentation
 from tinytrain.utils.any_utils import make_N_tuple
-from tinytrain.data.augment_ops import DynamicFilling
+from tinytrain.data.ops import DynamicFilling
 from tinytrain.utils.segment_utils import polygons2masks_overlap, polygons2masks
 
 
