@@ -10,9 +10,11 @@ from typing import TYPE_CHECKING, Any, Generator, Union
 
 from tinytrain.cfg import TTConfigManager, TTEngineRegistry
 from tinytrain.data.data_format import BaseDataInfo
+from tinytrain.global_var import TIMER_ENABLED
 from tinytrain.utils import LOGGER
 from tinytrain.utils.any_utils import create_iter_directory
 from tinytrain.utils.callback import Callback
+from tinytrain.utils.time_recorder import TimeRecorder
 
 if TYPE_CHECKING:
     from torch import nn
@@ -93,10 +95,12 @@ class TTBasePredictor:
         self.postprocess_result = None
 
         # save dir
-        save_dir = Path(config_manager.core["save_dir"]).resolve()
-        project_name = config_manager.core["project_name"] or "default_project"
-        self.save_dir = save_dir / project_name / config_manager.core["task"] / "predict"
         self.output_dir = None
+
+        # time recorder
+        self.preprocess_recoder = TimeRecorder(self.device, "preprocess")
+        self.inference_recoder = TimeRecorder(self.device, "inference")
+        self.postprocess_recoder = TimeRecorder(self.device, "postprocess")
 
     # ------------------------------------------------------------------
     # 2. 唯一公开主链
@@ -113,7 +117,9 @@ class TTBasePredictor:
         """
         from tinytrain.utils.source_loader import SourceParserHub
 
-        self.output_dir = create_iter_directory(self.save_dir, start_string="predict_")
+        core = self.config_manager.core
+        save_dir = Path(core["save_dir"]).resolve() / (core["project_name"] or "default_project") / core["task"] / "predict"
+        self.output_dir = create_iter_directory(save_dir, start_string="predict_")
 
         self.callback.run_callback(self, "on_predict_start")
         try:
@@ -125,6 +131,8 @@ class TTBasePredictor:
             yield from self._consume()
         finally:
             self.callback.run_callback(self, "on_predict_end")
+
+        LOGGER.info(f"Predict result saved in directory -> {self.output_dir}")
 
     # ------------------------------------------------------------------
     # 3. 后端初始化（内部工具）
@@ -263,16 +271,16 @@ class TTBasePredictor:
         for data_info in batch:
             self.callback.run_callback(self, "on_predict_batch_start")
 
-            self.preprocess_result = self.preprocess(data_info)
-
+            with self.preprocess_recoder:
+                self.preprocess_result = self.preprocess(data_info)
             self.callback.run_callback(self, "on_predict_preprocess_end")
 
-            self.inference_result = self.inference(self.preprocess_result)
-
+            with self.inference_recoder:
+                self.inference_result = self.inference(self.preprocess_result)
             self.callback.run_callback(self, "on_predict_inference_end")
 
-            self.postprocess_result = self.postprocess(data_info, self.inference_result)
-
+            with self.postprocess_recoder:
+                self.postprocess_result = self.postprocess(data_info, self.inference_result)
             self.callback.run_callback(self, "on_predict_batch_end")
 
             yield self.show(data_info, self.postprocess_result)

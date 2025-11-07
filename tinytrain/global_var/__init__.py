@@ -12,7 +12,6 @@ from matplotlib.font_manager import FontProperties
 
 # path
 ROOT = Path(__file__).resolve().parent.parent  # TinyTrain/
-DEFAULT_CFG_PATH = ROOT / "cfg"
 ASSETS_PATH = ROOT / "assets"
 
 # PyTorch Multi-GPU DDP
@@ -20,6 +19,9 @@ RANK = int(os.getenv("RANK", -1))
 LOCAL_RANK = int(os.getenv("LOCAL_RANK", -1))
 WORLD_SIZE = int(os.getenv("WORLD_SIZE", 1))
 NUM_THREADS = min(8, max(1, os.cpu_count() - 1))
+
+# profiler
+TIMER_ENABLED = True  # 是否进行耗时统计
 
 # log
 LOGGING_NAME = "TinyTrain"
@@ -34,7 +36,6 @@ warnings.filterwarnings("ignore", module="albumentations.*")
 
 # opencv
 cv2.setNumThreads(NUM_THREADS)  # 在模块初始化时设置一次
-
 
 # font
 def localization(font: str = None):

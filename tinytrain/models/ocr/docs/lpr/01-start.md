@@ -59,7 +59,7 @@
 from tinytrain import OCRCore
 
 # 指定车牌识别模型的link.toml文件
-ocr = OCRCore(link_file="../../task/lpr/link.toml")
+ocr = OCRCore(link_file="ocr/task/lpr/link.toml")
 
 # 可通过override覆盖配置文件参数
 ocr.set_config_overrides(
@@ -68,7 +68,7 @@ ocr.set_config_overrides(
   warmup_epochs=2,
   epochs=10,
   batch_size=16,
-  lr0=1e-2,
+  lr0=1e-3,
   lr1=1e-4,
   scheduler="auto",
   workers=1,

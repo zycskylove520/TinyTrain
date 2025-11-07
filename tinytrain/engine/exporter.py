@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 from pathlib import Path
 from typing import TYPE_CHECKING, Union
 
 from tinytrain.cfg import TTConfigManager, TTEngineRegistry
+from tinytrain.utils import LOGGER
+from tinytrain.utils.any_utils import create_iter_directory
 from tinytrain.utils.callback import Callback
 
 if TYPE_CHECKING:
@@ -60,25 +63,31 @@ class TTBaseExporter:
         # callback
         self.callback = callback
 
+        # save dir
+        self.output_dir = None
+
     # ------------------------------------------------------------------
     # 2. 唯一公开主链
     # ------------------------------------------------------------------
-    def export(self, export_dir: str | Path):
+    def export(self):
         """
         执行模型导出流程，将模型转换为目标格式并保存到指定目录。
-
-        Args:
-            export_dir (str | Path): 导出目录路径，不存在将自动创建。
 
         Raises:
             Exception: 导出过程中发生的任何错误。
         """
         import torch
 
+        core = self.config_manager.core
+        save_dir = Path(core["save_dir"]).resolve() / (core["project_name"] or "default_project") / core["task"] / "export"
+        self.output_dir = create_iter_directory(save_dir, start_string="export_")
+
         self.callback.run_callback(self, "on_export_start")
         with torch.inference_mode():
-            self.export_server.export(export_dir)
+            self.export_server.export(self.output_dir)
         self.callback.run_callback(self, "on_export_end")
+
+        LOGGER.info(f"Export result saved in directory -> {self.output_dir}")
 
     # ------------------------------------------------------------------
     # 3. 内部工具（不建议重写）

@@ -180,10 +180,6 @@ class TTCore:
         else:
             self._launch_training(model_scale, model, use_last_pt)
 
-        # import gc
-        # LOGGER.info("Training completed. Waiting for garbage collection...")
-        # gc.collect()
-
     def predict(self, source, model: str | Path | None = None, backend: str | None = None, use_best_pt=False, **kwargs) -> Generator[Any, None, None]:
         """
         启动推理。
@@ -218,7 +214,7 @@ class TTCore:
         """
         yield from self.predict(source, model, **kwargs)
 
-    def export(self, backend: str, model: str | Path | None = None, export_dir=None, use_best_pt=False, **kwargs):
+    def export(self, backend: str, model: str | Path | None = None, use_best_pt=False, **kwargs):
         """
         启动导出。
 
@@ -241,7 +237,7 @@ class TTCore:
         if self.exporter is None:
             self._bind_exporter(backend=backend, model=model, **kwargs)
 
-        self.exporter.export(export_dir=export_dir)
+        self.exporter.export()
 
     def tune(self, model_scale: str = None, pop_size=40, generations=20) -> Dict[str, Any]:
         """

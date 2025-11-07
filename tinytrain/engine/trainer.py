@@ -187,6 +187,7 @@ class TTBaseTrainer:
             self._graceful_shutdown(world_size)
             LOGGER.info("Releasing memory...")
             self._clear_memory()
+            LOGGER.info("Done.")
 
     # ------------------------------------------------------------------
     # 2. 数据与预处理（子类可重写）
@@ -338,7 +339,7 @@ class TTBaseTrainer:
 
         # set scheduler
         self.set_warmup_scheduler()
-        self.set_normal_scheduler()
+        self.set_standard_scheduler()
 
         # EarlyStopping
         self.early_stopping = EarlyStopping(self.config_manager.core["patience"])
@@ -390,6 +391,8 @@ class TTBaseTrainer:
         self.best_pt = self.weight_dir / "best.pt"
         self.simplified_pt = self.weight_dir / "simplified_best.pt"
 
+        LOGGER.info(f"Save directory setting completed. ✅")
+
     def set_dataset_dir(self) -> None:
         """
         设置训练、验证和测试数据集路径。
@@ -418,6 +421,8 @@ class TTBaseTrainer:
         if self.config_manager.dataset.get("test"):
             self.test_dir = _get_dirs(self.config_manager.dataset["test"])
 
+        LOGGER.info(f"Dataset directory setting completed ✅")
+
     def check_batch_size(self, world_size: int):
         """
         检查 batch_size 是否合理，是否支持 DDP。
@@ -439,7 +444,7 @@ class TTBaseTrainer:
         if world_size > 1:
             LOGGER.info(f"{world_size} GPU(s) found. Each GPU has a batch size of {self.batch_size}.")
         else:
-            LOGGER.info(f"Training batch size: {self.batch_size}")
+            LOGGER.info(f"Training batch size: {self.batch_size} ✅")
 
     def check_amp(self, world_size: int):
         """
@@ -503,7 +508,7 @@ class TTBaseTrainer:
         Args:
             world_size (int): 分布式训练中的进程数量。
         """
-        LOGGER.info(f"Setting dataloader...")
+        LOGGER.info(f"Initializing dataloader...")
         only_val = self.config_manager.core["only_val"]
 
         # train dataloader
@@ -527,6 +532,8 @@ class TTBaseTrainer:
         # test dataloader
         if self.test_dir:
             self.test_dataloader = self.build_dataloader(world_size, mode="test")
+
+        LOGGER.info(f"DataLoader initialization completed ✅")
 
     def build_dataloader(self, world_size: int, mode: str = "train", shuffle_val=False, shuffle_test=False, dist_val=False, dist_test=False):
         """
@@ -675,7 +682,7 @@ class TTBaseTrainer:
         Args:
             world_size (int): 分布式训练中的进程数量。
         """
-        LOGGER.info(f"Setting model...")
+        LOGGER.info(f"Setting up model...")
 
         # freeze layers
         self.freeze_layers(self.model, world_size)
@@ -702,6 +709,8 @@ class TTBaseTrainer:
         if self.config_manager.core["ema"]:
             self.ema = ModelEMA(self.get_model_instance(world_size))
             LOGGER.info("EMA(Exponential Moving Average) is enabled.")
+
+        LOGGER.info(f"Model setup complete ✅")
 
     def convert_ddp_model(self, world_size: int) -> None:
         """
@@ -830,6 +839,8 @@ class TTBaseTrainer:
                         state["step"] = 0
                         state["sum"] = torch.zeros_like(p, memory_format=torch.preserve_format)
 
+        LOGGER.info(f"Optimizer setting completed ✅")
+
     def resume_training(self):
         """
         从 checkpoint 恢复训练，包括 epoch、optimizer、fitness 等。
@@ -931,20 +942,22 @@ class TTBaseTrainer:
                 last_epoch=last_epoch
             )
 
-    def set_normal_scheduler(self, normal_scheduler=None):
+        LOGGER.info(f"Warmup scheduler setting completed ✅")
+
+    def set_standard_scheduler(self, standard_scheduler=None):
         """
         设置正式训练阶段的学习率调度器。
 
         Args:
-            normal_scheduler : 支持传入指定的学习率调度器。
+            standard_scheduler : 支持传入指定的学习率调度器。
         """
-        LOGGER.info(f"Setting normal scheduler...")
+        LOGGER.info(f"Setting standard scheduler...")
 
         if self.epochs <= self.warmup_epochs:
             return
 
-        if normal_scheduler:
-            self.normal_scheduler = normal_scheduler
+        if standard_scheduler:
+            self.scheduler = standard_scheduler
             return
 
         scheduler_name = self.config_manager.core["scheduler"]
@@ -1013,7 +1026,7 @@ class TTBaseTrainer:
                 min_lr=lr0 * lr1,
             )
         else:
-            LOGGER.warning(f"Unknown normal scheduler '{scheduler_name}', fallback to LinearLR.")
+            LOGGER.warning(f"Unknown standard scheduler '{scheduler_name}', fallback to LinearLR.")
             self.scheduler = optim.lr_scheduler.LinearLR(
                 self.optimizer,
                 start_factor=1.0,
@@ -1021,6 +1034,8 @@ class TTBaseTrainer:
                 total_iters=normal_epochs,
                 last_epoch=last_epoch
             )
+
+        LOGGER.info(f"Standard scheduler setting completed ✅")
 
     def save_config_file(self):
         """

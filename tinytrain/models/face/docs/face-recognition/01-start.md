@@ -73,21 +73,20 @@ face = FaceCore(link_file="../../task/recognition/link.toml")
 face.set_config_overrides(
     link_type="core",
     task="recognition",  # 指定task为recognition
-    warmup_epochs=2,
-    epochs=10,
+    warmup_epochs=3,
+    warmup_lr=1e-4,
+    epochs=20,
     batch_size=16,
-    lr0=1e-2,
-    lr1=1e-4,
-    scheduler="auto",
-    workers=1,
-    launch_tb=False,
-    amp=False,
+    lr0=1e-3,   # 推荐学习率
+    lr1=1e-2,
+    scheduler="LinearLR",
+    workers=1
 )
 
 face.set_config_overrides(
     link_type="dataset",
-    img_size=28,
-    cache=False
+    train_img_size=112,
+    val_img_size=112,
 )
 
 # 启动训练
@@ -112,7 +111,7 @@ face.set_config_overrides(
 results = face.predict(
     use_best_pt=True,
     source=["1.png", "2.png"],
-    img_shape=(28, 28),
+    img_shape=(112, 112),
 )
 for result in results:
     print(result)
@@ -136,7 +135,7 @@ face.set_config_overrides(
 face.export(
     use_best_pt=True,
     backend="onnx",  # 导出到onnx平台
-    input_shapes=[(1, 3, 28, 28)],
+    input_shapes=[(1, 3, 112, 112)],
     # jit_export=True,
     opset_version=11
 )

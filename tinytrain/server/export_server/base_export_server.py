@@ -31,25 +31,25 @@ class TTBaseExportServer:
         self.model = model
         self.device = device
 
-    def __call__(self, export_dir: str | Path = None):
+    def __call__(self, export_dir: Path):
         """
         允许实例像函数一样被直接调用，内部转发到 `export` 方法。
 
         Args
         ----
-        export_dir : str | Path | None
-            导出目录，若为 None 则使用配置文件中的默认路径。
+        export_dir : Path
+            导出目录。
         """
         self.export(export_dir)
 
-    def export(self, export_dir: str | Path = None) -> None:
+    def export(self, export_dir:Path) -> None:
         """
         执行模型导出流程，由子类实现。
 
         Args
         ----
-        export_dir : str | Path | None
-            导出目录，若为 None 则使用配置文件中的默认路径。
+        export_dir : Path
+            导出目录。
 
         Raises
         ----

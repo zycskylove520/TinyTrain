@@ -87,13 +87,13 @@ class TTBaseOnnxExportServer(TTBaseExportServer):
         """
         self.dummy_inputs = tuple(torch.rand(input_shape, dtype=torch.float, requires_grad=False).to(self.device) for input_shape in self.input_shapes)
 
-    def export(self, export_dir: str | Path = None):
+    def export(self, export_dir: Path):
         """
         执行 torch → ONNX → onnxslim 的完整导出流程。
 
         Args
         ----
-        export_dir : str | Path | None
+        export_dir : Path
             导出目录，若为空则保存到当前目录下的 model.onnx。
 
         Returns
@@ -105,8 +105,7 @@ class TTBaseOnnxExportServer(TTBaseExportServer):
         RuntimeError
             torch.onnx.export 或 onnxslim 任意环节失败时抛出。
         """
-        onnx_model_path = Path(export_dir) / "model.onnx" if export_dir else Path("model.onnx")
-        onnx_model_path.parent.mkdir(parents=True, exist_ok=True)
+        onnx_model_path = export_dir / "model.onnx"
 
         # jit trace（如果启用）
         if self.jit_export:
@@ -149,10 +148,8 @@ class TTBaseOnnxExportServer(TTBaseExportServer):
                 # 优化模型
                 LOGGER.info("start onnx slim...")
                 model_onnx = onnxslim.slim(onnx_model)
-                onnx.save(model_onnx, onnx_model_path)
-                LOGGER.info("onnx onnx slim completed!")
+                onnx.save(model_onnx, export_dir / "model_slim.onnx")
+                LOGGER.info("onnx slim completed!")
             except Exception as e:
                 LOGGER.exception("ONNX slim failed")
                 raise RuntimeError("Failed to export ONNX slim model") from e
-
-        LOGGER.info(f"Model has been successfully converted to ONNX format and saved to {onnx_model_path}")
