@@ -1,0 +1,5 @@
+core = "cfg/core.toml"
+model = "cfg/model/lprnet.yaml"
+loss = "cfg/loss-lpr.toml"
+dataset = "cfg/dataset-lpr.toml"
+augment = "cfg/augment-lpr.toml"

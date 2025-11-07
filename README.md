@@ -35,12 +35,13 @@
 - tracker:跟踪器目录
 - utils:其他目录
 
-# 安装tinytrain
+# 安装
 
 项目提供了 whl 文件，可直接安装。建议安装后配合源码使用。
 你也可以通过以下命令从源码安装（在 TinyTrain-main 目录下）：
 ```shell
-pip install -e .
+pip install -e . # 或
+pip install .
 ```
 下面以YOLO目标检测模型来做示例。
 

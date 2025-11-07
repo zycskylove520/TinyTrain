@@ -1,0 +1,8 @@
+core = "cfg/core.toml"
+model = "cfg/model/v11/yolov11-det.toml"
+loss = "cfg/loss-det.toml"
+dataset = "cfg/dataset-det.toml"
+augment = "cfg/augment-det.toml"
+inference="cfg/inference-det.toml"
+tracker="cfg/byte_tracker.toml"
+

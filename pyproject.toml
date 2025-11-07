@@ -2,16 +2,42 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+# Project settings
 [project]
 name = "tinytrain"
-version = "0.2.3"
-description = "A tiny training framework with PyTorch"
+dynamic = ["version"]
+description = "A lightweight PyTorch-based AI framework for training, inference and export!"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
+keywords = ["machine-learning", "deep-learning", "computer-vision", "ML", "DL", "AI", "YOLO"]
 authors = [
     { name = "zycskylove520", email = "867245713@qq.com" }
 ]
+maintainers = [
+    { name = "zycskylove520", email = "867245713@qq.com" }
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+]
+
+# Required dependencies
 dependencies = [
     "albumentations",
     "chardet",
@@ -44,10 +70,35 @@ dependencies = [
     "torchvision",
 ]
 
-[project.urls]
-Homepage = "https://github.com/yourname/TinyTrain"
-Repository = "https://github.com/yourname/TinyTrain"
+# Optional dependencies
+[project.optional-dependencies]
+labeling = [
+    "kivy",
+]
 
+# project urls
+[project.urls]
+Homepage = "https://github.com/zycskylove520/TinyTrain"
+Repository = "https://github.com/zycskylove520/TinyTrain"
+Changelog = "https://github.com/zycskylove520/TinyTrain/releases"
+"Bug Reports" = "https://github.com/zycskylove520/TinyTrain/issues"
+
+# Tools settings
 [tool.setuptools.packages.find]
 where = ["."]              # 从当前目录查找
-include = ["tinytrain*"]   # 只打包 tinytrain 目录
+include = ["tinytrain", "tinytrain.*"]   # 只打包 tinytrain 目录
+
+[tool.setuptools.package-data]
+"tinytrain" = [
+    "**/*.toml",
+    "**/*.yaml",
+    "**/*.yml",
+    "**/*.md",
+    "**/*.ttf",
+    "**/*.otf",
+    "**/*.png",
+    "**/*.jpg",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "tinytrain.__version__" }

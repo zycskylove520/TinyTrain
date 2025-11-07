@@ -1,0 +1,20 @@
+# ====================
+# 人脸识别dataset配置文件
+# ====================
+
+train_img_size = 112
+# 训练输入图像的尺寸，模型将图像缩放到这个大小进行处理
+
+val_img_size = 112
+# 验证输入图像的尺寸，模型将图像缩放到这个大小进行处理
+
+train = "datasets/face_dataset/glint360k"
+# 训练集图像路径,仅支持单个训练集
+
+val = "datasets/face_dataset/lfw/lfw_pair.txt"
+# 验证集图像路径，要求传入验证集对应的txt文件
+# 如果有多个验证集，请使用列表传入多个验证集对应的txt文件，如：
+# val = [xxx.txt, yyy.txt, ...]
+
+nc = 360232
+# 数据集的类别数量

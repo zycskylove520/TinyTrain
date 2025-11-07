@@ -1,0 +1,108 @@
+# =================================================
+# YOLO目标检测模型: Retinaface-resnet50-det 模型配置文件
+# =================================================
+
+name = "Retinaface-resnet50-det"
+scale = "l"
+
+[scales.l]
+depth = 1.00
+width = 1.00
+summary = "375 layers, 32875523 parameters, 32875523 gradients, 100.58 GFLOPs, for a 640×640 input."
+
+
+# ----------------------------backbone---------------------------------
+[[network]]
+# 0-P1/2
+type = "entry"
+module = "ResNetLayer"
+repeat = 1
+from = [-1]
+args.in_channels = 3
+args.out_channels = 64
+args.stride = 1
+args.is_first = true
+args.n = 1
+
+[[network]]
+# 1-P1/4
+type = "flow"
+module = "ResNetLayer"
+repeat = 1
+from = [-1]
+args.in_channels = 64
+args.out_channels = 64
+args.stride = 1
+args.is_first = false
+args.n = 3
+
+[[network]]
+# 2-P2/8
+type = "flow"
+module = "ResNetLayer"
+repeat = 1
+from = [-1]
+args.in_channels = 256
+args.out_channels = 128
+args.stride = 2
+args.is_first = false
+args.n = 4
+
+[[network]]
+# 3-P3/16
+type = "flow"
+module = "ResNetLayer"
+repeat = 1
+from = [-1]
+args.in_channels = 512
+args.out_channels = 256
+args.stride = 2
+args.is_first = false
+args.n = 6
+
+[[network]]
+# 4-P4/32
+type = "flow"
+module = "ResNetLayer"
+repeat = 1
+from = [-1]
+args.in_channels = 1024
+args.out_channels = 512
+args.stride = 2
+args.is_first = false
+args.n = 3
+
+# ----------------------------------head--------------------------------------
+[[network]]
+# 5
+type = "flow"
+module = "Combine"
+repeat = 1
+from = [2, 3, 4]
+
+[[network]]
+# 6
+type = "flow"
+module = "FPN"
+repeat = 1
+from = [-1]
+args.in_channels_list = [512, 1024, 2048]
+args.out_channels = 256
+
+[[network]]
+# 7
+type = "flow"
+module = "SSHPAN"
+repeat = 1
+from = [-1]
+args.in_channels = 256
+args.out_channels_list = [256, 512, 1024]
+
+[[network]]
+# 8
+type = "head"
+module = "YOLODetectHead"
+repeat = 1
+from = [-1]
+args.nc = -1
+args.from_channels = [256, 512, 1024]

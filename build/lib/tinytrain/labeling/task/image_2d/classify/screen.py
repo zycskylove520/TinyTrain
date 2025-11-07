@@ -1,0 +1,41 @@
+from kivy.app import App
+from kivy.metrics import dp
+from kivy.properties import ListProperty
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.screenmanager import Screen
+
+from .content_area import Image2DClassifyContentArea
+from .info_bar import Image2DClassifyInfoBar
+from .menu_bar import Image2DClassifyMenuBar
+
+
+class Image2DClassifyLabelScreen(Screen):
+    def __init__(self, **kwargs):
+        super(Image2DClassifyLabelScreen, self).__init__(**kwargs)
+        # 注册事件
+        self.register_event_type('on_files_changed')
+        self.register_event_type('on_read_file_info')
+
+        self.sm = App.get_running_app().screen_manager
+
+        v_layout = BoxLayout(orientation='vertical', size=self.size, pos=self.pos, spacing=dp(8), padding=[dp(8), dp(8)])
+        self.add_widget(v_layout)
+
+        # 菜单栏
+        self.menu_bar = Image2DClassifyMenuBar(self)
+        v_layout.add_widget(self.menu_bar)
+
+        # 信息栏
+        self.info_bar = Image2DClassifyInfoBar(self)
+        v_layout.add_widget(self.info_bar)
+
+        # 标注内容区
+        self.content_area = Image2DClassifyContentArea(self)
+        v_layout.add_widget(self.content_area)
+
+    # -------------自定义事件-----------------
+    def on_files_changed(self, files: ListProperty):
+        pass
+
+    def on_read_file_info(self, file_info: dict):
+        pass

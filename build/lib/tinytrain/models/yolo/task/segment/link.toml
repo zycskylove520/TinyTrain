@@ -1,0 +1,7 @@
+core = "cfg/core.toml"
+model = "cfg/model/v11/yolo11-seg.toml"
+loss = "cfg/loss-seg.toml"
+dataset = "cfg/my_dataset-seg.toml"
+augment = "cfg/augment-seg.toml"
+inference="cfg/inference-seg.toml"
+tracker="cfg/byte_tracker.toml"
