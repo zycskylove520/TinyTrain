@@ -1,6 +1,6 @@
 from tinytrain.engine import TTBaseTrainer
-from tinytrain.models.ocr.ocr_data_format import LPRBatchDataInfo
-from tinytrain.models.ocr.ocr_dataset import LPRNetDataset
+from tinytrain.models.lprnet.data_format import LPRBatchDataInfo
+from tinytrain.models.lprnet.dataset import LPRNetDataset
 
 
 class LPRTrainer(TTBaseTrainer):

@@ -3,7 +3,8 @@
 # 简介
 ***
 1. 车牌识别算法来自开源模型 *LPRNet*，链接：https://github.com/sirius-ai/LPRNet_Pytorch
-2. 因为LRPNet要求输入图片宽高必须为[94,24], 因此目前只支持一种模型结构，具体可查阅当前目录下的`cfg/model`目录。
+2. LRPNet模型要求输入图片宽高必须为[94,24], 具体可查阅当前目录下的`cfg/model`目录。
+3. TTLPRNet模型支持任意尺寸的图片输入, 具体可查阅当前目录下的`cfg/model`目录。
 
 # 数据集构建
 ***
@@ -56,13 +57,13 @@
 ***
 
 ```python
-from tinytrain import OCRCore
+from tinytrain.models.lprnet import LPRNetCore
 
 # 指定车牌识别模型的link.toml文件
-ocr = OCRCore(link_file="ocr/task/lpr/link.toml")
+lpr = LPRNetCore(link_file="link.toml")
 
 # 可通过override覆盖配置文件参数
-ocr.set_config_overrides(
+lpr.set_config_overrides(
   link_type="core",
   task="lpr",  # 指定task为lpr
   warmup_epochs=2,
@@ -77,23 +78,23 @@ ocr.set_config_overrides(
 )
 
 # 启动训练
-ocr.train(model_scale='n')
+lpr.train(model_scale='n')
 ```
 
 # 模型推理
 ***
 推理时传入的source可以是图片、视频、摄像头索引等。
 ```python
-from tinytrain import OCRCore
+from tinytrain.models.lprnet import LPRNetCore
 
 # 指定车牌识别模型的link.toml文件
-ocr = OCRCore(link_file="link.toml")
-ocr.set_config_overrides(
+lpr = LPRNetCore(link_file="link.toml")
+lpr.set_config_overrides(
     link_type="core",
     task="lpr",  # 指定task为lpr
 )
 
-results = ocr.predict(
+results = lpr.predict(
         use_best_pt=True,
         source="1.png",
     )
@@ -104,16 +105,16 @@ for result in results:
 # 模型导出
 ***
 ```python
-from tinytrain import OCRCore
+from tinytrain.models.lprnet import LPRNetCore
 
 # 指定车牌识别模型的link.toml文件
-ocr = OCRCore(link_file="link.toml")
-ocr.set_config_overrides(
+lpr = LPRNetCore(link_file="link.toml")
+lpr.set_config_overrides(
     link_type="core",
     task="lpr",  # 指定task为lpr
 )
 
-ocr.export(
+lpr.export(
         use_best_pt=True,
         backend="onnx",  # 导出到onnx平台
         input_shapes=[(1, 3, 24, 94)],
@@ -126,17 +127,17 @@ ocr.export(
 ***
 车牌识别算法支持进行超参数搜索，以便在训练前寻找最优超参数。
 ```python
-from tinytrain import OCRCore
+from tinytrain.models.lprnet import LPRNetCore
 
 # 指定车牌识别模型的link.toml文件
-ocr = OCRCore(link_file="link.toml")
-ocr.set_config_overrides(
+lpr = LPRNetCore(link_file="link.toml")
+lpr.set_config_overrides(
     link_type="core",
     task="lpr",  # 指定task为lpr
 )
 
 # search_result里包括最优超参数结果
-search_result = ocr.tune(
+search_result = lpr.tune(
     model_scale='n',
     pop_size=40,
     generations=20

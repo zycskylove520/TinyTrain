@@ -1,11 +1,11 @@
 # ---------- 全局注册器 ----------
 from __future__ import annotations
 
-import os
-
+from pathlib import Path
 from torch import nn
-from typing import Dict, Iterable, Set, Type, List, Tuple, Optional, ClassVar, Callable, Union
+from typing import Dict, Iterable, Set, Type, List, Tuple, Optional, ClassVar, Callable, Union, Final
 
+from tinytrain.global_var import ASSETS_PATH
 from tinytrain.utils import LOGGER
 
 
@@ -206,11 +206,39 @@ class TTModuleRegistry:
         {'ResB', 'ResBasic'}
     """
 
-    """别名 -> 类对象 的全局映射。"""
+    # ------------------------------------------------------------------
+    # 全局别名 -> 类对象 的正向映射表。
+    # 所有通过 @register 或 register_name 注册的模块都会记录于此，
+    # 用于运行期通过别名快速获取对应类。
+    # ------------------------------------------------------------------
     MODULE_REGISTRY: Dict[str, Type[nn.Module]] = {}
 
-    """类对象 -> 已注册别名 的反向映射。"""
+    # ------------------------------------------------------------------
+    # 类对象 -> 已注册别名集合 的反向映射表。
+    # 方便根据类反查所有别名，支持 aliases_of() 等查询/调试功能。
+    # ------------------------------------------------------------------
     _CLASS2ALIASES: Dict[Type[nn.Module], Set[str]] = {}
+
+    # ------------------------------------------------------------------
+    # 缓存文件路径：用于持久化 alias -> 全类名 的映射快照。
+    # 启动时若文件存在则直接加载，避免重复扫描磁盘。
+    # ------------------------------------------------------------------
+    _CACHE_FILE: Final[Path] = ASSETS_PATH / "snapshots/registry_snapshot.py"
+
+    # ------------------------------------------------------------------
+    # 收集所有待扫描的 (root, exclude) 需求。
+    # key   : 要扫描的顶级包/模块名，例如 "my_models"
+    # value : 该 root 下需要排除的子包或子目录名集合。
+    # 多次调用 register_plugin() 时会合并到此处，最终由 launch() 统一处理。
+    # ------------------------------------------------------------------
+    _ROOT_EXCLUDE: Dict[str, set[str]] = {}
+
+    # ------------------------------------------------------------------
+    # 防止无限重扫的守护标志。
+    # 当 get() 发现别名不存在时会触发一次 launch() 重扫，随后立即置 True，
+    # 同一进程生命周期内不再二次扫描，避免真正缺失的别名陷入死循环。
+    # ------------------------------------------------------------------
+    _RESCAN_GUARD: bool = False
 
     # ---------------- 装饰器 ----------------
     @classmethod
@@ -272,7 +300,9 @@ class TTModuleRegistry:
     @classmethod
     def _register_aliases(cls, module_cls: Type[nn.Module], aliases: Iterable[str]) -> None:
         """
-        执行真正的注册逻辑，并检测别名冲突。
+        真正的注册逻辑 + 即时落盘缓存。
+        每成功注册一个别名，就把  alias -> 全类名  追加写入快照文件，
+        保证后续进程可以直接秒加载。
 
         Args:
             module_cls(Type[nn.Module]): 待注册的类。
@@ -302,18 +332,17 @@ class TTModuleRegistry:
                 )
             raise KeyError("\n".join(lines))
 
-        # 3. 写入索引
-        if module_cls not in cls._CLASS2ALIASES:
-            cls._CLASS2ALIASES[module_cls] = set()
+        # 3. 写入内存
         for alias in aliases:
             cls.MODULE_REGISTRY[alias] = module_cls
-            cls._CLASS2ALIASES[module_cls].add(alias)
+            cls._CLASS2ALIASES.setdefault(module_cls, set()).add(alias)
 
     # ---------------- 查询 ----------------
     @classmethod
     def get(cls, alias: str) -> Type[nn.Module]:
         """
-        根据别名获取对应的类。
+        根据别名获取类。若别名不存在且尚未触发过重扫，则自动重新扫盘一次；
+        重扫后仍找不到才抛 KeyError。
 
         Args:
             alias(str): 已注册的别名。
@@ -324,9 +353,24 @@ class TTModuleRegistry:
         Raises:
             KeyError: 如果别名不存在。
         """
-        if alias not in cls.MODULE_REGISTRY:
-            raise KeyError(f"Module alias '{alias}' not found.")
-        return cls.MODULE_REGISTRY[alias]
+        # 1. 内存命中直接返回
+        if alias in cls.MODULE_REGISTRY:
+            return cls.MODULE_REGISTRY[alias]
+
+        # 2. 未命中，且还没触发过重扫 → 扫一次
+        if not cls._RESCAN_GUARD:
+            cls._RESCAN_GUARD = True  # 置位，保证只扫一次
+            LOGGER.info("Alias '%s' not found in cache, rescanning disk once...", alias)
+            cls.launch()  # 复用之前统一入口
+            # 再次查询
+            if alias in cls.MODULE_REGISTRY:
+                return cls.MODULE_REGISTRY[alias]
+
+        # 3. 仍然找不到 → 抛错
+        raise ValueError(
+            f"Unrecognized module string '{alias}'. "
+            f"Please check spelling, add candidate package, or use @register_module."
+        )
 
     @classmethod
     def aliases_of(cls, module_cls: Type[nn.Module]) -> Set[str]:
@@ -350,46 +394,91 @@ class TTModuleRegistry:
         cls._CLASS2ALIASES.clear()
 
     @classmethod
-    def register_plugin(cls, root: str = "tinytrain", exclude: Union[str, Iterable[str], None] = None, ) -> None:
+    def register_plugin(cls, root: str = "tinytrain", exclude: Union[str, Iterable[str], None] = None) -> None:
         """
-        扫描并导入用户模块/包，从而触发 @TTModuleRegistry.register 装饰器。
+        仅把本次扫描需求登记到 _ROOT_EXCLUDE，不真正扫描。
+        可以多次调用，最终由 launch() 统一执行。
 
         用法：
             TTModuleRegistry.register_plugin("my_models.blocks")  # 整包
             TTModuleRegistry.register_plugin("my_models.blocks.block")   # 单模块
             TTModuleRegistry.register_plugin("my_models.blocks.block.block.py")   # 单文件
         """
-        import importlib
-        import pkgutil
+        exclude_set = {exclude} if isinstance(exclude, str) else set(exclude or [])
+        # 合并多次调用对同一个 root 的排除项
+        cls._ROOT_EXCLUDE.setdefault(root, set()).update(exclude_set)
 
-        # 1. 归一化
-        if exclude is None:
-            exclude = set()
-        elif isinstance(exclude, str):
-            exclude = {exclude}
-        else:
-            exclude = set(exclude)
+    @classmethod
+    def launch(cls) -> None:
+        """
+        汇总之前所有 register_plugin 的登记，
+        一次性扫描、导入、写缓存。
+        """
+        import importlib, pkgutil, os
+        cls.clear()
 
-        # 2. 导入 root
-        root_mod = importlib.import_module(root)
-        root_dir = os.path.dirname(root_mod.__file__)
+        # ---------- 缓存命中则直接加载 ----------
+        cls._CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        if not cls._RESCAN_GUARD and cls._CACHE_FILE.exists():
+            try:
+                cache_module_name = ".".join(
+                    cls._CACHE_FILE.with_suffix("").parts[-3:]
+                )
+                spec = importlib.util.spec_from_file_location(
+                    cache_module_name, cls._CACHE_FILE
+                )
+                if spec is None or spec.loader is None:
+                    raise ImportError("bad snapshot spec")
+                snap_mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(snap_mod)
 
-        # 3. 存在性检查（只要磁盘没有该子目录就报错）
-        missing = {d for d in exclude if not os.path.isdir(os.path.join(root_dir, d))}
-        if missing:
-            raise FileNotFoundError(f"root 目录 '{root_dir}' 中不存在排除文件夹：{missing}")
+                for alias, full_path in snap_mod.REG.items():
+                    mod_path, cls_name = full_path.rsplit(".", 1)
+                    mod = importlib.import_module(mod_path)
+                    module_cls = getattr(mod, cls_name)
+                    cls.MODULE_REGISTRY[alias] = module_cls
+                    cls._CLASS2ALIASES.setdefault(module_cls, set()).add(alias)
+                cls.write_cache()
+                LOGGER.info(f"Loaded module registry from snapshot: {cls._CACHE_FILE}.")
+                return
+            except Exception as e:
+                LOGGER.warning(f"Snapshot broken ({e}), rescanning...")
+                cls._CACHE_FILE.unlink(missing_ok=True)
 
-        # 4. 构造要排除的“模块前缀”集合
-        exclude_prefixes = {f"{root}.{d}" for d in exclude}
+        # ---------- 缓存未命中：现场扫描 ----------
+        # 对登记过的 (root,exclude) 去重、排序，保证可复现
+        for root, exclude_set in sorted(cls._ROOT_EXCLUDE.items()):
+            root_mod = importlib.import_module(root)
+            root_dir = os.path.dirname(root_mod.__file__ or root_mod.__path__[0])
 
-        # 5. 遍历并导入
-        if hasattr(root_mod, "__path__"):  # 包
-            for _, subname, _ in pkgutil.walk_packages(
-                    root_mod.__path__, root_mod.__name__ + "."
-            ):
-                # 只要子包以任意排除前缀开头就跳过
-                if any(subname == pfx or subname.startswith(pfx + ".") for pfx in exclude_prefixes):
-                    continue
-                importlib.import_module(subname)
-        else:  # 单文件模块，直接导入自身
-            importlib.import_module(root)
+            # 排除目录不存在直接抛错，方便早发现
+            missing = {d for d in exclude_set if not os.path.isdir(os.path.join(root_dir, d))}
+            if missing:
+                raise FileNotFoundError(
+                    f"Excluded folder(s) {missing} not found in root directory '{root_dir}'."
+                )
+
+            exclude_prefixes = {f"{root}.{d}" for d in exclude_set}
+
+            # 导入子模块触发装饰器
+            if hasattr(root_mod, "__path__"):
+                for _, subname, _ in pkgutil.walk_packages(
+                        root_mod.__path__, root_mod.__name__ + "."
+                ):
+                    if any(subname == pfx or subname.startswith(pfx + ".") for pfx in exclude_prefixes):
+                        continue
+                    importlib.import_module(subname)
+            else:
+                importlib.import_module(root)
+
+            cls.write_cache()
+            LOGGER.info(f"Registry snapshot saved to: {cls._CACHE_FILE}")
+
+    @classmethod
+    def write_cache(cls):
+        reg_lines = ["# Auto-generated by TTModuleRegistry.launch\nREG = {"]
+        for alias, module_cls in sorted(cls.MODULE_REGISTRY.items()):
+            full = f"{module_cls.__module__}.{module_cls.__name__}"
+            reg_lines.append(f'    "{alias}": "{full}",')
+        reg_lines.append("}")
+        cls._CACHE_FILE.write_text("\n".join(reg_lines), encoding="utf8")

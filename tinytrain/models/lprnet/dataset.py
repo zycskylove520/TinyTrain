@@ -5,7 +5,7 @@ import torch
 from pathlib import Path
 
 from tinytrain.data.dataset import TTYOLOVisionDataset
-from tinytrain.models.ocr.ocr_data_format import LPRDataInfo, LPRBatchDataInfo
+from tinytrain.models.lprnet.data_format import LPRDataInfo, LPRBatchDataInfo
 from tinytrain.utils.data_utils import cv_imread, load_image_cache_file
 
 

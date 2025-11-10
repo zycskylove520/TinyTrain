@@ -1,8 +1,8 @@
 """
-OCRCore
+LPRNetCore
 ========
-OCRCore 是 TinyTrain 针对 OCR 系列任务的专用门面类。
-它在 TTCore 的基础上，通过 TTEngineRegistry 完成 OCR相关的一系列任务
+LPRNetCore 是 TinyTrain 针对 LPRNet 模型的专用门面类。
+它在 TTCore 的基础上，通过 TTEngineRegistry 完成相关的一系列任务
 所有核心组件（model / trainer / validator / predictor / exporter / server）
 的自动注册与快速索引，实现「一行代码」切换任务与后端。
 
@@ -38,7 +38,7 @@ lpr
 
 from tinytrain.engine import TTCore, TTBaseExporter
 from tinytrain.cfg import TTEngineRegistry
-from tinytrain.models.ocr.task.lpr import (
+from tinytrain.models.lprnet.engine import (
     LPRModel,
     LPRTrainer,
     LPRValidator,
@@ -48,7 +48,7 @@ from tinytrain.server.export_server import TTBaseOnnxExportServer
 from tinytrain.server.inference_server import TTBaseOnnxInferenceServer
 
 
-class OCRCore(TTCore):
+class LPRNetCore(TTCore):
     @classmethod
     def register_components(cls):
         # ---------- classify ----------

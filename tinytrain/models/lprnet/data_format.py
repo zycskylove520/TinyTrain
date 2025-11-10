@@ -4,10 +4,6 @@ from tinytrain.data.data_format import ImgDataInfo, ImgBatchDataInfo
 
 
 class LPRDataInfo(ImgDataInfo):
-    """
-    分类任务专用单张图像数据容器。
-    """
-
     def __init__(self,
                  label: list[int] | None = None,
                  length: int | None = None,

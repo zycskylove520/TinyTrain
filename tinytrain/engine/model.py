@@ -452,13 +452,7 @@ class TTConfigModel(TTBaseModel):
                 continue
 
         # 3. ⭐ 查全局注册表 ⭐
-        if module_str in TTModuleRegistry.MODULE_REGISTRY:
-            return TTModuleRegistry.get(module_str)
-
-        raise ValueError(
-            f"Unrecognized module string '{module_str}'. "
-            f"Please check spelling, add candidate package, or use @register_module."
-        )
+        return TTModuleRegistry.get(module_str)
 
     def _model_log(self):
         """

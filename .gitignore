@@ -1,9 +1,8 @@
-# 忽略所有 .pyc 文件
-*.pyc
-
 # 忽略特定目录
+__pycache__/
 dist/
 tinytrain.egg-info/
+tinytrain/snapshots/
 
 # 忽略特定类型的文件
 .env

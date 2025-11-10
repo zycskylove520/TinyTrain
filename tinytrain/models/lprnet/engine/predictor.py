@@ -4,7 +4,7 @@ import cv2
 from PIL import Image
 from torchvision import transforms
 
-from tinytrain.models.ocr.ocr_data_format import LPRDataInfo
+from tinytrain.models.lprnet.data_format import LPRDataInfo
 from tinytrain.engine.predictor import TTBasePredictor
 
 

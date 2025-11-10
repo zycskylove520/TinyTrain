@@ -5,7 +5,7 @@ import torch
 
 from typing import TYPE_CHECKING
 
-from tinytrain.models.ocr.ocr_data_format import LPRBatchDataInfo
+from tinytrain.models.lprnet.data_format import LPRBatchDataInfo
 from tinytrain.engine import TTBaseValidator
 from tinytrain.global_var import RANK
 from tinytrain.utils.progress_bar import TTProgressBar

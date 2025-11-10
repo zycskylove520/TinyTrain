@@ -16,6 +16,7 @@ from tinytrain.utils import LOGGER
 from tinytrain.utils.callback import Callback
 from tinytrain.utils.checks import check_file
 from tinytrain.global_var import NUM_THREADS, LOCAL_RANK, WORLD_SIZE
+from .. import TTModuleRegistry
 from ..utils.dist import DDPLauncher
 
 if TYPE_CHECKING:
@@ -50,6 +51,9 @@ class TTCore:
         # register manager
         self.config_manager = TTConfigManager(link_file=link_file)
         self.task: str = self.config_manager.core["task"]
+
+        # register AI modules
+        TTModuleRegistry.launch()
 
         # register components
         self.register_components()

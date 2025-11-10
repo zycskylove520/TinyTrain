@@ -16,7 +16,7 @@ from .subloss import BboxLossWithDFL, KeypointLoss
 
 if TYPE_CHECKING:
     from tinytrain.data.data_format import ClassifyBatchDataInfo, DetectBatchDataInfo, PoseBatchDataInfo, SegmentBatchDataInfo
-    from tinytrain.models.ocr.ocr_data_format import LPRBatchDataInfo
+    from tinytrain.models.lpr.ocr_data_format import LPRBatchDataInfo
 
 
 class ClassificationLoss(BaseLoss):

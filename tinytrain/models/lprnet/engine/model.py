@@ -2,7 +2,7 @@ import torch
 
 from tinytrain.engine import TTConfigModel
 from tinytrain.loss import LPRCTCLoss
-from tinytrain.models.ocr.ocr_data_format import LPRBatchDataInfo
+from tinytrain.models.lprnet.data_format import LPRBatchDataInfo
 
 
 class LPRModel(TTConfigModel):
