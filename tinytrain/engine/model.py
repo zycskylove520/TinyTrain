@@ -274,7 +274,6 @@ class TTConfigModel(TTBaseModel):
             try:
                 record_info = self.record_list[i]
                 module_type: str = record_info["type"]
-                module_name: str = record_info["module"]
                 frm: list[int] = record_info["from"]
                 num_from: int = len(frm)
 
