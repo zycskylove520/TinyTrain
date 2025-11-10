@@ -182,7 +182,7 @@ class TTModuleRegistry:
 
     Examples:
         >>> from torch import nn
-        >>> from tinytrain.cfg.register import TTModuleRegistry
+        >>> from tinytrain import TTModuleRegistry
         >>>
         >>> # 1) 装饰器方式：无参
         >>> @TTModuleRegistry.register
@@ -286,15 +286,19 @@ class TTModuleRegistry:
 
     # ---------------- 函数式注册 ----------------
     @classmethod
-    def register_name(cls, module_cls: Type[nn.Module], *aliases: str) -> None:
+    def register_name(cls, module_cls: Type[nn.Module], name: str = None, *aliases: str) -> None:
         """
         函数式接口，批量给类注册别名。
 
         Args:
             module_cls(Type[nn.Module]): 需要注册的 nn.Module 子类。
+            name(str, optional): 主别名。当装饰器无参调用时，此位置会收到类对象本身。
             *aliases(str): 要关联的别名列表。
         """
-        cls._register_aliases(module_cls, aliases)
+        final_aliases = (name,) + aliases if name is not None else aliases
+        if not final_aliases:  # 极端情况：没给任何别名
+            final_aliases = (module_cls.__name__,)
+        cls._register_aliases(module_cls, final_aliases)
 
     # ---------------- 内部注册逻辑 ----------------
     @classmethod

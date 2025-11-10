@@ -124,20 +124,10 @@ class YOLOModel(TTConfigModel):
                     _from = [-1]
 
             if _type == "entry":  # entry层
-                assert -1 in _from, f"entry layer_{level} must depend on from index: -1."
-                # assert "in_channels" in _args, f"level_{level}: {_module} 'in_channels' must exist!"
-                # set model entry channels
-                if _args.get("in_channels", None) is not None:
-                    if _args["in_channels"] == -1:
-                        entry_channels = self.config_manager.model["entry_channels"]
-                        assert entry_channels is not None, "entry level: if {_module} 'in_channels' == -1, must set model config key:entry_channels!"
-                        _args["in_channels"] = entry_channels
+                pass
             elif _type == "flow":  # flow层
-                # assert "in_channels" in _args, f"level_{level}: {_module} 'in_channels' must exist!"
-                # assert "out_channels" in _args, f"level_{level}: {_module} 'out_channels' must exist!"
                 pass
             elif _type == "head":  # head层
-                # assert "in_channels" in _args, f"level_{level}: {_module} 'in_channels' must exist!"
                 if _args.get("nc", None) is not None:
                     _args["nc"] = self.config_manager.dataset["nc"]
 
