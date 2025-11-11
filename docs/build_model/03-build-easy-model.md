@@ -72,6 +72,6 @@ if __name__ == '__main__':
 
 注意，此时的link文件不需要model字段，因为不是通过配置文件构建的。
 
-学习TTConfigManager类，请参考：[什么是TTConfigManager](../core/01-what-is-TTConfigManager.md)
+学习TTConfigManager类，请参考：[什么是TTConfigManager](../core/01-TTConfigManager)
 
 学习通过配置文件构建模型，请参考：[学习创建自定义AI模块](01-create-module.md)

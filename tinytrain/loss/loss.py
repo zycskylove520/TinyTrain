@@ -11,7 +11,7 @@ from tinytrain.utils.box_utils import cxcywh_2_lxlyrxry, lxlyrxry_2_cxcywh, make
 from tinytrain.modules.assigner.taa_assigner import TaskAlignedAssigner, dist2bbox
 from tinytrain.utils.segment_utils import crop_mask
 
-from .base.base_loss import BaseLoss
+from .base.base_loss import TTBaseLoss
 from .subloss import BboxLossWithDFL, KeypointLoss
 
 if TYPE_CHECKING:
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from tinytrain.models.lpr.ocr_data_format import LPRBatchDataInfo
 
 
-class ClassificationLoss(BaseLoss):
+class ClassificationLoss(TTBaseLoss):
     """
     通用分类损失封装，默认使用 CrossEntropyLoss。
     可通过 cls_loss_gain 对最终损失进行缩放。
@@ -51,7 +51,7 @@ class ClassificationLoss(BaseLoss):
         return loss, loss_items
 
 
-class ClassificationWithFocalLoss(BaseLoss):
+class ClassificationWithFocalLoss(TTBaseLoss):
     """
     Focal Loss，用于缓解类别不平衡问题。
     在 CE 基础上加入 (1-pt)^γ 调制因子，并可指定类别权重 alpha。
@@ -118,7 +118,7 @@ class ClassificationWithFocalLoss(BaseLoss):
         return focal_loss, loss_items
 
 
-class LPRCTCLoss(BaseLoss):
+class LPRCTCLoss(TTBaseLoss):
     def __init__(self, lpr_loss_gain: float, blank: int, reduction: str = "mean"):
         super().__init__()
         self.criterion = nn.CTCLoss(blank=blank, reduction=reduction)
@@ -147,7 +147,7 @@ class LPRCTCLoss(BaseLoss):
         return tuple(input_lengths), tuple(target_lengths)
 
 
-class YOLOV8DetectionLoss(BaseLoss):
+class YOLOV8DetectionLoss(TTBaseLoss):
     """
     YOLOv8 检测头损失，包含：
         1. 分类损失 (BCE)

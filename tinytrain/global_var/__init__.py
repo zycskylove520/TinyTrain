@@ -38,6 +38,8 @@ warnings.filterwarnings("ignore", module="albumentations.*")
 cv2.setNumThreads(NUM_THREADS)  # 在模块初始化时设置一次
 
 # font
+DEFAULT_FONT = "LXGWWenKai-Regular.ttf"
+
 def localization(font: str = None):
     if font is None:
         # warnings.filterwarnings("ignore", message="Glyph.*missing from font")
@@ -76,4 +78,4 @@ def localization(font: str = None):
     buf.close()  # 立即释放内存
 
 
-localization("LXGWWenKai-Regular.ttf")  # 在这里修改自己喜欢的字体,比如xxx.otf,xxx.ttf
+localization(DEFAULT_FONT)  # 在这里修改自己喜欢的字体,比如xxx.otf,xxx.ttf

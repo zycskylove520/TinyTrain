@@ -114,7 +114,7 @@ class TTConfigManager(SimpleNamespace):
     @staticmethod
     def _infer_register_name() -> str | None:
         """
-        自动推断调用者类名（例如 TTCore 的子类）。
+        自动推断调用者类名（例如 TTBaseCore 的子类）。
         如果无法推断，返回 None。
         """
         import inspect

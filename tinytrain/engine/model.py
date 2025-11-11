@@ -12,7 +12,7 @@ from tinytrain.global_var import RANK
 from tinytrain.utils import LOGGER
 
 if TYPE_CHECKING:
-    from tinytrain.loss.base import BaseLoss
+    from tinytrain.loss.base import TTBaseLoss
 
 
 class TTBaseModel(nn.Module):
@@ -56,12 +56,12 @@ class TTBaseModel(nn.Module):
     # ------------------------------------------------------------------
     # 2. 子类必须实现的钩子
     # ------------------------------------------------------------------
-    def init_criterion(self) -> BaseLoss:
+    def init_criterion(self) -> TTBaseLoss:
         """
         初始化任务特定的损失函数。
 
         Returns:
-            BaseLoss: 损失模块。
+            TTBaseLoss: 损失模块。
 
         Raises:
             NotImplementedError: 必须由子类实现。

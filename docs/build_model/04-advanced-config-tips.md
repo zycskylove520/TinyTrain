@@ -1,10 +1,10 @@
 # 学习更高级的模型构建技巧
 
-该章节将介绍更多的模型配置字段，您将学会搭建令人惊叹的先进模型。
+该章节将介绍更高级的模型配置方法，您将学会搭建令人惊叹的先进模型。
 
 请确保在学习该章节前已学习前置章节：[从配置文件构建AI模型](02-build-config-model.md)
 
-## allow_repeat
+## allow_repeat字段
 allow_repeat字段允许repeat为1的符合要求的模块也能根据depth进行多次重复。默认为false，可以不在配置文件中使用。
 ```toml
 [[network]]
@@ -98,7 +98,7 @@ model = "my_model.toml"  # 键名必须是model
 dataset = "my_dataset.toml"
 ```
 
-如果不知道为什么这么写，请参阅：[什么是TTConfigManager](../core/01-what-is-TTConfigManager.md)
+如果不知道为什么这么写，请参阅：[什么是TTConfigManager](../core/01-TTConfigManager)
 
 为了实现动态修改MyClassifyHead算子的nc参数，我们需要重载TTConfigModel的custom_parse_model_level函数，在该函数中可以访问并修改任意network层的任意参数。
 ```python
@@ -113,4 +113,7 @@ class MyModel(TTConfigModel):
             # 动态修改nc值为my_dataset.toml文件指向的nc值
             module_info["args"]["nc"] = self.config_manager.dataset["nc"]
 ```
+
+
+
 

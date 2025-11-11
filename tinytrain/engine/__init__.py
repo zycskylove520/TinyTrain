@@ -1,4 +1,4 @@
-from .core import TTCore
+from .core import TTBaseCore
 from .distiller import TTBaseDistiller
 from .exporter import TTBaseExporter
 from .model import TTBaseModel, TTConfigModel, TTEasyModel

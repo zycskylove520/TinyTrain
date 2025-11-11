@@ -1,1 +1,1 @@
-from .base_loss import BaseLoss
+from .base_loss import TTBaseLoss

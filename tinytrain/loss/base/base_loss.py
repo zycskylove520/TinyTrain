@@ -1,9 +1,9 @@
 import torch
 
 
-class BaseLoss(torch.nn.Module):
+class TTBaseLoss(torch.nn.Module):
     def __init__(self, *args, **kwargs):
-        super(BaseLoss, self).__init__()
+        super(TTBaseLoss, self).__init__()
 
     def forward(self, *args, **kwargs):
         loss = torch.tensor(0, requires_grad=True)

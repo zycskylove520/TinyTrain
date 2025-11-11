@@ -1,4 +1,4 @@
-# 什么是TTConfigManager
+# TTConfigManager使用指南
 
 TTConfigManager类是用于管理所有配置文件的全局配置类，从模型的训练到推理到部署，通过TTConfigManager可以在任何地方获取到需要的配置参数。
 

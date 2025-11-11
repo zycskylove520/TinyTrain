@@ -134,7 +134,7 @@ network:
 
 ## 3. 构建模型
 
-在使用配置文件构建模型之前，需要先创建一个link文件，该文件可以是toml或yaml/yml文件，用于链接不同的配置文件。通过以下链接深入了解：[什么是TTConfigManager](../core/01-what-is-TTConfigManager.md)
+在使用配置文件构建模型之前，需要先创建一个link文件，该文件可以是toml或yaml/yml文件，用于链接不同的配置文件。通过以下链接深入了解：[什么是TTConfigManager](../core/01-TTConfigManager)
 
 以下创建一个link.toml文件，其内容如下：
 

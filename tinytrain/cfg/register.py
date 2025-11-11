@@ -20,6 +20,7 @@ class TTEngineRegistry:
     - 显式注册核心
     - 按路径精确/模糊查询实现类
     - 批量冲突检测（注册阶段即报错）
+    - 7大引擎类型：model、trainer、validator、predictor、exporter、tuner和distiller
 
     数据结构示意：
         _impl[core][task][engine_type][backend] = impl_cls
@@ -33,15 +34,30 @@ class TTEngineRegistry:
         ... class MyClassificationModel:
         ...     pass
         >>>
-        >>> # 2) 指定后端
+        >>> # 2) 在Core类中注册
+        >>> class MyCore(TTBaseCore):
+        >>>     @classmethod
+        >>>     def register_components(cls):
+        >>>         TTEngineRegistry.register(cls, "classify", "model")(MyClassificationModel)
+        >>>
+        >>> # 3) 指定后端
         >>> @TTEngineRegistry.register(core=MyCore, task="detect", engine_type="inference_server", backend="onnx")
         ... class MyClassificationOnnxInferenceServer:
         ...     pass
         >>>
-        >>> # 3) 查询实现
+        >>> # 4) 查询实现
         >>> cls = TTEngineRegistry.get(config_manager, engine_type="inference_server", backend="onnx")
         >>> assert cls is MyClassificationOnnxInferenceServer
     """
+    ENGINE_ASSERT = (
+        "model",
+        "trainer",
+        "validator",
+        "predictor",
+        "exporter",
+        "tuner",
+        "distiller"
+    )
 
     """已注册的核心名称集合。"""
     _cores: ClassVar[Set[str]] = set()
@@ -69,7 +85,7 @@ class TTEngineRegistry:
             ValueError: 如果该核心已被注册。
         """
         if core_name in cls._cores:
-            raise ValueError(f"TTCore {core_name} already registered")
+            raise ValueError(f"TTBaseCore {core_name} already registered")
         cls._cores.add(core_name)
 
     # ---------- 2. 类装饰器 ----------
@@ -96,6 +112,8 @@ class TTEngineRegistry:
         Returns:
             Callable[[Type], Type]: 装饰器函数，返回被装饰的类本身。
         """
+        assert engine_type in TTEngineRegistry.ENGINE_ASSERT, f"engine_type {engine_type} is not supported, must be one of {TTEngineRegistry.ENGINE_ASSERT}"
+
         core_name = core.__name__
 
         def decorator(impl_cls: Type) -> Type:
@@ -151,7 +169,7 @@ class TTEngineRegistry:
         core_name = config_manager.register_name
         task = config_manager.core["task"]
         if core_name not in cls._cores:
-            raise KeyError(f"TTCore {core_name} has not been registered")
+            raise KeyError(f"TTBaseCore {core_name} has not been registered")
 
         bucket = (
             cls._impl
