@@ -1,4 +1,4 @@
-import global_var
+from .global_var import *
 from .cfg import TTModuleRegistry, TTEngineRegistry
 
 __version__ = "0.2.4"

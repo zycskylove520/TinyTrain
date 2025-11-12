@@ -93,11 +93,8 @@ include = ["tinytrain", "tinytrain.*"]   # 只打包 tinytrain 目录
     "**/*.toml",
     "**/*.yaml",
     "**/*.yml",
-    "**/*.md",
     "**/*.ttf",
     "**/*.otf",
-    "**/*.png",
-    "**/*.jpg",
 ]
 
 [tool.setuptools.dynamic]

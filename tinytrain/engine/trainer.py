@@ -22,7 +22,7 @@ from tinytrain.global_var import RANK, LOCAL_RANK, WORLD_SIZE
 from tinytrain.metrics.base import TrainResult
 from tinytrain.utils import LOGGER
 from tinytrain.utils.progress_bar import TTProgressBar
-from tinytrain.utils.any_utils import set_random_seed, create_iter_directory, maybe_limit_num_workers
+from tinytrain.utils.any_utils import setup_torch_environment, create_iter_directory, maybe_limit_num_workers
 from tinytrain.utils.callback import Callback
 from tinytrain.utils.checks import check_amp
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -87,7 +87,6 @@ class TTBaseTrainer:
             model (TTBaseModel): 模型实例，用于训练和验证。
             callback (Callback): 回调函数，用于在训练过程中执行自定义操作。
         """
-        torch.set_float32_matmul_precision('high')
         self.config_manager: TTConfigManager = config_manager
         self.validator: TTBaseValidator | None = None
 
@@ -102,7 +101,7 @@ class TTBaseTrainer:
         self.scaler: torch.amp.GradScaler | None = None
 
         # seed
-        set_random_seed(self.config_manager.core["seed"], self.config_manager.core["deterministic"])
+        setup_torch_environment(self.config_manager.core["seed"], self.config_manager.core["deterministic"])
 
         # save dir
         self.save_dir: Path | None = None
@@ -669,7 +668,6 @@ class TTBaseTrainer:
             persistent_workers=num_workers > 0,
             drop_last=True,
             pin_memory=can_pin_memory,
-            pin_memory_device=self.device.type if can_pin_memory else "",
             prefetch_factor=min(4, max(2, os.cpu_count() // max(world_size, 1))) if num_workers > 0 else None,
             multiprocessing_context='spawn' if os.name != 'nt' and num_workers > 0 else None,
         )

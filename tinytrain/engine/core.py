@@ -71,8 +71,7 @@ class TTBaseCore:
         self.distiller = None
 
         # 保存当前主脚本路径（用于 DDP 启动）
-        frame = inspect.stack()[-1]
-        self.main_script_path = Path(frame.filename).resolve()
+        self.main_script_path = Path(inspect.stack()[-1].filename).resolve()
 
     @classmethod
     def register_components(cls):
@@ -152,7 +151,7 @@ class TTBaseCore:
     # ------------------------------------------------------------------
     # 3. 对外主要 API
     # ------------------------------------------------------------------
-    def train(self, model_scale: str = None, model: str | Path = None, use_last_pt=False, process_name: str = None, **kwargs) -> None:
+    def train(self, model_scale: str = None, model: str | Path = None, use_last_pt=False, use_best_pt=False, process_name: str = None) -> None:
         """
         启动训练。
 
@@ -160,9 +159,11 @@ class TTBaseCore:
             model_scale (str | None):
                 模型规模标识（如 "n", "s", "m", "l", "x"），将覆盖配置文件。
             model (str | Path | None):
-                权重文件路径（.pt/.pth）。为 None 时根据 use_last_pt 自动搜索。
+                权重文件路径（.pt/.pth）。为 None 时根据 use_last_pt 或 use_last_pt 自动搜索。
             use_last_pt (bool):
-                是否自动寻找最新的 last.pt，优先级低于显式 model。
+                是否自动寻找最新的 last.pt，优先级低于显式 model。use_last_pt 与 use_last_pt 互斥。
+            use_best_pt (bool):
+                是否自动寻找最新的 best.pt，优先级低于显式 model。use_last_pt 与 use_last_pt 互斥。
             process_name (str | None):
                 进程名，便于在系统监控中区分。
         """
@@ -175,14 +176,18 @@ class TTBaseCore:
             setproctitle.setproctitle(process_name)
 
         nproc_per_node = self._get_nproc_per_node()
-        # 判断是否已由 torchrun 启动（DDP 子进程）
+        # 智能设置线程数
+        self._setup_optimal_threads(nproc_per_node)
+
+        # 判断是否已由 torchrun 启动（DDP 子进程）或需要启动 DDP
         if "LOCAL_RANK" in os.environ:
             LOGGER.info("Detected DDP environment (torchrun), skipping subprocess launch.")
-            self._launch_training(model_scale, model, use_last_pt)
         elif nproc_per_node > 1:
             self._launch_ddp(nproc_per_node)
-        else:
-            self._launch_training(model_scale, model, use_last_pt)
+            return
+
+        # 单进程或 DDP 子进程执行训练
+        self._launch_training(model_scale, model, use_last_pt, use_best_pt)
 
     def predict(self, source, model: str | Path | None = None, backend: str | None = None, use_best_pt=False, **kwargs) -> Generator[Any, None, None]:
         """
@@ -526,7 +531,7 @@ class TTBaseCore:
         finally:
             LOGGER.info("Releasing memory...")
 
-    def _launch_training(self, model_scale: str = None, model: str | Path = None, use_last_pt=False):
+    def _launch_training(self, model_scale: str = None, model: str | Path = None, use_last_pt=False, use_best_pt=False):
         """
         单进程 / DDP 子进程内部真正执行训练的入口函数。
 
@@ -534,9 +539,10 @@ class TTBaseCore:
             model_scale: 模型规模（n/s/m/l/x），新建权重时使用。
             model: 权重文件路径（.pt/.pth），优先级高于 use_last_pt。
             use_last_pt: 当 model 为 None 时，是否自动寻找最近一次训练的 last.pt。
+            use_best_pt: 当 model 为 None 时，是否自动寻找最近一次训练的 best.pt。
 
         步骤：
-        1. 若 use_last_pt 为真，调用 _find_last_pt_file() 自动定位权重。
+        1. 若 use_last_p 或 use_best_pt 为真，自动定位权重。
         2. 若 self.model 尚未实例化，调用 get_model() 加载或新建模型。
         3. 若 self.trainer 尚未实例化，调用 _bind_trainer() 绑定训练器。
         4. 执行 self.trainer.train() 开始训练迭代。
@@ -546,9 +552,16 @@ class TTBaseCore:
         - 所有异常直接抛出，由外层 train() 统一捕获并记录。
         """
 
-        # find last pt file
-        if use_last_pt and model is None:
-            model = self._find_last_pt_file()
+        # 检查 use_last_pt 和 use_best_pt 互斥性
+        if use_last_pt and use_best_pt:
+            raise ValueError("参数 use_last_pt 和 use_best_pt 不能同时为 True")
+
+        # 根据优先级自动选择权重文件
+        if model is None:
+            if use_last_pt:
+                model = self._find_last_pt_file()
+            elif use_best_pt:
+                model = self._find_best_pt_file()  # 假设有对应的查找最佳权重文件的方法
 
         # bind model
         if self.model is None:
@@ -560,6 +573,32 @@ class TTBaseCore:
 
         # train
         self.trainer.train()
+
+    @staticmethod
+    def _setup_optimal_threads(nproc_per_node: int):
+        """
+        根据系统资源设置最优线程数
+
+        Args:
+            nproc_per_node (int): 每个节点的 GPU 数量。
+        """
+        cpu_cores = os.cpu_count()
+
+        if not cpu_cores:
+            return
+
+        if nproc_per_node > 1:
+            # 分布式训练，每个进程分配的核心数
+            cores_per_process = max(1, cpu_cores // nproc_per_node)
+        else:
+            cores_per_process = max(1, cpu_cores // 2)  # 单机使用一半核心
+
+        os.environ['OMP_NUM_THREADS'] = str(cores_per_process)
+        os.environ['MKL_NUM_THREADS'] = str(cores_per_process)
+        os.environ['OPENBLAS_NUM_THREADS'] = str(cores_per_process)
+        os.environ['NUMEXPR_NUM_THREADS'] = str(cores_per_process)
+
+        return cores_per_process
 
     # ------------------------------------------------------------------
     # 6. 各引擎绑定（内部工具）

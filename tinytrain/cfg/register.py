@@ -56,7 +56,9 @@ class TTEngineRegistry:
         "predictor",
         "exporter",
         "tuner",
-        "distiller"
+        "distiller",
+        "inference_server",
+        "export_server"
     )
 
     """已注册的核心名称集合。"""

@@ -73,6 +73,79 @@ def generate_unique_id(file_name, timestamp):
     return unique_id
 
 
+def setup_torch_environment(seed: int = 0, deterministic: bool = False, precision: str = 'tf32') -> None:
+    """
+    统一设置PyTorch训练环境，包括随机种子、CUDA确定性和计算精度。
+
+    Args:
+        seed: 随机种子 (默认: 0)
+        deterministic: 是否启用确定性算法，会牺牲速度但保证可复现性 (默认: False)
+        precision: 计算精度 - 'ieee', 'tf32', 'none' (默认: 'tf32')
+    """
+    import random
+    import numpy as np
+    import torch
+    import warnings
+
+    # 设置随机种子
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+    # 如果使用CUDA，设置CUDA相关配置
+    if torch.cuda.is_available():
+        # 设置CUDA随机种子
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # 为所有GPU设置随机种子
+
+        # 设置CuDNN配置
+        if torch.backends.cudnn.is_available():
+            torch.backends.cudnn.deterministic = deterministic
+            torch.backends.cudnn.benchmark = not deterministic  # 确定性模式下关闭benchmark
+
+            # 设置计算精度（忽略弃用警告）
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore",
+                                        message="Please use the new API settings to control TF32 behavior",
+                                        category=UserWarning)
+
+                try:
+                    # 使用新API设置精度
+                    if precision == 'ieee':
+                        # IEEE FP32 标准精度（最高精度）
+                        torch.backends.cuda.matmul.fp32_precision = 'ieee'
+                        torch.backends.cudnn.conv.fp32_precision = 'ieee'
+                    elif precision == 'tf32':
+                        # TF32 精度（Ampere GPU默认，平衡精度和性能）
+                        torch.backends.cuda.matmul.fp32_precision = 'tf32'
+                        torch.backends.cudnn.conv.fp32_precision = 'tf32'
+                    elif precision == 'none':
+                        # 无特殊精度设置
+                        torch.backends.cuda.matmul.fp32_precision = 'none'
+                        torch.backends.cudnn.conv.fp32_precision = 'none'
+                    else:
+                        raise ValueError(f"Unsupported precision level: {precision}")
+                except AttributeError:
+                    # 回退到旧API（如果新API不可用）
+                    torch.set_float32_matmul_precision(precision)
+
+        LOGGER.info(f"PyTorch environment setup completed ✅")
+        LOGGER.info(f"Random seed: {seed}")
+        LOGGER.info(f"Deterministic mode: {deterministic}")
+
+        if precision == 'ieee':
+            LOGGER.info("Compute precision set to: IEEE FP32 (highest precision)")
+        elif precision == 'tf32':
+            LOGGER.info("Compute precision set to: TF32 (balanced)")
+        elif precision == 'none':
+            LOGGER.info("Compute precision set to: None (default behavior)")
+
+        LOGGER.info(f"CuDNN Benchmark: {torch.backends.cudnn.benchmark}")
+    else:
+        LOGGER.info(f"PyTorch environment setup completed ✅")
+        LOGGER.info(f"Random seed: {seed}")
+
+
 def set_random_seed(seed: int = 0, deterministic: bool = False) -> None:
     """
     统一设置 Python / NumPy / PyTorch 的随机种子，支持 CUDA 确定性。
@@ -97,6 +170,34 @@ def set_random_seed(seed: int = 0, deterministic: bool = False) -> None:
                 torch.backends.cudnn.benchmark = False
             else:
                 torch.backends.cudnn.benchmark = True
+
+
+def setup_torch_precision(precision='high'):
+    """
+    设置PyTorch精度，兼容不同版本
+
+    Args:
+        precision: 'highest', 'high', 'medium'
+    """
+
+    if not torch.cuda.is_available():
+        return
+
+    try:
+        # 尝试使用新API
+        if precision == 'highest':
+            torch.backends.cuda.matmul.fp32_precision = 'highest'
+            torch.backends.cudnn.conv.fp32_precision = 'highest'
+        elif precision == 'high':
+            torch.backends.cuda.matmul.fp32_precision = 'high'
+            torch.backends.cudnn.conv.fp32_precision = 'high'
+        elif precision == 'medium':
+            torch.backends.cuda.matmul.fp32_precision = 'medium'
+            torch.backends.cudnn.conv.fp32_precision = 'medium'
+
+    except AttributeError:
+        # 回退到旧API（如果新API不可用）
+        torch.set_float32_matmul_precision(precision)
 
 
 @contextmanager

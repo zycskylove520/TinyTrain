@@ -3,6 +3,8 @@ __pycache__/
 dist/
 tinytrain.egg-info/
 tinytrain/snapshots/
+datasets/
+projects/
 
 # 忽略特定类型的文件
 .env
