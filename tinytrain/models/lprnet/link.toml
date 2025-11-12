@@ -1,3 +1,5 @@
+# Copyright (c) 2025 zycskylove520 - MIT License
+
 core = "cfg/core.toml"
 model = "cfg/model/lprnet.yaml"
 loss = "cfg/loss-lpr.toml"

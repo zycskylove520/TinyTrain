@@ -1,3 +1,5 @@
+# Copyright (c) 2025 zycskylove520 - MIT License
+
 core = "cfg/core.toml"
 model = "cfg/model/mobilefacenet.yaml"
 loss = "cfg/loss-rec.toml"

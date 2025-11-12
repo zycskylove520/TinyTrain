@@ -1,3 +1,5 @@
+# Copyright (c) 2025 zycskylove520 - MIT License
+
 core = "cfg\\core.toml"
 model = "cfg\\yolo11-det.toml"
 loss = "cfg\\loss-det.toml"

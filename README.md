@@ -1,120 +1,155 @@
 # <div align="center">TinyTrain:轻量级AI框架</div>
 
 ***
-<div>TinyTrain 是一个基于 PyTorch 的轻量级弹性可扩展 AI 框架，易于上手，支持高度自定义修改，能够实现绝大多数 AI 任务。</div>
-<div>该框架支持单机单卡、单机多卡以及多机多卡（尚未测试）训练模式。</div>
-<div>目前，TinyTrain 已支持：</div>
+TinyTrain 是一个基于 PyTorch 构建的轻量级、弹性可扩展的深度学习框架，专为简化 AI 模型开发流程而设计。本框架具备高度模块化架构，支持快速上手和深度定制，可覆盖绝大多数计算机视觉任务。
 
-- YOLO系列
-    1. 图像分类
-    2. 目标检测
-    3. 姿态估计
-    4. 实例分割
+## 🚀 核心特性
 
-- Face系列
-    1. 人脸识别
+* **轻量级设计**: 精简的代码架构，低资源消耗，快速部署
+* **弹性可扩展**: 高度模块化设计，支持自定义模块和算法扩展
+* **多硬件支持**: 支持单机单卡、单机多卡及多机多卡训练（分布式训练待完整测试）
+* **生产就绪**: 提供完整的训练、推理、导出流水线
 
-- OCR系列
-    1. 车牌识别
+## 📦 功能支持
 
-<div>后续将不断增加更多 AI 任务适配。</div>
+### 当前支持的算法系列
 
-###### TinyTrain工作目录结构:
-- assets:资产文件存放区域
-- cfg:配置管理相关
-- data:数据集及数据结构相关
-- engine:核心引擎
-- global_var:全局变量存放区域
-- labeling:标注软件(开发中)
-- loss:神经网络损失
-- metrics:评估指标目录
-- modules:神经网络模块目录
-- server:各种后端服务
-- test:测试示例目录
-- tools:实用工具目录
-- tracker:跟踪器目录
-- utils:其他目录
+| 领域      | 支持任务                |
+|---------|---------------------|
+| YOLO系列  | 图像分类、目标检测、姿态估计、实例分割 |
+| Face系列	 | 人脸识别	               |
+| OCR系列	  | 车牌识别	               |
 
-# 安装
+### 持续扩展中
 
-项目提供了 whl 文件，可直接安装。建议安装后配合源码使用。
-你也可以通过以下命令从源码安装（在 TinyTrain-main 目录下）：
+我们正在积极适配更多 AI 任务和算法模型，欢迎社区贡献。
+
+## 🏗️ 项目架构
+
+```text
+TinyTrain/
+├── assets/          # 资源文件
+├── cfg/            # 配置管理系统
+├── data/           # 数据集与数据管道
+├── engine/         # 核心训练引擎
+├── global_var/     # 全局变量管理
+├── labeling/       # 标注工具（开发中）
+├── loss/           # 损失函数模块
+├── metrics/        # 评估指标
+├── modules/        # 神经网络组件
+├── server/         # 后端服务
+├── test/           # 测试用例
+├── tools/          # 实用工具集
+├── tracker/        # 目标跟踪器
+└── utils/          # 通用工具库
+```
+
+## 🔧 安装指南
+
+### 快速安装
+
+我们提供预编译的 whl 包，可直接安装使用：
+
 ```shell
-pip install -e . # 或
+pip install tinytrain-*.whl
+```
+
+### 源码安装
+
+如需最新功能或进行二次开发，建议从源码安装：
+
+```shell
+git clone https://github.com/your-username/TinyTrain.git
+cd TinyTrain
+
+# 开发模式安装（推荐）
+pip install -e .
+
+# 或生产模式安装
 pip install .
 ```
-下面以YOLO目标检测模型来做示例。
 
-# 模型训练
-***
-TinyTrain 提供了 project 目录，可用于直接训练模型。
-你也可以创建一个新的脚本，使用以下代码开启模型训练：
+## 🎯 快速开始
+
+### 模型训练
+
+`TinyTrain` 使用统一的配置管理系统，所有参数通过 `link.toml` 配置文件定义。以下以 YOLO 目标检测为例：
+
 ```python
-from tinytrain import YOLOCore
+from tinytrain.models.yolo import YOLOCore
 
+# 初始化核心引擎
 yolo = YOLOCore(r"link.toml")
-# 配置core相关参数
-yolo.set_config_overrides(link_type="core",
-                          epochs=10,
-                          # resume=False, 恢复训练
-                          # device=[0,1]  支持多卡训练
-                          )
+
+# 覆盖训练参数
+yolo.set_config_overrides(
+    link_type="core",
+    epochs=100,
+    batch_size=32,
+    save_dir="runs/"  # 训练结果输出目录
+    # resume=True,    # 恢复训练
+    # device=[0,1]   # 多GPU训练
+)
+
+# 覆盖数据参数
 # 配置dataset相关参数
 yolo.set_config_overrides(
     link_type="dataset",
     img_size=640
 )
-# 直接训练
-yolo.train(model_scale='n')
-# 使用pt文件进行训练,如果设置了resume为True，则为恢复训练
-yolo.train(model_scale="n", model="xxx.pt")
-```
-所有 AI 训练配置均通过 link.toml 文件指定，可从该文件访问所有可配置参数，并可通过 set_config_overrides 函数进行覆盖。若未指定训练结果目录，则默认生成在当前脚本执行的 runs 目录下。
 
-# 模型推理
-***
-1. 训练完后直接推理
+# 开始训练
+yolo.train(model_scale='n')  # 从头训练 nano 模型
+
+# 或从预训练权重开始
+yolo.train(model_scale="n", model="pretrained.pt")
+```
+
+### 模型推理
+
+#### 1. 训练后直接推理
+
 ```python
-from tinytrain import YOLOCore
+from tinytrain.models.yolo import YOLOCore
 
 yolo = YOLOCore(r"link.toml")
-yolo.set_config_overrides(link_type="core",
-                          epochs=10,
-                          )
 yolo.train(model_scale='n')
 
+# 单张图像推理
 results = yolo.predict(source=r"xxx.jpg")
 for result in results:
     print(result)
 ```
 
-2. 使用pt文件进行推理
+#### 2. 加载训练好的模型
+
 ```python
-from tinytrain import YOLOCore
+from tinytrain.models.yolo import YOLOCore
 
 yolo = YOLOCore(r"link.toml")
 
-# 指定pt文件进行推理
-results = yolo.predict(source=r"xxx.jpg", model=r"xxx.pt")
+# 使用最佳权重
+results = yolo.predict(source=r"xxx.jpg", use_best_pt=True)
 for result in results:
     print(result)
 
-# 使用最新训练的pt文件进行推理
-results = yolo.predict(source=r"xxx.jpg", use_best_pt=True)
+# 或指定权重文件
+results = yolo.predict(source=r"xxx.jpg", model=r"xxx.pt")
 for result in results:
     print(result)
 ```
 
-3. 使用onnx文件进行推理
+#### 3. ONNX 运行时推理
+
 ```python
-from tinytrain import YOLOCore
+from tinytrain.models.yolo import YOLOCore
 
 yolo = YOLOCore(r"link.toml")
 
 # 使用onnx进行推理
 results = yolo.predict(
     model="xxx.onnx",
-    engine="onnx",
+    backend="onnx",
     source=r"D:\project\python_code\TinyTrain-main\datasets\firework\images\val\2f730a7b97ef51dcbba8fe15aee67092.jpg",
     img_shape=(640, 640)
 )
@@ -122,19 +157,49 @@ for result in results:
     print(result)
 ```
 
-# 模型导出
-***
-目前只做了onnx导出适配。
+### 模型导出
+
+当前支持 ONNX 格式导出，便于生产环境部署：
+
 ```python
-from tinytrain import YOLOCore
+from tinytrain.models.yolo import YOLOCore
 
 yolo = YOLOCore(r"link.toml")
 
-# 导出onnx
+# 导出为 ONNX 格式
 yolo.export(
     use_best_pt=True,
     backend="onnx",
     input_shapes=[(1, 3, 640, 640)],
-    # jit_export=True  # 支持jit导出
+    # jit_export=True  # 支持 TorchScript 导出
 )
 ```
+
+## ⚙️ 配置系统
+
+TinyTrain 采用 TOML 格式的配置文件，所有训练参数集中管理，支持运行时动态覆盖.
+
+## 🔮 未来路线图
+
+* 完善多机多卡分布式训练支持
+* 增加自然语言处理任务支持
+* 开发可视化标注工具
+* 优化模型压缩和量化工具
+* 增强模型部署能力
+
+## 🤝 贡献指南
+
+我们欢迎社区贡献！请参阅 CONTRIBUTING.md 了解详细指南。
+
+## 📄 许可证
+
+本项目采用 MIT 许可证。详见 LICENSE 文件。
+
+## 📞 联系我们
+
+* GitHub: https://github.com/zycskylove520/TinyTrain
+* Issues: `GitHub Issues` 或 QQ群：`271313723`
+* Email: `zycskylove520@gmail.com` 或 `867245713@qq.com`
+
+---
+<div align="center"> <strong>TinyTrain</strong> - 让 AI 开发更简单、更高效 </div>
