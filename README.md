@@ -183,7 +183,7 @@ for result in results:
 
 ### 模型导出
 
-当前支持 ONNX 格式导出，便于生产环境部署：
+当前支持 `ONNX` 格式导出，便于生产环境部署：
 
 ```python
 from tinytrain.models.yolo import YOLOCore
@@ -201,7 +201,7 @@ yolo.export(
 
 ## ⚙️ 配置系统
 
-TinyTrain 采用 TOML 格式的配置文件，所有训练参数集中管理，支持运行时动态覆盖.
+`TinyTrain` 采用 `TOML` 或 `yaml/yml` 格式的配置文件，所有训练参数集中管理，支持运行时动态覆盖.
 
 ## 🔮 未来路线图
 
@@ -217,7 +217,7 @@ TinyTrain 采用 TOML 格式的配置文件，所有训练参数集中管理，�
 
 ## 📄 许可证
 
-本项目采用 MIT 许可证。详见 LICENSE 文件。
+本项目采用 `MIT` 许可证。详见 `LICENSE` 文件。
 
 ## 📞 联系我们
 
