@@ -1,14 +1,38 @@
-# <div align="center">TinyTrain:轻量级AI框架</div>
+# <div align="center">TinyTrain: 轻量级AI框架</div>
+
+<div align="center">轻量级 · 高效 · 易用的AI模型开发全流程框架</div>
 
 ***
+
+<div align="center">
+
+![visitors](https://visitor-badge.laobi.icu/badge?page_id=zycskylove520/TinyTrain)
+[![GitHub Repo stars](https://img.shields.io/github/stars/zycskylove520/TinyTrain?style=social)](https://github.com/zycskylove520/TinyTrain/stargazers)
+[![GitHub Code License](https://img.shields.io/github/license/zycskylove520/TinyTrain)](LICENSE)
+[![GitHub last commit](https://img.shields.io/github/last-commit/zycskylove520/TinyTrain)](https://github.com/zycskylove520/TinyTrain/commits/master)
+[![GitHub pull request](https://img.shields.io/badge/PRs-welcome-blue)](https://github.com/zycskylove520/TinyTrain/pulls)
+![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=flat&logo=PyTorch&logoColor=white)
+![Python](https://img.shields.io/badge/python-3.8%2B-blue)
+![OS](https://img.shields.io/badge/OS-Linux%20%7C%20Windows%20%7C%20macOS-brightgreen)
+
+</div>
+
 TinyTrain 是一个基于 PyTorch 构建的轻量级、弹性可扩展的深度学习框架，专为简化 AI 模型开发流程而设计。本框架具备高度模块化架构，支持快速上手和深度定制，可覆盖绝大多数计算机视觉任务。
 
-## 🚀 核心特性
+## ✨ 核心特性
+### 🚀 开发效率
+- **开箱即用**: 预置经典模型和标准训练流程，快速启动项目
+- **模块化设计**: 灵活组合训练组件，支持轻松定制和扩展
+- **生产就绪**: 提供完整的训练、评估、可视化到模型导出全流程
 
-* **轻量级设计**: 精简的代码架构，低资源消耗，快速部署
-* **弹性可扩展**: 高度模块化设计，支持自定义模块和算法扩展
-* **多硬件支持**: 支持单机单卡、单机多卡及多机多卡训练（分布式训练待完整测试）
-* **生产就绪**: 提供完整的训练、推理、导出流水线
+### ⚡ 训练性能  
+- **高效训练**: 支持分布式训练、混合精度、梯度累积等加速技术
+- **轻量级架构**: 精简代码设计，低资源消耗，支持快速部署
+- **多硬件支持**: 完整支持单机单卡、单机多卡及多机多卡训练(测试中)
+
+### 🔧 实验管理
+- **实验跟踪**: 完整的训练过程监控和超参数优化
+- **弹性扩展**: 高度模块化架构，支持自定义模块和算法扩展
 
 ## 📦 功能支持
 
