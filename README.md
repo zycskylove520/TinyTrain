@@ -55,7 +55,7 @@ TinyTrain/
 ├── assets/          # 资源文件
 ├── cfg/            # 配置管理系统
 ├── data/           # 数据集与数据管道
-├── engine/         # 核心训练引擎
+├── engine/         # 核心引擎
 ├── global_var/     # 全局变量管理
 ├── labeling/       # 标注工具（开发中）
 ├── loss/           # 损失函数模块
