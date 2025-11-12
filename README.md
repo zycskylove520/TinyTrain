@@ -7,7 +7,7 @@
 <div align="center">
 
 ![visitors](https://visitor-badge.laobi.icu/badge?page_id=zycskylove520/TinyTrain)
-[![GitHub Repo stars](https://img.shields.io/github/stars/zycskylove520/TinyTrain?style=social)](https://github.com/zycskylove520/TinyTrain/stargazers)
+[![GitHub Repo stars](https://img.shields.io/github/stars/zycskylove520/TinyTrain)](https://github.com/zycskylove520/TinyTrain/stargazers)
 [![GitHub Code License](https://img.shields.io/github/license/zycskylove520/TinyTrain)](LICENSE)
 [![GitHub last commit](https://img.shields.io/github/last-commit/zycskylove520/TinyTrain)](https://github.com/zycskylove520/TinyTrain/commits/master)
 [![GitHub pull request](https://img.shields.io/badge/PRs-welcome-blue)](https://github.com/zycskylove520/TinyTrain/pulls)
