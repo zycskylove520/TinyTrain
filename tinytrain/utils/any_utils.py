@@ -95,7 +95,7 @@ def generate_unique_id(file_name, timestamp):
     return unique_id
 
 
-def setup_torch_environment(seed: int = 0, deterministic: bool = False, precision: str = 'tf32') -> None:
+def setup_torch_environment(seed: int = 0, deterministic: bool = False, precision: str = 'highest') -> None:
     """
     统一设置PyTorch训练环境，包括随机种子、CUDA确定性和计算精度。
 
