@@ -27,7 +27,7 @@ import numpy as np
 from typing import TYPE_CHECKING
 
 from tinytrain.cfg.config_manager import TTConfigManager
-from tinytrain.utils.callback import Callback
+from tinytrain.utils.callback import Callback, Events
 
 if TYPE_CHECKING:
     from tinytrain.engine import TTBasePredictor
@@ -76,7 +76,7 @@ class TTBaseTrackServer:
         callback : Callback
             回调注册器实例。
         """
-        callback.add_callback("on_predict_start", self.create_save_dir)
+        callback.add_callback(Events.ON_PREDICT_START, self.create_save_dir)
 
     def create_save_dir(self, predictor: TTBasePredictor):
         """

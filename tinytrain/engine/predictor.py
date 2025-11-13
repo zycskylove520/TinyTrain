@@ -35,7 +35,7 @@ from tinytrain.data.data_format import BaseDataInfo
 from tinytrain.global_var import TIMER_ENABLED
 from tinytrain.utils import LOGGER
 from tinytrain.utils.any_utils import create_iter_directory
-from tinytrain.utils.callback import Callback
+from tinytrain.utils.callback import Callback, Events
 from tinytrain.utils.time_recorder import TimeRecorder
 
 if TYPE_CHECKING:
@@ -143,7 +143,7 @@ class TTBasePredictor:
         save_dir = Path(core["save_dir"]).resolve() / (core["project_name"] or "default_project") / core["task"] / "predict"
         self.output_dir = create_iter_directory(save_dir, start_string="predict_")
 
-        self.callback.run_callback(self, "on_predict_start")
+        self.callback.run_callback(Events.ON_PREDICT_START ,self)
         try:
             # 1. 选择解析器并启动线程
             parser = SourceParserHub.auto(source)
@@ -152,7 +152,7 @@ class TTBasePredictor:
             # 2. 消费队列
             yield from self._consume()
         finally:
-            self.callback.run_callback(self, "on_predict_end")
+            self.callback.run_callback(Events.ON_PREDICT_END, self)
 
         LOGGER.info(f"Predict result saved in directory -> {self.output_dir}")
 
@@ -291,18 +291,18 @@ class TTBasePredictor:
             Any: show() 处理后的单条结果。
         """
         for data_info in batch:
-            self.callback.run_callback(self, "on_predict_batch_start")
+            self.callback.run_callback(Events.ON_PREDICT_BATCH_START, self)
 
             with self.preprocess_recoder:
                 self.preprocess_result = self.preprocess(data_info)
-            self.callback.run_callback(self, "on_predict_preprocess_end")
+            self.callback.run_callback(Events.ON_PREDICT_PREPROCESS_END, self)
 
             with self.inference_recoder:
                 self.inference_result = self.inference(self.preprocess_result)
-            self.callback.run_callback(self, "on_predict_inference_end")
+            self.callback.run_callback(Events.ON_PREDICT_INFERENCE_END, self)
 
             with self.postprocess_recoder:
                 self.postprocess_result = self.postprocess(data_info, self.inference_result)
-            self.callback.run_callback(self, "on_predict_batch_end")
+            self.callback.run_callback(Events.ON_PREDICT_BATCH_END, self)
 
             yield self.show(data_info, self.postprocess_result)

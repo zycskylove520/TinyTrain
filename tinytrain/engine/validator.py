@@ -31,6 +31,7 @@ from torch import nn
 from tinytrain.data.data_format import BaseBatchDataInfo
 from tinytrain.utils.progress_bar import TTProgressBar
 from tinytrain.cfg import TTConfigManager
+from ..utils.callback import Events
 
 if TYPE_CHECKING:
     from .trainer import TTBaseTrainer
@@ -107,7 +108,7 @@ class TTBaseValidator:
         model = self.get_model_instance()
         model.eval()
 
-        self.callbacks.run_callback(self, "on_val_start")
+        self.callbacks.run_callback(Events.ON_VAL_START, self)
 
         pbar = TTProgressBar(self.val_dataloader, total=len(self.val_dataloader), info_color="blue")
 
@@ -117,7 +118,7 @@ class TTBaseValidator:
             self.start_metrics_on_training(pbar)
 
         for i, batch_samples in enumerate(pbar):
-            self.callbacks.run_callback(self, "on_val_batch_start")
+            self.callbacks.run_callback(Events.ON_VAL_BATCH_START, self)
 
             # Preprocess
             batch_samples = self.preprocess(batch_samples)  # type: ignore[arg-type]
@@ -133,7 +134,7 @@ class TTBaseValidator:
             else:
                 self.update_metrics_on_training(outputs, batch_samples, pbar)
 
-            self.callbacks.run_callback(self, "on_val_batch_end")
+            self.callbacks.run_callback(Events.ON_VAL_BATCH_END, self)
 
         if stop:
             self.end_metrics_on_train_completed(pbar)
@@ -141,7 +142,7 @@ class TTBaseValidator:
             self.end_metrics_on_training(pbar)
 
         fitness = self.get_fitness()
-        self.callbacks.run_callback(self, "on_val_end")
+        self.callbacks.run_callback(Events.ON_VAL_END, self)
 
         if self.world_size > 1:
             dist.barrier()

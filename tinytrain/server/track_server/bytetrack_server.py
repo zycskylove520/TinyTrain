@@ -30,7 +30,7 @@ from tinytrain.cfg import TTConfigManager
 from tinytrain.data.data_format import DetectDataInfo
 from tinytrain.tracker import STrack, BYTETracker
 from tinytrain.utils import LOGGER
-from tinytrain.utils.callback import Callback
+from tinytrain.utils.callback import Callback, Events
 
 from .base_track_server import TTBaseTrackServer
 
@@ -77,9 +77,9 @@ class ByteTrackServer(TTBaseTrackServer):
             回调注册器实例。
         """
         super().register_callback(callback)
-        callback.add_callback("on_predict_start", self.logger_record)
-        callback.add_callback("on_predict_batch_end", self.update_track_results)
-        callback.add_callback("on_predict_end", self.on_predict_end)
+        callback.add_callback(Events.ON_PREDICT_START, self.logger_record)
+        callback.add_callback(Events.ON_PREDICT_BATCH_END, self.update_track_results)
+        callback.add_callback(Events.ON_PREDICT_END, self.on_predict_end)
 
     def logger_record(self, predictor: TTBasePredictor):
         """预测开始时记录日志。"""

@@ -80,7 +80,8 @@ class TTEngineRegistry:
         "tuner",
         "distiller",
         "inference_server",
-        "export_server"
+        "export_server",
+        "track_server"
     )
 
     """已注册的核心名称集合。"""

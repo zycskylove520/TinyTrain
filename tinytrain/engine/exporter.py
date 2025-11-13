@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Union
 from tinytrain.cfg import TTConfigManager, TTEngineRegistry
 from tinytrain.utils import LOGGER
 from tinytrain.utils.any_utils import create_iter_directory
-from tinytrain.utils.callback import Callback
+from tinytrain.utils.callback import Callback, Events
 
 if TYPE_CHECKING:
     import torch
@@ -104,10 +104,10 @@ class TTBaseExporter:
         save_dir = Path(core["save_dir"]).resolve() / (core["project_name"] or "default_project") / core["task"] / "export"
         self.output_dir = create_iter_directory(save_dir, start_string="export_")
 
-        self.callback.run_callback(self, "on_export_start")
+        self.callback.run_callback(Events.ON_EXPORT_START, self)
         with torch.inference_mode():
             self.export_server.export(self.output_dir)
-        self.callback.run_callback(self, "on_export_end")
+        self.callback.run_callback(Events.ON_EXPORT_END, self)
 
         LOGGER.info(f"Export result saved in directory -> {self.output_dir}")
 

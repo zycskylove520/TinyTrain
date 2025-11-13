@@ -45,7 +45,7 @@ from tinytrain.metrics.base import TrainResult
 from tinytrain.utils import LOGGER
 from tinytrain.utils.progress_bar import TTProgressBar
 from tinytrain.utils.any_utils import setup_torch_environment, create_iter_directory, maybe_limit_num_workers
-from tinytrain.utils.callback import Callback
+from tinytrain.utils.callback import Callback, Events
 from tinytrain.utils.checks import check_amp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from tinytrain.utils.train_utils import ModelEMA, EarlyStopping
@@ -326,7 +326,7 @@ class TTBaseTrainer:
         Args:
             world_size (int): 分布式训练中的进程数量。
         """
-        self.callbacks.run_callback(self, "on_prepare_train_start")
+        self.callbacks.run_callback(Events.ON_PREPARE_TRAIN_START, self)
 
         # set save dir
         self.set_save_dir(world_size)
@@ -373,7 +373,7 @@ class TTBaseTrainer:
         if RANK in {-1, 0}:
             self.plot_something_before_train()
 
-        self.callbacks.run_callback(self, "on_prepare_train_end")
+        self.callbacks.run_callback(Events.ON_PREPARE_TRAIN_END, self)
 
         # DDP synchronize
         if world_size > 1:
@@ -1120,9 +1120,9 @@ class TTBaseTrainer:
         # 正式训练
         LOGGER.info(f"start training...")
         train_time_start = time.time()
-        self.callbacks.run_callback(self, "on_train_start")
+        self.callbacks.run_callback(Events.ON_TRAIN_START, self)
         while True:
-            self.callbacks.run_callback(self, "on_train_epoch_start")
+            self.callbacks.run_callback(Events.ON_TRAIN_EPOCH_START, self)
             self.model.train()
 
             # dataloader sampler
@@ -1135,7 +1135,7 @@ class TTBaseTrainer:
             # 开启epoch循环
             smooth_loss_items = None
             for i, batch_samples in enumerate(pbar):
-                self.callbacks.run_callback(self, "on_train_batch_start")
+                self.callbacks.run_callback(Events.ON_TRAIN_BATCH_START, self)
 
                 # 当前是第几个batch
                 current_batch = current_epoch * num_batch + i
@@ -1198,7 +1198,7 @@ class TTBaseTrainer:
                         f"{s_loss_values}|"
                     )
 
-                self.callbacks.run_callback(self, "on_train_batch_end")
+                self.callbacks.run_callback(Events.ON_TRAIN_BATCH_END, self)
 
             if RANK in {-1, 0}:
                 # train result
@@ -1226,13 +1226,13 @@ class TTBaseTrainer:
 
             # save model
             self.save_model(world_size, current_epoch)
-            self.callbacks.run_callback(self, "on_model_save")
+            self.callbacks.run_callback(Events.ON_MODEL_SAVE, self)
 
             # save train result to csv file
             if RANK in {-1, 0} and self.train_result:
                 self.train_result.save_csv()
 
-            self.callbacks.run_callback(self, "on_train_epoch_end")
+            self.callbacks.run_callback(Events.ON_TRAIN_EPOCH_END, self)
 
             if world_size > 1:
                 dist.barrier()
@@ -1297,7 +1297,7 @@ class TTBaseTrainer:
         # export simplified model
         self.simplified_model(world_size)
 
-        self.callbacks.run_callback(self, "on_train_end")
+        self.callbacks.run_callback(Events.ON_TRAIN_END, self)
         LOGGER.info(f"train results saved at {self.save_dir}")
 
     def only_do_validate(self):

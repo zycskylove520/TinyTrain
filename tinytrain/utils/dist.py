@@ -20,9 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-"""
-分布式训练命令生成工具
-"""
 from __future__ import annotations
 
 import socket
