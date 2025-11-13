@@ -529,7 +529,7 @@ class TTBaseTrainer:
         Args:
             world_size (int): 分布式训练中的进程数量。
         """
-        LOGGER.info(f"Initializing dataloader...")
+        LOGGER.info(f"Initializing dataLoader. This may take a few moments for large datasets. Please wait patiently...")
         only_val = self.config_manager.core["only_val"]
 
         # train dataloader
