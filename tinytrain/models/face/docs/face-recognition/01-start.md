@@ -64,7 +64,7 @@ class2/class2_001.jpg class3/class3_001.jpg 0
 ***
 
 ```python
-from tinytrain import FaceCore
+from tinytrain.models.face import FaceCore
 
 # 指定人脸识别模型的link.toml文件
 face = FaceCore(link_file="../../task/recognition/link.toml")
@@ -98,7 +98,7 @@ face.train(model_scale='n')
 ***
 
 ```python
-from tinytrain import FaceCore
+from tinytrain.models.face import FaceCore
 
 # 指定人脸识别模型的link.toml文件
 face = FaceCore(link_file="link.toml")
@@ -123,7 +123,7 @@ for result in results:
 人脸识别模型导出到第三方引擎的模型最终输出为人脸的特征向量。
 
 ```python
-from tinytrain import FaceCore
+from tinytrain.models.face import FaceCore
 
 # 指定人脸识别模型的link.toml文件
 face = FaceCore(link_file="link.toml")

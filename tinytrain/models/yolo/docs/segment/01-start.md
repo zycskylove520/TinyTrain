@@ -60,7 +60,7 @@ YOLO 实例分割（YOLO-Segment）沿用 YOLOv5/v8 的扁平化文本格式，*
 # 模型训练
 ***
 ```python
-from tinytrain import YOLOCore
+from tinytrain.models.yolo import YOLOCore
 
 # 指定YOLO实例分割模型的link.toml文件
 yolo = YOLOCore(link_file="link.toml")
@@ -94,7 +94,7 @@ yolo.train(model_scale='n')
 ***
 推理时传入的source可以是图片、视频、摄像头索引等。
 ```python
-from tinytrain import YOLOCore
+from tinytrain.models.yolo import YOLOCore
 
 # 指定YOLO实例分割模型的link.toml文件
 yolo = YOLOCore(link_file="link.toml")
@@ -115,7 +115,7 @@ for result in results:
 # 模型导出
 ***
 ```python
-from tinytrain import YOLOCore
+from tinytrain.models.yolo import YOLOCore
 
 # 指定YOLO实例分割模型的link.toml文件
 yolo = YOLOCore(link_file="link.toml")
@@ -139,7 +139,7 @@ yolo.export(
 cfg目录下有tracker配置文件可进行跟踪相关参数配置。
 ***
 ```python
-from tinytrain import YOLOCore
+from tinytrain.models.yolo import YOLOCore
 
 # 指定YOLO实例分割模型的link.toml文件
 yolo = YOLOCore(link_file="link.toml")
@@ -163,7 +163,7 @@ for result in results:
 ***
 YOLO实例分割算法支持进行超参数搜索，以便在训练前寻找最优超参数。
 ```python
-from tinytrain import YOLOCore
+from tinytrain.models.yolo import YOLOCore
 
 # 指定YOLO实例分割模型的link.toml文件
 yolo = YOLOCore(link_file="link.toml")
