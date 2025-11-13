@@ -95,7 +95,7 @@ def generate_unique_id(file_name, timestamp):
     return unique_id
 
 
-def setup_torch_environment(seed: int = 0, deterministic: bool = False, precision: str = 'highest') -> None:
+def setup_torch_environment(seed: int = 0, deterministic: bool = False, precision: str = 'high') -> None:
     """
     统一设置PyTorch训练环境，包括随机种子、CUDA确定性和计算精度。
 
@@ -110,7 +110,6 @@ def setup_torch_environment(seed: int = 0, deterministic: bool = False, precisio
     import random
     import numpy as np
     import torch
-    import warnings
 
     # 设置随机种子
     random.seed(seed)
@@ -128,47 +127,41 @@ def setup_torch_environment(seed: int = 0, deterministic: bool = False, precisio
             torch.backends.cudnn.deterministic = deterministic
             torch.backends.cudnn.benchmark = not deterministic  # 确定性模式下关闭benchmark
 
-            # 设置计算精度（忽略弃用警告）
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore",
-                                        message="Please use the new API settings to control TF32 behavior",
-                                        category=UserWarning)
+        # 设置计算精度
+        if precision in ['highest', 'high', 'medium']:
+            torch.set_float32_matmul_precision(precision)
 
-                try:
-                    # 使用新API设置精度
-                    if precision == 'ieee':
-                        # IEEE FP32 标准精度（最高精度）
-                        torch.backends.cuda.matmul.fp32_precision = 'ieee'
-                        torch.backends.cudnn.conv.fp32_precision = 'ieee'
-                    elif precision == 'tf32':
-                        # TF32 精度（Ampere GPU默认，平衡精度和性能）
-                        torch.backends.cuda.matmul.fp32_precision = 'tf32'
-                        torch.backends.cudnn.conv.fp32_precision = 'tf32'
-                    elif precision == 'none':
-                        # 无特殊精度设置
-                        torch.backends.cuda.matmul.fp32_precision = 'none'
-                        torch.backends.cudnn.conv.fp32_precision = 'none'
-                    else:
-                        raise ValueError(f"Unsupported precision level: {precision}")
-                except AttributeError:
-                    # 回退到旧API（如果新API不可用）
-                    torch.set_float32_matmul_precision(precision)
+            # 同时设置TF32相关选项（可选）
+            if precision == 'medium':
+                # 启用TF32以获得最佳性能
+                torch.backends.cuda.matmul.allow_tf32 = True
+                torch.backends.cudnn.allow_tf32 = True
+            else:
+                # 禁用TF32以获得最高精度
+                torch.backends.cuda.matmul.allow_tf32 = False
+                torch.backends.cudnn.allow_tf32 = False
+        else:
+            raise ValueError(f"Unsupported precision level: {precision}. "
+                             f"Supported values are: 'highest', 'high', 'medium'")
 
         LOGGER.info(f"PyTorch environment setup completed ✅")
         LOGGER.info(f"Random seed: {seed}")
         LOGGER.info(f"Deterministic mode: {deterministic}")
 
-        if precision == 'ieee':
-            LOGGER.info("Compute precision set to: IEEE FP32 (highest precision)")
-        elif precision == 'tf32':
-            LOGGER.info("Compute precision set to: TF32 (balanced)")
-        elif precision == 'none':
-            LOGGER.info("Compute precision set to: None (default behavior)")
+        if precision == 'highest':
+            LOGGER.info("Compute precision set to: Highest (FP32 full precision)")
+        elif precision == 'high':
+            LOGGER.info("Compute precision set to: High (balanced precision)")
+        elif precision == 'medium':
+            LOGGER.info("Compute precision set to: Medium (TF32 enabled for performance)")
 
         LOGGER.info(f"CuDNN Benchmark: {torch.backends.cudnn.benchmark}")
+        LOGGER.info(f"TF32 matmul enabled: {torch.backends.cuda.matmul.allow_tf32}")
+        LOGGER.info(f"TF32 cuDNN enabled: {torch.backends.cudnn.allow_tf32}")
     else:
         LOGGER.info(f"PyTorch environment setup completed ✅")
         LOGGER.info(f"Random seed: {seed}")
+        LOGGER.info("CUDA not available, using CPU")
 
 
 def set_random_seed(seed: int = 0, deterministic: bool = False) -> None:
