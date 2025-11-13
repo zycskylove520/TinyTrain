@@ -172,60 +172,6 @@ def setup_torch_environment(seed: int = 0, deterministic: bool = False, precisio
         LOGGER.info(f"Random seed: {seed}")
 
 
-def set_random_seed(seed: int = 0, deterministic: bool = False) -> None:
-    """
-    统一设置 Python / NumPy / PyTorch 的随机种子，支持 CUDA 确定性。
-
-    Args:
-        seed: 随机种子
-        deterministic: 是否启用 CUDA 确定性算法（会牺牲速度）
-    """
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-
-    # 如果使用CUDA，额外设置CUDA的随机种子
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)  # 为所有GPU设置随机种子
-
-        # 启用CUDA的非确定性算法
-        if torch.backends.cudnn.is_available():
-            torch.backends.cudnn.deterministic = deterministic
-            if deterministic:
-                torch.backends.cudnn.benchmark = False
-            else:
-                torch.backends.cudnn.benchmark = True
-
-
-def setup_torch_precision(precision='high'):
-    """
-    设置PyTorch精度，兼容不同版本
-
-    Args:
-        precision: 'highest', 'high', 'medium'
-    """
-
-    if not torch.cuda.is_available():
-        return
-
-    try:
-        # 尝试使用新API
-        if precision == 'highest':
-            torch.backends.cuda.matmul.fp32_precision = 'highest'
-            torch.backends.cudnn.conv.fp32_precision = 'highest'
-        elif precision == 'high':
-            torch.backends.cuda.matmul.fp32_precision = 'high'
-            torch.backends.cudnn.conv.fp32_precision = 'high'
-        elif precision == 'medium':
-            torch.backends.cuda.matmul.fp32_precision = 'medium'
-            torch.backends.cudnn.conv.fp32_precision = 'medium'
-
-    except AttributeError:
-        # 回退到旧API（如果新API不可用）
-        torch.set_float32_matmul_precision(precision)
-
-
 @contextmanager
 def torch_distributed_zero_first(local_rank: int):
     """
