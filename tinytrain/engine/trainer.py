@@ -730,7 +730,7 @@ class TTBaseTrainer:
             self.ema = ModelEMA(self.get_model_instance(world_size))
             LOGGER.info("EMA(Exponential Moving Average) is enabled.")
 
-        LOGGER.info(f"Model setup complete ✅")
+        LOGGER.info(f"Model setup completed ✅")
 
     def convert_ddp_model(self, world_size: int) -> None:
         """
