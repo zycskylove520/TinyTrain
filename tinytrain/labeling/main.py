@@ -22,7 +22,7 @@ SOFTWARE.
 
 from kivy.config import Config
 
-FONT = 'assets/fonts/QingguaMoeSans.ttf'
+FONT = '../../tinytrain/assets/fonts/QingguaMoeSans.ttf'
 Config.set('kivy', 'default_font', ['TTFont', FONT])
 
 from kivy.app import App

@@ -43,10 +43,10 @@ WORLD_SIZE = int(os.getenv("WORLD_SIZE", 1))
 NUM_THREADS = min(8, max(1, os.cpu_count() - 1))
 
 # profiler
-TIMER_ENABLED = True  # 是否进行耗时统计
+TIMER_ENABLED = int(os.getenv("USE_TINYTRAIN_TIMER_ENABLED", 0))  # 是否进行耗时统计，0表示不统计，1表示统计
 
 # log
-LOGGING_NAME = "TinyTrain"
+LOGGING_NAME = os.getenv("TINYTRAIN_LOGGING_NAME", "TinyTrain")
 
 # format
 IMG_FORMATS = {"bmp", "dng", "jpeg", "jpg", "mpo", "png", "tif", "tiff", "webp", "pfm", "heic"}  # image suffixes
@@ -60,7 +60,8 @@ warnings.filterwarnings("ignore", module="albumentations.*")
 cv2.setNumThreads(NUM_THREADS)  # 在模块初始化时设置一次
 
 # font
-DEFAULT_FONT = "LXGWWenKai-Regular.ttf"
+DEFAULT_FONT = os.getenv("TINYTRAIN_FONT", "LXGWWenKai-Regular.ttf")
+
 
 def localization(font: str = None):
     if font is None:
@@ -68,14 +69,30 @@ def localization(font: str = None):
         return
 
     font_dir = Path(matplotlib.matplotlib_fname()).parent / "fonts/ttf/"
-    local_font = font_dir / font
+
+    # 判断字体路径类型
+    font_path = Path(font)
+
+    if font_path.is_absolute() or (len(font_path.parts) > 1 and font_path.parts[0] not in {".", ".."}):
+        # 绝对路径或相对路径（包含目录分隔符）
+        if font_path.exists():
+            remote_font = font_path
+            local_font = font_dir / font_path.name
+        else:
+            print(f"Specified font file does not exist: {font_path}")
+            return
+    else:
+        # 只有字体文件名，从 assets/fonts 目录获取
+        remote_font = ASSETS_PATH / "fonts" / font
+        local_font = font_dir / font
+
     if local_font.exists():
+        print(f"Using font: {font_path.name}")
         font_prop = FontProperties(fname=local_font)
     else:
-        print(f"Localizing font Loading: {font}")
+        print(f"Localizing font Loading: {font_path.name}")
 
         # 拷贝新字体
-        remote_font = ASSETS_PATH / f"fonts/{font}"
         shutil.copy(remote_font, font_dir)
 
         # 方法一：直接删除字体缓存目录
