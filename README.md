@@ -60,6 +60,7 @@ TinyTrain/
 ├── labeling/       # 标注工具（开发中）
 ├── loss/           # 损失函数模块
 ├── metrics/        # 评估指标
+├── models/         # AI模型
 ├── modules/        # 神经网络组件
 ├── server/         # 后端服务
 ├── test/           # 测试用例
@@ -94,6 +95,7 @@ pip install .
 ```
 
 ## 🎯 快速开始
+`TinyTrain` 所有已实现的AI模型都在`tinytrain.models`目录下。
 
 ### 模型训练
 
