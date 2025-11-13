@@ -10,7 +10,7 @@ description = "A lightweight PyTorch-based AI framework for training, inference 
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
-keywords = ["machine-learning", "deep-learning", "computer-vision", "ML", "DL", "AI"]
+keywords = ["machine-learning", "deep-learning", "computer-vision", "ML", "DL", "AI", "YOLO"]
 authors = [
     { name = "zycskylove520", email = "867245713@qq.com" }
 ]
