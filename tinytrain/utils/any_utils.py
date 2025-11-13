@@ -97,15 +97,7 @@ def generate_unique_id(file_name, timestamp):
 
 def setup_torch_environment(seed: int = 0, deterministic: bool = False, precision: str = 'high') -> None:
     """
-    统一设置PyTorch训练环境，包括随机种子、CUDA确定性和计算精度。
-
-    Args:
-        seed: 随机种子 (默认: 0)
-        deterministic: 是否启用确定性算法，会牺牲速度但保证可复现性 (默认: False)
-        precision: 计算精度 - 'highest', 'high', 'medium' (默认: 'medium')。
-                'highest': 禁用 TF32，使用 FP32 全精度（最慢但最精确）
-                'high': 平衡精度和性能
-                'medium': 启用 TF32，在 Ampere+ GPU 上获得最佳性能
+    统一设置PyTorch训练环境，完全使用新API避免警告。
     """
     import random
     import numpy as np
@@ -118,50 +110,66 @@ def setup_torch_environment(seed: int = 0, deterministic: bool = False, precisio
 
     # 如果使用CUDA，设置CUDA相关配置
     if torch.cuda.is_available():
-        # 设置CUDA随机种子
         torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)  # 为所有GPU设置随机种子
+        torch.cuda.manual_seed_all(seed)
 
         # 设置CuDNN配置
         if torch.backends.cudnn.is_available():
             torch.backends.cudnn.deterministic = deterministic
-            torch.backends.cudnn.benchmark = not deterministic  # 确定性模式下关闭benchmark
+            torch.backends.cudnn.benchmark = not deterministic
 
-        # 设置计算精度
-        if precision in ['highest', 'high', 'medium']:
-            torch.set_float32_matmul_precision(precision)
+            # 检测PyTorch版本
+            torch_version = torch.__version__
+            major, minor = map(int, torch_version.split('.')[:2])
 
-            # 同时设置TF32相关选项（可选）
-            if precision == 'medium':
-                # 启用TF32以获得最佳性能
-                torch.backends.cuda.matmul.allow_tf32 = True
-                torch.backends.cudnn.allow_tf32 = True
+            # 根据版本选择不同的设置方式
+            if major == 2 and minor >= 9:
+                # PyTorch 2.9+ 使用新API
+                if precision == 'medium':
+                    # 启用TF32以获得最佳性能
+                    torch.backends.cuda.matmul.fp32_precision = 'tf32'
+                    torch.backends.cudnn.conv.fp32_precision = 'tf32'
+                    # 避免使用 set_float32_matmul_precision
+                elif precision == 'high':
+                    # 平衡精度和性能
+                    torch.backends.cuda.matmul.fp32_precision = 'ieee'
+                    torch.backends.cudnn.conv.fp32_precision = 'ieee'
+                elif precision == 'highest':
+                    # 禁用TF32以获得最高精度
+                    torch.backends.cuda.matmul.fp32_precision = 'ieee'
+                    torch.backends.cudnn.conv.fp32_precision = 'ieee'
             else:
-                # 禁用TF32以获得最高精度
-                torch.backends.cuda.matmul.allow_tf32 = False
-                torch.backends.cudnn.allow_tf32 = False
-        else:
-            raise ValueError(f"Unsupported precision level: {precision}. "
-                             f"Supported values are: 'highest', 'high', 'medium'")
+                # PyTorch <2.9 使用旧API
+                LOGGER.info(f"Using PyTorch {torch_version} (legacy API)")
+
+                if precision == 'medium':
+                    # 启用TF32以获得最佳性能
+                    torch.backends.cuda.matmul.allow_tf32 = True
+                    torch.backends.cudnn.allow_tf32 = True
+                    if hasattr(torch, 'set_float32_matmul_precision'):
+                        torch.set_float32_matmul_precision('medium')
+                elif precision == 'high':
+                    # 平衡精度和性能
+                    torch.backends.cuda.matmul.allow_tf32 = False
+                    torch.backends.cudnn.allow_tf32 = False
+                    if hasattr(torch, 'set_float32_matmul_precision'):
+                        torch.set_float32_matmul_precision('high')
+                elif precision == 'highest':
+                    # 禁用TF32以获得最高精度
+                    torch.backends.cuda.matmul.allow_tf32 = False
+                    torch.backends.cudnn.allow_tf32 = False
+                    if hasattr(torch, 'set_float32_matmul_precision'):
+                        torch.set_float32_matmul_precision('highest')
 
         LOGGER.info(f"PyTorch environment setup completed ✅")
-        LOGGER.info(f"Random seed: {seed}")
-        LOGGER.info(f"Deterministic mode: {deterministic}")
+        LOGGER.info(f"PyTorch version: {torch.__version__}")
+        LOGGER.info(f"Random seed: {seed}, Deterministic: {deterministic}")
+        LOGGER.info(f"Precision setting: {precision}")
 
-        if precision == 'highest':
-            LOGGER.info("Compute precision set to: Highest (FP32 full precision)")
-        elif precision == 'high':
-            LOGGER.info("Compute precision set to: High (balanced precision)")
-        elif precision == 'medium':
-            LOGGER.info("Compute precision set to: Medium (TF32 enabled for performance)")
-
-        LOGGER.info(f"CuDNN Benchmark: {torch.backends.cudnn.benchmark}")
-        LOGGER.info(f"TF32 matmul enabled: {torch.backends.cuda.matmul.allow_tf32}")
-        LOGGER.info(f"TF32 cuDNN enabled: {torch.backends.cudnn.allow_tf32}")
     else:
         LOGGER.info(f"PyTorch environment setup completed ✅")
+        LOGGER.info(f"PyTorch version: {torch.__version__}")
         LOGGER.info(f"Random seed: {seed}")
-        LOGGER.info("CUDA not available, using CPU")
 
 
 def set_random_seed(seed: int = 0, deterministic: bool = False) -> None:
