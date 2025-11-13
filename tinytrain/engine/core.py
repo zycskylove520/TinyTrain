@@ -850,3 +850,5 @@ class TTBaseCore:
             return self._find_last_pt_file()
         elif use_best_pt:
             return self._find_best_pt_file()  # 假设有对应的查找最佳权重文件的方法
+        else:
+            return None
