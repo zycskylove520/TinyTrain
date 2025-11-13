@@ -1561,7 +1561,7 @@ class TTBaseTrainer:
             timeout=timedelta(seconds=3600),  # 1 hours
             # rank=RANK,
             # world_size=WORLD_SIZE,
-            # device_id=self.device,
+            device_id=self.device,
         )
 
     @staticmethod
