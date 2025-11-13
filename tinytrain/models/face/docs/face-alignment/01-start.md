@@ -15,7 +15,7 @@ FACE_LANDMARK_2D_5 = np.array(
 
 ## 68点人脸关键点模板
 68 点模型 没有强制输入尺寸，但实际开源/商用代码里几乎都把 灰度 128 × 128 作为“事实标准”.
-<p style="text-align: center;">
+<p align="center">
     <img src=img/2d_landmarks_68_points.jpg width="400">
 </p>
 
@@ -40,7 +40,7 @@ FACE_LANDMARK_2D_68 = np.array([
 
 ## 106点人脸关键点模板
 106 点模型没有“唯一法定”输入尺寸，但开源/商用实现普遍把 224×224 作为默认训练与推理分辨率.
-<p style="text-align: center;">
+<p align="center">
     <img src=img/2d_landmarks_106_points.jpg width="400">
 </p>
 
