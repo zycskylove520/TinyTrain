@@ -1,10 +1,10 @@
-# <div align="center">TinyTrain: 轻量级AI框架</div>
+# <div style="text-align: center;">TinyTrain: 轻量级AI框架</div>
 
-<div align="center">轻量级 · 高效 · 易用的AI模型开发全流程框架</div>
+<div style="text-align: center;">轻量级 · 高效 · 易用的AI模型开发全流程框架</div>
 
 ***
 
-<div align="center">
+<div style="text-align: center;">
 
 ![visitors](https://visitor-badge.laobi.icu/badge?page_id=zycskylove520/TinyTrain)
 [![GitHub Repo stars](https://img.shields.io/github/stars/zycskylove520/TinyTrain)](https://github.com/zycskylove520/TinyTrain/stargazers)
@@ -226,4 +226,4 @@ yolo.export(
 * Email: `zycskylove520@gmail.com` 或 `867245713@qq.com`
 
 ---
-<div align="center"> <strong>TinyTrain</strong> - 让 AI 开发更简单、更高效 </div>
+<div style="text-align: center;"> <strong>TinyTrain</strong> - 让 AI 开发更简单、更高效 </div>
