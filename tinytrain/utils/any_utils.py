@@ -102,7 +102,10 @@ def setup_torch_environment(seed: int = 0, deterministic: bool = False, precisio
     Args:
         seed: 随机种子 (默认: 0)
         deterministic: 是否启用确定性算法，会牺牲速度但保证可复现性 (默认: False)
-        precision: 计算精度 - 'ieee', 'tf32', 'none' (默认: 'tf32')
+        precision: 计算精度 - 'highest', 'high', 'medium' (默认: 'medium')。
+                'highest': 禁用 TF32，使用 FP32 全精度（最慢但最精确）
+                'high': 平衡精度和性能
+                'medium': 启用 TF32，在 Ampere+ GPU 上获得最佳性能
     """
     import random
     import numpy as np
