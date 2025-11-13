@@ -1553,9 +1553,6 @@ class TTBaseTrainer:
     def set_ddp():
         """
         初始化分布式训练环境（DDP）。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
         """
         from torch.distributed import init_process_group
 
