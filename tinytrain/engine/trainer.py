@@ -193,7 +193,7 @@ class TTBaseTrainer:
         try:
             if world_size > 1:
                 LOGGER.info("Initializing DDP...")
-                self.set_ddp(world_size)
+                self.set_ddp()
             if self.intra_node_group is None and world_size > 1 and dist.is_initialized():
                 self.intra_node_group = self._get_intra_node_group()
             self._do_train(world_size)
