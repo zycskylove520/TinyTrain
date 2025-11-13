@@ -195,7 +195,7 @@ class TTBaseCore:
 
         # 修改进程名，从而避免与其他脚本混淆
         if process_name:
-            setproctitle.setproctitle(process_name)
+            setproctitle.setproctitle(f"{process_name}-local_rank:[{LOCAL_RANK}]")
 
         nproc_per_node = self._get_nproc_per_node()
         # 智能设置线程数
@@ -211,7 +211,7 @@ class TTBaseCore:
         # 单进程或 DDP 子进程执行训练
         self._launch_training(model_scale, model, use_last_pt, use_best_pt)
 
-    def predict(self, source, model: str | Path | None = None, backend: str | None = None, use_best_pt=False, **kwargs) -> Generator[Any, None, None]:
+    def predict(self, source, model: str | Path | None = None, backend: str | None = None, use_last_pt=False, use_best_pt=False, **kwargs) -> Generator[Any, None, None]:
         """
         启动推理。
 
@@ -219,7 +219,8 @@ class TTBaseCore:
             source: 输入源（路径、URL、摄像头索引等）。
             model (str | Path | None): 权重或后端文件路径。
             backend (str | None): 后端名称（onnx / tensorrt / torchscript ...）。
-            use_best_pt (bool): 是否自动寻找 best.pt。
+            use_last_pt (bool): 当 model 为 None 时，是否自动寻找最近一次训练的 last.pt。
+            use_best_pt (bool): 当 model 为 None 时，是否自动寻找最近一次训练的 best.pt。
             **kwargs: 透传给 predictor。
 
         Returns:
@@ -230,8 +231,8 @@ class TTBaseCore:
             self._set_device()
 
         # find best.pt file
-        if use_best_pt and model is None:
-            model = self._find_best_pt_file()
+        if model is None:
+            model = self._find_pt_file(use_best_pt=use_best_pt, use_last_pt=use_last_pt)
 
         # bind predictor
         if self.predictor is None:
@@ -239,21 +240,21 @@ class TTBaseCore:
 
         yield from self.predictor.predict(source)
 
-    def __call__(self, source, model: str | Path | None = None, **kwargs) -> Generator[Any, None, None]:
+    def __call__(self, source, model: str | Path | None = None, backend: str | None = None, use_last_pt=False, use_best_pt=False, **kwargs) -> Generator[Any, None, None]:
         """
         允许 TTBaseCore 实例直接当函数用：core(source) 等价于 predict(source)。
         """
-        yield from self.predict(source, model, **kwargs)
+        yield from self.predict(source, model, backend, use_last_pt, use_best_pt, **kwargs)
 
-    def export(self, backend: str, model: str | Path | None = None, use_best_pt=False, **kwargs):
+    def export(self, backend: str, model: str | Path | None = None, use_last_pt=False, use_best_pt=False, **kwargs):
         """
         启动导出。
 
         Args:
             backend (str): 导出后端名称（onnx / tensorrt / torchscript ...）。
             model (str | Path | None): 权重文件路径。
-            export_dir (str | Path | None): 导出目录，默认为配置中的 save_dir。
-            use_best_pt (bool): 是否自动寻找 best.pt。
+            use_last_pt (bool): 当 model 为 None 时，是否自动寻找最近一次训练的 last.pt。
+            use_best_pt (bool): 当 model 为 None 时，是否自动寻找最近一次训练的 best.pt。
             **kwargs: 透传给 exporter。
         """
         # 指定设备
@@ -261,8 +262,8 @@ class TTBaseCore:
             self._set_device()
 
         # find best.pt file
-        if use_best_pt and model is None:
-            model = self._find_best_pt_file()
+        if model is None:
+            model = self._find_pt_file(use_best_pt=use_best_pt, use_last_pt=use_last_pt)
 
         # bind predictor
         if self.exporter is None:
@@ -558,10 +559,10 @@ class TTBaseCore:
         单进程 / DDP 子进程内部真正执行训练的入口函数。
 
         参数：
-            model_scale: 模型规模（n/s/m/l/x），新建权重时使用。
-            model: 权重文件路径（.pt/.pth），优先级高于 use_last_pt。
-            use_last_pt: 当 model 为 None 时，是否自动寻找最近一次训练的 last.pt。
-            use_best_pt: 当 model 为 None 时，是否自动寻找最近一次训练的 best.pt。
+            model_scale (str): 模型规模，例如（n/s/m/l/x），新建权重时使用。
+            model (str | Path): 权重文件路径（.pt/.pth），优先级高于 use_last_pt。
+            use_last_pt (bool): 当 model 为 None 时，是否自动寻找最近一次训练的 last.pt。
+            use_best_pt (bool): 当 model 为 None 时，是否自动寻找最近一次训练的 best.pt。
 
         步骤：
         1. 若 use_last_p 或 use_best_pt 为真，自动定位权重。
@@ -573,17 +574,9 @@ class TTBaseCore:
         - 该函数由 train() 在“非 torchrun 启动”或“DDP 子进程”路径下调用。
         - 所有异常直接抛出，由外层 train() 统一捕获并记录。
         """
-
-        # 检查 use_last_pt 和 use_best_pt 互斥性
-        if use_last_pt and use_best_pt:
-            raise ValueError("参数 use_last_pt 和 use_best_pt 不能同时为 True")
-
         # 根据优先级自动选择权重文件
         if model is None:
-            if use_last_pt:
-                model = self._find_last_pt_file()
-            elif use_best_pt:
-                model = self._find_best_pt_file()  # 假设有对应的查找最佳权重文件的方法
+            model = self._find_pt_file(use_last_pt=use_last_pt, use_best_pt=use_best_pt)
 
         # bind model
         if self.model is None:
@@ -846,3 +839,14 @@ class TTBaseCore:
                 f"在 {task_dir} 及其子目录中均未找到可用的 best.pt"
             )
         return pt_model
+
+    def _find_pt_file(self, use_last_pt, use_best_pt):
+        # 检查 use_last_pt 和 use_best_pt 互斥性
+        if use_last_pt and use_best_pt:
+            raise ValueError("参数 use_last_pt 和 use_best_pt 不能同时为 True")
+
+        # 根据优先级自动选择权重文件
+        if use_last_pt:
+            return self._find_last_pt_file()
+        else:
+            return self._find_best_pt_file()  # 假设有对应的查找最佳权重文件的方法
