@@ -61,7 +61,7 @@ class TTBaseCore:
     # ------------------------------------------------------------------
     # 1. 构造与类级钩子
     # ------------------------------------------------------------------
-    def __init__(self, link_file: str | Path, callback: Callback = None, *args, **kwargs) -> None:
+    def __init__(self, link_file: str | Path, callback: Callback = None) -> None:
         """
         初始化 TTBaseCore，加载 link 配置并注册各 engine 的占位符。
 
@@ -184,45 +184,60 @@ class TTBaseCore:
     # ------------------------------------------------------------------
     # 3. 对外主要 API
     # ------------------------------------------------------------------
-    def train(self, model_scale: str = None, model: str | Path = None, use_last_pt=False, use_best_pt=False, process_name: str = None) -> None:
+    def train(self, model_scale: str = None, model: str | Path = None, use_last_pt=False, use_best_pt=False, process_name: str = "defalut_train") -> None:
         """
-        启动训练。
+        启动模型训练流程。
 
         Args:
             model_scale (str | None):
-                模型规模标识（如 "n", "s", "m", "l", "x"），将覆盖配置文件。
+                模型规模标识，用于从配置文件中选择特定规模的模型架构。
+                支持的值包括 "n", "s", "m", "l", "x" 等，具体取决于模型配置。
+                如果为 None，则使用配置文件中定义的默认规模。
+
             model (str | Path | None):
-                权重文件路径（.pt/.pth）。为 None 时根据 use_last_pt 或 use_last_pt 自动搜索。
+                预训练权重文件路径（.pt 或 .pth 格式）。提供时将加载该权重继续训练。
+                如果为 None，系统将根据 use_last_pt 或 use_best_pt 参数自动搜索权重文件。
+                显式指定 model 参数时，model_scale、 use_last_pt 和 use_best_pt 参数将被忽略。
+
             use_last_pt (bool):
-                是否自动寻找最新的 last.pt，优先级低于显式 model。use_last_pt 与 use_last_pt 互斥。
+                是否自动搜索最近一次训练的 last.pt 权重文件继续训练。
+                此参数仅在 model 为 None 时生效，且与 use_best_pt 互斥。
+
             use_best_pt (bool):
-                是否自动寻找最新的 best.pt，优先级低于显式 model。use_last_pt 与 use_last_pt 互斥。
-            process_name (str | None):
-                进程名，便于在系统监控中区分。
+                是否自动搜索性能最佳的 best.pt 权重文件继续训练。
+                此参数仅在 model 为 None 时生效，且与 use_last_pt 互斥。
+
+            process_name (str):
+                进程名称标识，用于在系统监控工具（如 htop、ps）中区分训练进程。
+                默认为 "default_train"。
+
+        Note:
+            - 权重文件搜索优先级：显式 model 参数 > use_last_pt > use_best_pt
+            - use_last_pt 和 use_best_pt 不能同时为 True
+            - 训练过程支持单机单卡和多卡分布式训练（DDP），系统会自动检测并配置
+
+        Raises:
+            ValueError: 当 use_last_pt 和 use_best_pt 同时为 True 时抛出
+            FileNotFoundError: 当指定的权重文件不存在时抛出
         """
-        # 指定设备
-        if self.device is None:
-            self._set_device()
+        # 单机或DDP执行训练
+        if self._setup_ddp(process_name=process_name):
+            # 根据优先级自动选择权重文件
+            if model is None:
+                model = self._find_pt_file(use_last_pt=use_last_pt, use_best_pt=use_best_pt)
 
-        # 修改进程名，从而避免与其他脚本混淆
-        if process_name:
-            setproctitle.setproctitle(f"{process_name}-local_rank:[{LOCAL_RANK}]")
+            # bind model
+            if self.model is None:
+                self.get_model(model_scale, model)
 
-        nproc_per_node = self._get_nproc_per_node()
-        # 智能设置线程数
-        self._setup_optimal_threads(nproc_per_node)
+            # bind trainer
+            if self.trainer is None:
+                self._bind_trainer()
 
-        # 判断是否已由 torchrun 启动（DDP 子进程）或需要启动 DDP
-        if "LOCAL_RANK" in os.environ:
-            LOGGER.info("Detected DDP environment (torchrun), skipping subprocess launch.")
-        elif nproc_per_node > 1:
-            self._launch_ddp(nproc_per_node)
-            return
+            # train
+            self.trainer.train()
 
-        # 单进程或 DDP 子进程执行训练
-        self._launch_training(model_scale, model, use_last_pt, use_best_pt)
-
-    def predict(self, source, model: str | Path | None = None, backend: str | None = None, use_last_pt=False, use_best_pt=False, **kwargs) -> Generator[Any, None, None]:
+    def predict(self, source, model: str | Path = None, backend: str = None, use_last_pt=False, use_best_pt=False, **kwargs) -> Generator[Any, None, None]:
         """
         启动推理。
 
@@ -251,13 +266,13 @@ class TTBaseCore:
 
         yield from self.predictor.predict(source)
 
-    def __call__(self, source, model: str | Path | None = None, backend: str | None = None, use_last_pt=False, use_best_pt=False, **kwargs) -> Generator[Any, None, None]:
+    def __call__(self, source, model: str | Path = None, backend: str = None, use_last_pt=False, use_best_pt=False, **kwargs) -> Generator[Any, None, None]:
         """
         允许 TTBaseCore 实例直接当函数用：core(source) 等价于 predict(source)。
         """
         yield from self.predict(source, model, backend, use_last_pt, use_best_pt, **kwargs)
 
-    def export(self, backend: str, model: str | Path | None = None, use_last_pt=False, use_best_pt=False, **kwargs):
+    def export(self, backend: str, model: str | Path = None, use_last_pt=False, use_best_pt=False, **kwargs):
         """
         启动导出。
 
@@ -316,65 +331,79 @@ class TTBaseCore:
 
         return self.tuner.tune(pop_size=pop_size, generations=generations)
 
-    def distill(self, teacher_model: str | Path, student_model_scale: str, student_model: str | Path = None, process_name: str = None):
+    def distill(self, teacher_model: str | Path | torch.nn.Module | TTBaseModel, student_model_scale: str = None, student_model: str | Path = None, process_name: str = "defalut_distill"):
         """
-        对外暴露的“一站式知识蒸馏”接口。
+        执行知识蒸馏训练，将教师模型的知识迁移到学生模型。
 
-        参数：
-            teacher_model: 教师权重文件路径（.pt/.pth）。
-            student_model_scale: 学生模型规模（n/s/m/l/x），用于新建学生模型。
-            student_model: 学生权重文件路径（可选）。若提供，则直接加载；否则按 scale 新建。
-            process_name: 进程名，方便在 top / htop 中识别。
+        Args:
+            teacher_model (str | Path | torch.nn.Module | TTBaseModel):
+                教师模型定义，支持多种形式：
+                - 权重文件路径（.pt/.pth）：加载预训练的教师模型
+                - ONNX模型路径（.onnx）：直接使用ONNX模型作为教师
+                - 模型实例：已初始化的PyTorch模型或TTBaseModel实例
 
-        执行流程：
-        1. 若设备未初始化，先调用 _set_device()。
-        2. 若指定进程名，调用 setproctitle 修改。
-        3. 若 self.model 尚未绑定，调用 get_model() 加载或创建学生模型。
-        4. 加载教师权重，重建教师模型实例（deepcopy 配置防止冲突）。
-        5. 调用 _bind_distiller() 实例化蒸馏器。
-        6. 启动蒸馏训练：self.distiller.train()。
-        7. 训练结束手动触发 gc.collect()，释放显存与内存。
+            student_model_scale (str):
+                学生模型规模标识，用于从配置文件中选择特定规模的学生模型架构。
+                支持的值包括 "n", "s", "m", "l", "x" 等，具体取决于模型配置。
 
-        异常：
-        - 教师权重文件后缀非法将触发 AssertionError。
-        - 蒸馏器未注册将触发 AttributeError。
+            student_model (str | Path | None):
+                学生模型预训练权重文件路径（.pt 或 .pth 格式）。
+                如果为 None，将根据 student_model_scale 创建新的学生模型。
+                如果提供路径，将加载该权重初始化学生模型。
+
+            process_name (str):
+                进程名称标识，用于在系统监控工具中区分蒸馏训练进程。
+                默认为 "default_distill"。
+
+        Supported Teacher Model Types:
+        - PyTorch模型文件 (.pt, .pth)
+        - ONNX模型文件 (.onnx)
+        - 已加载的PyTorch模型实例
+        - TTBaseModel子类实例
+
+        Raises:
+            TypeError: 当教师模型类型不支持或文件格式不匹配时抛出
+            FileNotFoundError: 当指定的模型文件不存在时抛出
+            AttributeError: 当蒸馏器未在注册表中注册时抛出
         """
-        # 指定设备
-        if self.device is None:
-            self._set_device()
 
-        # 修改进程名，从而避免与其他脚本混淆
-        if process_name:
-            setproctitle.setproctitle(process_name)
+        if self._setup_ddp(process_name=process_name):
+            # bind student model
+            if self.model is None:
+                self.get_model(student_model_scale, student_model)
 
-        # bind student model
-        if self.model is None:
-            self.get_model(student_model_scale, student_model)
+            # bind teacher model
+            if isinstance(teacher_model, (str, Path)):  # str|Path:
+                teacher_model = check_file(teacher_model)
 
-        # bind distiller
-        if self.distiller is None:
-            # load teacher model
-            assert Path(teacher_model).suffix in {".pt", ".pth"}, f"{Path(teacher_model).suffix} is not supported"
-            teacher_model = check_file(teacher_model)
-            checkpoint = torch.load(teacher_model.as_posix(), map_location="cpu", weights_only=False)
-            teacher_config_manager = deepcopy(self.config_manager)
-            teacher_config_manager.model = checkpoint["model_args"]
-            teacher_model = TTEngineRegistry.get(teacher_config_manager, "teacher_model")(teacher_config_manager)
-            teacher_model.load_model_state_dict(checkpoint["model"], True)
+                # 加载和学生模型同款模型，但不同尺寸
+                if Path(teacher_model).suffix in {".pt", ".pth"}:
+                    checkpoint = torch.load(teacher_model.as_posix(), map_location="cpu", weights_only=False)
+                    teacher_cfg = deepcopy(self.config_manager)
+                    teacher_cfg.model = checkpoint["model_args"]
+                    teacher_model_ins = TTEngineRegistry.get(teacher_cfg, "model")(teacher_cfg)
+                    teacher_model_ins.load_model_state_dict(checkpoint["model"], force_load=True)
+                elif Path(teacher_model).suffix in {".onnx"}:
+                    import onnxruntime as ort
+                    teacher_model_ins = ort.InferenceSession(teacher_model)
+                else:
+                    raise TypeError(f"{Path(teacher_model).suffix} is not supported")
+            elif isinstance(student_model, (TTBaseModel, torch.nn.Module)):  # model instance
+                teacher_model_ins = teacher_model
+            else:
+                raise TypeError(f"Not supported teacher model!")
 
-            self._bind_distiller(teacher_model)
+            # bind distiller
+            if self.distiller is None:
+                self._bind_distiller(teacher_model_ins)
 
-        # train
-        self.distiller.train()
-
-        import gc
-        LOGGER.info("Training completed. Waiting for garbage collection...")
-        gc.collect()
+            # train
+            self.distiller.train()
 
     # ------------------------------------------------------------------
     # 4. 模型获取
     # ------------------------------------------------------------------
-    def get_model(self, model_scale: str | None = None, model: str | Path = None, force_load=True) -> TTBaseModel:
+    def get_model(self, model_scale: str = None, model: str | Path = None, force_load=True) -> TTBaseModel:
         """
         根据权重或配置文件获取模型。
 
@@ -541,6 +570,33 @@ class TTBaseCore:
             raise NotImplementedError(f"device type {self.device.type} is not supported.")
         return 0
 
+    def _setup_ddp(self, process_name: str = None):
+        # 指定设备
+        if self.device is None:
+            self._set_device()
+
+        # 修改进程名，从而避免与其他脚本混淆
+        if process_name:
+            setproctitle.setproctitle(f"{process_name}-local_rank:[{LOCAL_RANK}]")
+
+        nproc_per_node = self._get_nproc_per_node()
+        # 智能设置线程数
+        self._setup_optimal_threads(nproc_per_node)
+
+        # 如果已经在DDP环境中，直接执行
+        if self._is_ddp_environment():
+            LOGGER.info(f"DDP environment detected - Local Rank: {LOCAL_RANK}, World Size: {WORLD_SIZE}")
+            return True
+        # 如果需要启动DDP
+        elif nproc_per_node > 1:
+            LOGGER.info(f"Launching DDP training with {nproc_per_node} GPUs")
+            self._launch_ddp(nproc_per_node)
+            return False  # 主进程不执行
+        # 单机单卡
+        else:
+            LOGGER.info("Single GPU/CPU training mode")
+            return True
+
     def _launch_ddp(self, nproc_per_node: int):
         """
         使用 torchrun 启动分布式训练。
@@ -564,41 +620,6 @@ class TTBaseCore:
             raise
         finally:
             LOGGER.info("Releasing memory...")
-
-    def _launch_training(self, model_scale: str = None, model: str | Path = None, use_last_pt=False, use_best_pt=False):
-        """
-        单进程 / DDP 子进程内部真正执行训练的入口函数。
-
-        参数：
-            model_scale (str): 模型规模，例如（n/s/m/l/x），新建权重时使用。
-            model (str | Path): 权重文件路径（.pt/.pth），优先级高于 use_last_pt。
-            use_last_pt (bool): 当 model 为 None 时，是否自动寻找最近一次训练的 last.pt。
-            use_best_pt (bool): 当 model 为 None 时，是否自动寻找最近一次训练的 best.pt。
-
-        步骤：
-        1. 若 use_last_p 或 use_best_pt 为真，自动定位权重。
-        2. 若 self.model 尚未实例化，调用 get_model() 加载或新建模型。
-        3. 若 self.trainer 尚未实例化，调用 _bind_trainer() 绑定训练器。
-        4. 执行 self.trainer.train() 开始训练迭代。
-
-        注意：
-        - 该函数由 train() 在“非 torchrun 启动”或“DDP 子进程”路径下调用。
-        - 所有异常直接抛出，由外层 train() 统一捕获并记录。
-        """
-        # 根据优先级自动选择权重文件
-        if model is None:
-            model = self._find_pt_file(use_last_pt=use_last_pt, use_best_pt=use_best_pt)
-
-        # bind model
-        if self.model is None:
-            self.get_model(model_scale, model)
-
-        # bind trainer
-        if self.trainer is None:
-            self._bind_trainer()
-
-        # train
-        self.trainer.train()
 
     @staticmethod
     def _setup_optimal_threads(nproc_per_node: int):
@@ -626,6 +647,11 @@ class TTBaseCore:
 
         return cores_per_process
 
+    @staticmethod
+    def _is_ddp_environment():
+        """检查是否在DDP环境中"""
+        return all(var in os.environ for var in ["LOCAL_RANK", "RANK", "WORLD_SIZE"])
+
     # ------------------------------------------------------------------
     # 6. 各引擎绑定（内部工具）
     # ------------------------------------------------------------------
@@ -640,7 +666,7 @@ class TTBaseCore:
             callback=self.callback
         )
 
-    def _bind_predictor(self, model, backend: str | None = None, **kwargs):
+    def _bind_predictor(self, model, backend: str = None, **kwargs):
         """
         实例化并绑定 predictor，支持三种场景：
         1. 训练完直接预测；
@@ -690,7 +716,7 @@ class TTBaseCore:
                 **kwargs
             )
 
-    def _bind_exporter(self, backend: str, model: str | Path | None = None, **kwargs):
+    def _bind_exporter(self, backend: str, model: str | Path = None, **kwargs):
         """
         实例化并绑定 exporter，支持：
         1. 训练完直接导出；
@@ -736,7 +762,7 @@ class TTBaseCore:
             **kwargs
         )
 
-    def _bind_tuner(self, model_scale: str | None = None) -> None:
+    def _bind_tuner(self, model_scale: str = None) -> None:
         """
         实例化并绑定 tuner。
         """

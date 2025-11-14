@@ -138,8 +138,6 @@ def setup_torch_environment(seed: int = 0, deterministic: bool = False, precisio
                     torch.backends.cudnn.conv.fp32_precision = 'ieee'
             else:
                 # PyTorch <2.9 使用旧API
-                LOGGER.info(f"Using PyTorch {torch_version} (legacy API)")
-
                 if precision == 'medium':
                     # 启用TF32以获得最佳性能
                     torch.backends.cuda.matmul.allow_tf32 = True

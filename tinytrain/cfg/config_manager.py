@@ -118,7 +118,7 @@ class TTConfigManager(SimpleNamespace):
         """
         if Path(config_file).suffix == ".toml":
             return self.load_toml(config_file)
-        elif Path(config_file.suffix) == ".yaml" or Path(config_file.suffix) == ".yml":
+        elif Path(config_file).suffix == ".yaml" or Path(config_file).suffix == ".yml":
             return self.load_yaml(config_file)
         else:
             raise ValueError(f"TTConfigManager unsupported file type: {config_file.suffix}")
