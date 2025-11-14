@@ -25,6 +25,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict
 
+from tinytrain import ROOT
 from tinytrain.utils.checks import check_file
 
 
@@ -78,7 +79,7 @@ class TTConfigManager(SimpleNamespace):
         self.link = self.load_config_file(link_file)
         # 检查是否提供了core.toml
         if "core" not in self.link:
-            data = self.load_config_file("./core.toml")
+            data = self.load_config_file(ROOT / "cfg/core.toml")
             setattr(self, "core", data)
 
         # 不允许与已存在成员冲突
@@ -96,9 +97,28 @@ class TTConfigManager(SimpleNamespace):
             setattr(self, key, data)
 
     def load_config_file(self, config_file: str | Path):
-        if config_file.suffix == ".toml":
+        """
+        加载配置文件并根据文件类型调用相应的解析器。
+
+        支持的文件格式：
+        - .toml: 使用 toml 库解析
+        - .yaml/.yml: 使用 yaml 库解析
+
+        Args:
+            config_file (str | Path): 配置文件路径，支持字符串或 Path 对象
+
+        Returns:
+            Dict: 解析后的配置数据字典
+
+        Raises:
+            ValueError: 当文件类型不支持时抛出异常
+            FileNotFoundError: 当配置文件不存在时抛出异常
+            toml.TomlDecodeError: 当 TOML 文件格式错误时抛出异常
+            yaml.YAMLError: 当 YAML 文件格式错误时抛出异常
+        """
+        if Path(config_file).suffix == ".toml":
             return self.load_toml(config_file)
-        elif config_file.suffix == ".yaml" or config_file.suffix == ".yml":
+        elif Path(config_file.suffix) == ".yaml" or Path(config_file.suffix) == ".yml":
             return self.load_yaml(config_file)
         else:
             raise ValueError(f"TTConfigManager unsupported file type: {config_file.suffix}")

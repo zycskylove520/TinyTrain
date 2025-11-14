@@ -41,7 +41,7 @@ from torch.utils.data.dataloader import DataLoader
 from tinytrain.cfg import TTConfigManager, TTEngineRegistry
 from tinytrain.data.data_format import BaseBatchDataInfo
 from tinytrain.global_var import RANK, LOCAL_RANK, WORLD_SIZE
-from tinytrain.metrics.base import TrainResult
+from tinytrain.metrics.base import TrainMetrics
 from tinytrain.utils import LOGGER
 from tinytrain.utils.progress_bar import TTProgressBar
 from tinytrain.utils.any_utils import setup_torch_environment, create_iter_directory, maybe_limit_num_workers
@@ -169,7 +169,7 @@ class TTBaseTrainer:
 
         # train result
         self.best_epoch: int = 0
-        self.train_result: TrainResult | None = None  # 记录训练打印信息，然后保存为csv文件
+        self.train_metrics: TrainMetrics | None = None  # 记录训练打印信息，然后保存为csv文件
 
         # callback
         self.callbacks = callback
@@ -329,7 +329,7 @@ class TTBaseTrainer:
 
         # set train result
         if RANK in {-1, 0}:
-            self.train_result = TrainResult(config_manager=self.config_manager, save_dir=self.save_dir)
+            self.train_metrics = TrainMetrics(config_manager=self.config_manager, save_dir=self.save_dir)
 
         # check batch size
         self.check_batch_size()
@@ -1171,9 +1171,9 @@ class TTBaseTrainer:
 
             if RANK in {-1, 0}:
                 # train result
-                self.train_result.add("lr", self.optimizer.param_groups[0]["lr"])
+                self.train_metrics.add("lr", self.optimizer.param_groups[0]["lr"])
                 for loss_name, loss_value in smooth_loss_items.items():
-                    self.train_result.add(loss_name, loss_value.item())
+                    self.train_metrics.add(loss_name, loss_value.item())
 
             # validation
             if WORLD_SIZE > 1:
@@ -1191,15 +1191,15 @@ class TTBaseTrainer:
                 self.best_fitness = self.fitness
 
             if RANK in {-1, 0}:
-                self.train_result.add("fitness", self.fitness)
+                self.train_metrics.add("fitness", self.fitness)
 
             # save model
             self.save_model(current_epoch)
             self.callbacks.run_callback(Events.ON_MODEL_SAVE, self)
 
             # save train result to csv file
-            if RANK in {-1, 0} and self.train_result:
-                self.train_result.save_csv()
+            if RANK in {-1, 0} and self.train_metrics:
+                self.train_metrics.save_csv()
 
             self.callbacks.run_callback(Events.ON_TRAIN_EPOCH_END, self)
 
@@ -1632,9 +1632,9 @@ class TTBaseTrainer:
             self.val_dataloader = None
 
             # 3.绘制train result
-            if RANK in {-1, 0} and self.train_result:
-                self.train_result.plot(start=self.start_epoch + 1)
-                self.train_result.close()  # 可以选择不close，那么tensorboard训练完不会关闭
+            if RANK in {-1, 0} and self.train_metrics:
+                self.train_metrics.plot(start=self.start_epoch + 1)
+                self.train_metrics.close()  # 可以选择不close，那么tensorboard训练完不会关闭
 
         except Exception as e:
             LOGGER.error(f"Error during graceful shutdown: {e}")

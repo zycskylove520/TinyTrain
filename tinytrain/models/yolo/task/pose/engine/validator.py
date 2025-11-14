@@ -140,15 +140,15 @@ class YOLOPoseValidator(TTBaseValidator):
             print(progress_str)
 
             # metrics result
-            if self.trainer.train_result is not None:
-                self.trainer.train_result.add("detect_precision", d_precision)
-                self.trainer.train_result.add("detect_recall", d_recall)
-                self.trainer.train_result.add("detect_map50", d_map50)
-                self.trainer.train_result.add("detect_map50_95", d_map50_95)
-                self.trainer.train_result.add("pose_precision", p_precision)
-                self.trainer.train_result.add("pose_recall", p_recall)
-                self.trainer.train_result.add("pose_map50", p_map50)
-                self.trainer.train_result.add("pose_map50_95", p_map50_95)
+            if self.trainer.train_metrics is not None:
+                self.trainer.train_metrics.add("detect_precision", d_precision)
+                self.trainer.train_metrics.add("detect_recall", d_recall)
+                self.trainer.train_metrics.add("detect_map50", d_map50)
+                self.trainer.train_metrics.add("detect_map50_95", d_map50_95)
+                self.trainer.train_metrics.add("pose_precision", p_precision)
+                self.trainer.train_metrics.add("pose_recall", p_recall)
+                self.trainer.train_metrics.add("pose_map50", p_map50)
+                self.trainer.train_metrics.add("pose_map50_95", p_map50_95)
 
     def start_metrics_on_train_completed(self, pbar: TTProgressBar):
         self.confuse_matrix.reset()

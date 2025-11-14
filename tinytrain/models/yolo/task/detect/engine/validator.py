@@ -103,15 +103,15 @@ class YOLODetectionValidator(TTBaseValidator):
             print(progress_str)
 
             # metrics result
-            if self.trainer.train_result is not None:
-                self.trainer.train_result.add("precision", precision)
-                self.trainer.train_result.add("recall", recall)
-                self.trainer.train_result.add("mar", mar_100)
-                self.trainer.train_result.add("map50", map50)
-                self.trainer.train_result.add("map50_95", map50_95)
-                self.trainer.train_result.add("map_small", map_small)
-                self.trainer.train_result.add("map_medium", map_medium)
-                self.trainer.train_result.add("map_large", map_large)
+            if self.trainer.train_metrics is not None:
+                self.trainer.train_metrics.add("precision", precision)
+                self.trainer.train_metrics.add("recall", recall)
+                self.trainer.train_metrics.add("mar", mar_100)
+                self.trainer.train_metrics.add("map50", map50)
+                self.trainer.train_metrics.add("map50_95", map50_95)
+                self.trainer.train_metrics.add("map_small", map_small)
+                self.trainer.train_metrics.add("map_medium", map_medium)
+                self.trainer.train_metrics.add("map_large", map_large)
 
     def start_metrics_on_train_completed(self, pbar: TTProgressBar):
         self.confuse_matrix.reset()

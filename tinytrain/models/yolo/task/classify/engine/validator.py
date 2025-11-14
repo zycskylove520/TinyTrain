@@ -102,10 +102,10 @@ class YOLOClassificationValidator(TTBaseValidator):
         topn_accuracy = self.topn.compute()
 
         if RANK in {-1, 0}:
-            if self.trainer.train_result is not None:
-                self.trainer.train_result.add("top1_accuracy", top1_accuracy)
+            if self.trainer.train_metrics is not None:
+                self.trainer.train_metrics.add("top1_accuracy", top1_accuracy)
                 topn_acc = f"top{self.n}_accuracy"
-                self.trainer.train_result.add(topn_acc, topn_accuracy)
+                self.trainer.train_metrics.add(topn_acc, topn_accuracy)
 
     def start_metrics_on_train_completed(self, pbar: TTProgressBar):
         self.single_classes_acc.reset()

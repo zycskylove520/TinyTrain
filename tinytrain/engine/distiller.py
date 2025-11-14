@@ -69,67 +69,125 @@ class TTBaseDistiller(TTBaseTrainer):
         self.teacher_model.eval()
 
     # ------------------------------------------------------------------
-    # 2. 蒸馏逻辑（子类可重写）
+    # 2. 前向传播+损失计算（要求子类必须重写）
     # ------------------------------------------------------------------
-    def model_inference_and_loss_calculate(self, teacher_model, student_model, inputs) -> tuple[float, dict]:
+    def execute_forward(self, batch_samples):
         """
-        前向传播 + 蒸馏损失计算模板。
+        训练器每 batch 会调用的前向入口。
 
         Args:
-            teacher_model: 教师模型（已冻结）。
-            student_model: 学生模型（可训练）。
-            inputs: 输入张量或列表。
+            batch_samples: 当前批次数据（含输入与标签）。
 
         Returns:
             tuple:
                 - total_loss: 标量，用于反向传播。
                 - loss_items: 字典，记录各分项损失（仅用于日志）。
+
+        Note:
+            loss_items 格式要求：
+            1. 必须返回字典，键为损失名称，值为对应的损失张量
+            2. 所有损失值必须使用 .detach() 从计算图中分离
+            3. 值必须是标量张量或标量
+            4. 例如：
+               - {"cls_loss": torch.tensor(0.), "mse_loss": 0, ...}
+
+        Examples:
+            >>> # 示例1：基础分类蒸馏
+            >>> def execute_forward(self, batch_samples):
+            >>>     inputs, labels = batch_samples
+            >>>
+            >>>     # 学生模型前向
+            >>>     student_outputs = self.model(inputs)
+            >>>
+            >>>     # 教师模型前向（不计算梯度）
+            >>>     with torch.no_grad():
+            >>>         teacher_outputs = self.teacher_model(inputs)
+            >>>
+            >>>     # 计算硬标签损失（学生vs真实标签）
+            >>>     cls_loss = F.cross_entropy(student_outputs.logits, labels)
+            >>>
+            >>>     # 计算蒸馏损失（学生vs教师软标签）
+            >>>     distill_loss = F.kl_div(
+            >>>         F.log_softmax(student_outputs.logits / self.temperature, dim=-1),
+            >>>         F.softmax(teacher_outputs.logits / self.temperature, dim=-1),
+            >>>         reduction='batchmean'
+            >>>     ) * (self.temperature ** 2)
+            >>>
+            >>>     # 总损失 = α * 蒸馏损失 + (1-α) * 分类损失
+            >>>     total_loss = self.alpha * distill_loss + (1 - self.alpha) * cls_loss
+            >>>
+            >>>     # 记录损失项（必须使用detach()）
+            >>>     loss_items = {
+            >>>         "cls_loss": cls_loss.detach(),
+            >>>         "distill_loss": distill_loss.detach(),
+            >>>         "total_loss": total_loss.detach()
+            >>>     }
+            >>>
+            >>>     return total_loss, loss_items
+
+            >>> # 示例2：多任务蒸馏（分类+回归）
+            >>> def execute_forward(self, batch_samples):
+            >>>     inputs, labels = batch_samples
+            >>>     cls_labels, reg_labels = labels
+            >>>
+            >>>     # 前向传播
+            >>>     student_outputs = self.model(inputs)
+            >>>
+            >>>     with torch.no_grad():
+            >>>         teacher_outputs = self.teacher_model(inputs)
+            >>>
+            >>>     # 分类损失
+            >>>     cls_loss = F.cross_entropy(student_outputs.cls_logits, cls_labels)
+            >>>
+            >>>     # 回归损失
+            >>>     reg_loss = F.mse_loss(student_outputs.reg_pred, reg_labels)
+            >>>
+            >>>     # 分类蒸馏损失
+            >>>     cls_distill = F.kl_div(
+            >>>         F.log_softmax(student_outputs.cls_logits / 2.0, dim=-1),
+            >>>         F.softmax(teacher_outputs.cls_logits / 2.0, dim=-1),
+            >>>         reduction='batchmean'
+            >>>     ) * 4.0
+            >>>
+            >>>     # 回归蒸馏损失
+            >>>     reg_distill = F.mse_loss(student_outputs.reg_pred, teacher_outputs.reg_pred)
+            >>>
+            >>>     # 总损失
+            >>>     total_loss = (cls_loss + reg_loss + 0.5 * cls_distill + 0.5 * reg_distill)
+            >>>
+            >>>     loss_items = {
+            >>>         "cls_loss": cls_loss.detach(),
+            >>>         "reg_loss": reg_loss.detach(),
+            >>>         "cls_distill": cls_distill.detach(),
+            >>>         "reg_distill": reg_distill.detach(),
+            >>>         "total_loss": total_loss.detach()
+            >>>     }
+            >>>
+            >>>     return total_loss, loss_items
+
+            >>> # 示例3：仅蒸馏（无真实标签）
+            >>> def execute_forward(self, batch_samples):
+            >>>     inputs = batch_samples  # 无标签数据
+            >>>
+            >>>     student_outputs = self.model(inputs)
+            >>>
+            >>>     with torch.no_grad():
+            >>>         teacher_outputs = self.teacher_model(inputs)
+            >>>
+            >>>     # 仅使用蒸馏损失
+            >>>     distill_loss = F.mse_loss(student_outputs.features, teacher_outputs.features)
+            >>>
+            >>>     loss_items = {
+            >>>         "distill_loss": distill_loss.detach(),
+            >>>         "total_loss": distill_loss.detach()  # 总损失就是蒸馏损失
+            >>>     }
+            >>>
+            >>>     return distill_loss, loss_items
         """
-
-        # 计算教师模型的输出
-        teacher_class_scores, teacher_bbox_coords = teacher_model(inputs)
-        # 计算学生模型的输出
-        student_class_scores, student_bbox_coords = student_model(inputs)
-
-        # 计算知识蒸馏的损失
-        loss, loss_items = self.sample_distillation_loss(student_class_scores, student_bbox_coords, teacher_class_scores, teacher_bbox_coords, temperature=5.0, alpha=0.5)
-        return loss, loss_items
-
-    def sample_distillation_loss(self, student_class_scores, student_bbox_coords, teacher_class_scores, teacher_bbox_coords, temperature, alpha):
-        """
-        默认蒸馏损失：KL 散度 + L1 框回归。
-
-        Args:
-            student_class_scores: 学生类别 logits。
-            student_bbox_coords: 学生框预测。
-            teacher_class_scores: 教师类别 logits。
-            teacher_bbox_coords: 教师框预测。
-            temperature: 蒸馏温度。
-            alpha: KL 损失权重 (0~1)，1-alpha 给框回归。
-
-        Returns:
-            tuple:
-                - total_loss: 标量。
-                - loss_items: {"kl_loss": tensor, "bbox_loss": tensor}。
-        """
-
-        # 计算类别置信度的KL散度损失
-        student_softmax = nn.functional.softmax(student_class_scores / temperature, dim=1)
-        teacher_softmax = nn.functional.softmax(teacher_class_scores / temperature, dim=1)
-        kl_loss = nn.KLDivLoss()(nn.functional.log_softmax(student_class_scores / temperature, dim=1),
-                                 teacher_softmax)
-
-        # 计算边界框的L1损失
-        bbox_loss = nn.L1Loss()(student_bbox_coords, teacher_bbox_coords)
-
-        # 总损失是KL散度损失和边界框损失的加权和
-        total_loss = alpha * kl_loss + (1 - alpha) * bbox_loss
-
-        loss_items = {"kl_loss": kl_loss.deatch(), "bbox_loss": bbox_loss.deatch()}
-        return total_loss, loss_items
+        return super().execute_forward(batch_samples)
 
     # ------------------------------------------------------------------
-    # 3. 训练流程钩子（不建议重写）
+    # 3. 训练流程钩子
     # ------------------------------------------------------------------
     def freeze_layers(self, model: TTBaseModel):
         """
@@ -138,19 +196,7 @@ class TTBaseDistiller(TTBaseTrainer):
         Args:
             model: 此处实际传入的是学生模型（TTBaseTrainer.model）。
         """
+        super().freeze_layers(model)
 
         for param in self.teacher_model.parameters():
             param.requires_grad = False
-
-    def execute_forward(self, batch_samples):
-        """
-        训练器每 batch 会调用的前向入口。
-        内部转发给蒸馏专用前向函数。
-
-        Args:
-            batch_samples: 当前批次数据（含输入与标签）。
-
-        Returns:
-            tuple[float, dict]: (总损失, 分项损失字典)。
-        """
-        return self.model_inference_and_loss_calculate(self.teacher_model, self.model, batch_samples.data)

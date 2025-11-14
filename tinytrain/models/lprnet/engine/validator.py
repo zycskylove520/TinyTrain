@@ -82,10 +82,10 @@ class LPRValidator(TTBaseValidator):
             progress_str = f"{'val':^5}|{self.num_classes:^15}|{self.acc:^15.3f}|{self.tn_len:^15}|{self.tn_chr:^15}|"
             print(progress_str)
 
-            if self.trainer.train_result is not None:
-                self.trainer.train_result.add("accuracy", self.acc)
-                self.trainer.train_result.add("tn_len", self.tn_len)
-                self.trainer.train_result.add("tn_chr", self.tn_chr)
+            if self.trainer.train_metrics is not None:
+                self.trainer.train_metrics.add("accuracy", self.acc)
+                self.trainer.train_metrics.add("tn_len", self.tn_len)
+                self.trainer.train_metrics.add("tn_chr", self.tn_chr)
 
     def start_metrics_on_train_completed(self, pbar: TTProgressBar):
         self.start_metrics_on_training(pbar)

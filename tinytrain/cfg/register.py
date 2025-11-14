@@ -71,6 +71,7 @@ class TTEngineRegistry:
         >>> cls = TTEngineRegistry.get(config_manager, engine_type="inference_server", backend="onnx")
         >>> assert cls is MyClassificationOnnxInferenceServer
     """
+
     ENGINE_ASSERT = (
         "model",
         "trainer",

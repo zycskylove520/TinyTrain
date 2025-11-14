@@ -124,8 +124,8 @@ class TTBaseCore:
             KeyError: 试图覆盖 link 段。
             AttributeError: 不存在的配置段。
         """
-        if link_type == 'link':
-            raise KeyError("The 'set_config_overrides' function does not support setting link files. Please set them manually.")
+        if link_type in {'link', "register_name"}:
+            raise KeyError(f"The 'set_config_overrides' function does not support setting link_type: {link_type}. Please set them manually.")
         try:
             config = getattr(self.config_manager, link_type)
             update_dict = {}
@@ -141,6 +141,19 @@ class TTBaseCore:
 
     @staticmethod
     def exclude_from_resume():
+        """
+        定义在恢复训练时需要排除的配置项列表。
+
+        当从检查点恢复训练时，某些配置项不应该从保存的检查点中恢复，
+        而是使用当前运行时的新配置值。这些配置项通常包括：
+        - 训练相关的超参数（如batch_size、学习率策略等）
+        - 设备相关的设置
+        - 分布式训练配置
+        - 其他可能影响训练稳定性的设置
+
+        Returns:
+            list[str]: 需要排除的配置项名称列表
+        """
         exclude_list = [
             "launch_tb",
             "amp",
@@ -839,6 +852,30 @@ class TTBaseCore:
         return pt_model
 
     def _find_pt_file(self, use_last_pt, use_best_pt):
+        """
+        根据优先级自动查找并返回权重文件路径。
+
+        权重文件查找优先级：
+        1. 如果 use_last_pt 为 True，查找最新的 last.pt 文件
+        2. 如果 use_best_pt 为 True，查找最新的 best.pt 文件
+        3. 如果都为 False，返回 None
+
+        Args:
+            use_last_pt (bool): 是否查找最近一次训练的 last.pt 文件
+            use_best_pt (bool): 是否查找性能最好的 best.pt 文件
+
+        Returns:
+            Path | None: 找到的权重文件路径，如果未找到且不需要查找则返回 None
+
+        Raises:
+            ValueError: 当 use_last_pt 和 use_best_pt 同时为 True 时抛出
+            FileNotFoundError: 当需要查找但找不到对应的权重文件时抛出
+
+        注意:
+            - use_last_pt 和 use_best_pt 是互斥的，不能同时为 True
+            - 查找范围基于配置中的 save_dir、project_name 和 task 设置
+            - 按目录修改时间倒序查找，返回找到的第一个有效文件
+        """
         # 检查 use_last_pt 和 use_best_pt 互斥性
         if use_last_pt and use_best_pt:
             raise ValueError("参数 use_last_pt 和 use_best_pt 不能同时为 True")

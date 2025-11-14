@@ -34,7 +34,7 @@ from tinytrain.utils import LOGGER
 from tinytrain.utils.dist import find_available_port
 
 
-class TrainResult:
+class TrainMetrics:
     """
     训练/验证结果记录与可视化工具。
 
@@ -167,8 +167,28 @@ class TrainResult:
             start (int): 横轴起始值，默认 1。
         """
         LOGGER.info(f"plotting result.png...")
+
         # 过滤非数字键值对
-        filtered_dic = {key: value for key, value in self.data.items() if all(isinstance(x, (int, float)) for x in value)}
+        filtered_dic = {}
+        for key, values in self.data.items():
+            data_list = []
+            valid = True
+
+            for value in values:
+                if self._is_numeric_value(value):
+                    numeric_value = self._to_float(value)
+                    if numeric_value is not None:
+                        data_list.append(numeric_value)
+                    else:
+                        LOGGER.warning(f"{key} cannot convert {value} to float.")
+                        valid = False
+                        break
+                else:
+                    valid = False
+                    break
+
+            if valid and data_list:
+                filtered_dic[key] = data_list
 
         # 获取子图数量
         num_subplots = len(filtered_dic)
@@ -189,12 +209,16 @@ class TrainResult:
         # 创建大图和子图
         fig, axes = plt.subplots(rows, cols, figsize=(8 * cols, 6 * rows))  # 添加子图间距
 
-        # 如果只有一个子图，axes不是数组，需要将其转换为数组
+        # 处理子图轴对象
         if num_subplots == 1:
-            axes = [[axes]]  # 转换为二维数组
-
-        # 将所有轴对象展平为一个列表
-        axes = axes.flatten()
+            # 单个子图：axes 是单个 Axes 对象
+            axes = [axes]
+        elif rows == 1 or cols == 1:
+            # 单行或单列：axes 是一维数组
+            axes = list(axes)
+        else:
+            # 多行多列：axes 是二维数组，展平为一维
+            axes = axes.flatten()
 
         # 绘制每个子图
         for i, (key, value) in enumerate(filtered_dic.items()):
@@ -270,15 +294,53 @@ class TrainResult:
     @staticmethod
     def _to_float(x):
         """
-        将 torch.Tensor / np.ndarray / Python 数值 → float。
+        将各种数值类型转换为float。
 
-        高维张量需先 `.detach().cpu().numpy().item()`。
+        Args:
+            x: 输入值，支持 torch.Tensor、np.ndarray、Python数值等
+
+        Returns:
+            float: 转换后的浮点数，如果无法转换返回None
         """
-        if isinstance(x, torch.Tensor):
-            # .item() 只对 0-D 张量有效；若需兼容高维请先 x.detach().cpu().numpy().item()
-            return x.detach().cpu().item()
-        if isinstance(x, np.ndarray):
-            return x.item()  # 0-D ndarray
-        if isinstance(x, (int, float, np.number)):
-            return float(x)
-        return None  # 其它类型直接丢弃
+        if x is None:
+            return None
+
+        try:
+            if isinstance(x, torch.Tensor):
+                # 检查是否为标量张量
+                if x.ndim <= 1:
+                    return float(x.detach().cpu().item())
+                else:
+                    # 对于多维张量，可以选择返回平均值或其他聚合值
+                    # 这里保持原逻辑，返回None
+                    LOGGER.warning(f"torch高维张量无法直接转换为float: shape={x.shape}")
+                    return None
+            elif isinstance(x, np.ndarray):
+                # 检查是否为标量数组
+                if x.ndim <= 1:
+                    return float(x.item())
+                else:
+                    LOGGER.warning(f"numpy高维数组无法直接转换为float: shape={x.shape}")
+                    return None
+            elif isinstance(x, (int, float, bool, np.number)):
+                return float(x)
+
+            else:
+                # 尝试强制转换，处理字符串数值等情况
+                try:
+                    return float(x)
+                except (ValueError, TypeError):
+                    return None
+
+        except Exception as e:
+            LOGGER.debug(f"转换为float时出错: {e}, 类型: {type(x)}")
+            return None
+
+    @staticmethod
+    def _is_numeric_value(x):
+        """判断是否为数值类型"""
+        if isinstance(x, (int, float, bool, np.number)):
+            return True
+        elif isinstance(x, (torch.Tensor, np.ndarray)) and x.ndim <= 1:
+            return True
+        return False

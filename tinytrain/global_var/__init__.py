@@ -33,7 +33,7 @@ from matplotlib import pyplot as plt
 from matplotlib.font_manager import FontProperties
 
 # path
-ROOT = Path(__file__).resolve().parent.parent  # TinyTrain/
+ROOT = Path(__file__).resolve().parent.parent  # tinytrain/
 ASSETS_PATH = ROOT / "assets"
 
 # PyTorch Multi-GPU DDP

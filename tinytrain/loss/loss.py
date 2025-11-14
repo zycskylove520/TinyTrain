@@ -38,7 +38,7 @@ from .subloss import BboxLossWithDFL, KeypointLoss
 
 if TYPE_CHECKING:
     from tinytrain.data.data_format import ClassifyBatchDataInfo, DetectBatchDataInfo, PoseBatchDataInfo, SegmentBatchDataInfo
-    from tinytrain.models.lpr.ocr_data_format import LPRBatchDataInfo
+    from tinytrain.models.lprnet.data_format import LPRBatchDataInfo
 
 
 class ClassificationLoss(TTBaseLoss):
@@ -65,7 +65,7 @@ class ClassificationLoss(TTBaseLoss):
             batch: 批数据，需包含 `.target` 字段，形状 (B,)，值为类别索引。
 
         Returns:
-            loss: 标量损失。
+            loss: 标量损失张量。
             loss_items: dict，记录各分量，便于日志打印。
         """
         loss = self.criterion(pred, batch.target) * self.cls_loss_gain

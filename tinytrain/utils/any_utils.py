@@ -27,11 +27,9 @@ SOFTWARE.
 
 import math
 import os
-import random
 import shutil
 import uuid
 import torch
-import numpy as np
 import torch.distributed as dist
 
 from contextlib import contextmanager
