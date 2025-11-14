@@ -181,22 +181,19 @@ class TTBaseTrainer:
         """
         启动模型训练，支持单机单卡、单机多卡、多机多卡等多种训练方式。
         """
-        self._perform_training(WORLD_SIZE)
+        self._perform_training()
 
-    def _perform_training(self, world_size):
+    def _perform_training(self):
         """
         执行实际训练逻辑，包括 DDP 初始化、训练、异常处理和资源清理。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
         """
         try:
-            if world_size > 1:
+            if WORLD_SIZE > 1:
                 LOGGER.info("Initializing DDP...")
-                self.set_ddp()
-            if self.intra_node_group is None and world_size > 1 and dist.is_initialized():
+                self.setup_ddp_environment()
+            if self.intra_node_group is None and WORLD_SIZE > 1 and dist.is_initialized():
                 self.intra_node_group = self._get_intra_node_group()
-            self._do_train(world_size)
+            self._do_train()
         except KeyboardInterrupt:
             LOGGER.warning(f"Training interrupted by user (Rank {RANK}).")
         except SystemExit as e:
@@ -205,7 +202,7 @@ class TTBaseTrainer:
             LOGGER.error(f"An unexpected error occurred: {e}")
             raise e
         finally:
-            self._graceful_shutdown(world_size)
+            self._graceful_shutdown()
             LOGGER.info("Releasing memory...")
             self._clear_memory()
             LOGGER.info("Done.")
@@ -249,13 +246,12 @@ class TTBaseTrainer:
         """
         pass
 
-    def freeze_layers(self, model: TTBaseModel, world_size: int):
+    def freeze_layers(self, model: TTBaseModel):
         """
         冻结模型的某些层，防止其参数在训练中被更新。
 
         Args:
             model (TTBaseModel): 模型实例
-            world_size (int): 分布式训练中的进程数量。
         """
         pass
 
@@ -276,7 +272,7 @@ class TTBaseTrainer:
 
         Args:
             model (TTBaseModel): 当前待训练模型。
-            lr (float): 当前经过 world_size 与 accumulate 缩放后的初始学习率。
+            lr (float): 当前经过 WORLD_SIZE 与 accumulate 缩放后的初始学习率。
             weight_decay (float): 全局权重衰减系数。
             **kwargs: 预留扩展字段，例如 momentum、betas 等。
 
@@ -319,17 +315,14 @@ class TTBaseTrainer:
     # ------------------------------------------------------------------
     # 3. 训练前准备
     # ------------------------------------------------------------------
-    def _before_train(self, world_size: int):
+    def _before_train(self):
         """
         训练前的准备工作，包括路径设置、模型初始化、优化器配置等。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
         """
         self.callbacks.run_callback(Events.ON_PREPARE_TRAIN_START, self)
 
         # set save dir
-        self.set_save_dir(world_size)
+        self.set_save_dir()
 
         # set dataset dir
         self.set_dataset_dir()
@@ -339,13 +332,13 @@ class TTBaseTrainer:
             self.train_result = TrainResult(config_manager=self.config_manager, save_dir=self.save_dir)
 
         # check batch size
-        self.check_batch_size(world_size)
+        self.check_batch_size()
 
         # set dataloaders
-        self.set_dataloaders(world_size)
+        self.set_dataloaders()
 
         # set model
-        self.set_model(world_size)
+        self.set_model()
 
         # only val
         if self.config_manager.core["only_val"]:
@@ -353,7 +346,7 @@ class TTBaseTrainer:
             sys.exit("Validation finished, exiting.")
 
         # set optimizer
-        self.set_optimizer(world_size)
+        self.set_optimizer()
 
         # resume training
         self.resume_training()
@@ -376,15 +369,12 @@ class TTBaseTrainer:
         self.callbacks.run_callback(Events.ON_PREPARE_TRAIN_END, self)
 
         # DDP synchronize
-        if world_size > 1:
+        if WORLD_SIZE > 1:
             dist.barrier()
 
-    def set_save_dir(self, world_size: int):
+    def set_save_dir(self):
         """
         设置训练结果保存路径，支持多节点同步。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
         """
         LOGGER.info(f"Setting save directory...")
         # 节点内主进程（LOCAL_RANK==0）负责创建目录
@@ -397,7 +387,7 @@ class TTBaseTrainer:
             self.save_dir = create_iter_directory(save_dir)
 
         # 节点内广播 save_dir
-        if world_size > 1 and dist.is_initialized():
+        if WORLD_SIZE > 1 and dist.is_initialized():
             save_dir_list = [str(self.save_dir)] if LOCAL_RANK == 0 else [None]
             dist.broadcast_object_list(save_dir_list, src=0, group=self.intra_node_group)
             self.save_dir = Path(save_dir_list[0])
@@ -444,12 +434,9 @@ class TTBaseTrainer:
 
         LOGGER.info(f"Dataset directory setting completed ✅")
 
-    def check_batch_size(self, world_size: int):
+    def check_batch_size(self):
         """
         检查 batch_size 是否合理，是否支持 DDP。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
         """
         LOGGER.info(f"Checking batch size...")
 
@@ -462,17 +449,14 @@ class TTBaseTrainer:
             LOGGER.warning("Batch size is not a multiple of 16. It is recommended to set batch size as a multiple of 16 for better training performance.")
 
         # 打印批量大小信息
-        if world_size > 1:
-            LOGGER.info(f"{world_size} GPU(s) found. Each GPU has a batch size of {self.batch_size}.")
+        if WORLD_SIZE > 1:
+            LOGGER.info(f"{WORLD_SIZE} GPU(s) found. Each GPU has a batch size of {self.batch_size}.")
         else:
             LOGGER.info(f"Training batch size: {self.batch_size} ✅")
 
-    def check_amp(self, world_size: int):
+    def check_amp(self):
         """
         检查是否支持自动混合精度（AMP），并初始化 GradScaler。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
         """
         LOGGER.info(f"Checking AMP...")
 
@@ -506,7 +490,7 @@ class TTBaseTrainer:
                     LOGGER.warning("AMP: checks failed ❌")
 
         # ---------- 同步 ----------
-        if world_size > 1:
+        if WORLD_SIZE > 1:
             amp_tensor = torch.tensor([self.amp], dtype=torch.uint8, device=self.device)
             if RANK != -1:
                 dist.broadcast(amp_tensor, src=0)
@@ -522,29 +506,26 @@ class TTBaseTrainer:
             # 旧版只能走 cuda.amp
             self.scaler = torch.cuda.amp.GradScaler(enabled=self.amp, growth_interval=100)
 
-    def set_dataloaders(self, world_size: int):
+    def set_dataloaders(self):
         """
         构建训练与验证的 DataLoader。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
         """
         LOGGER.info(f"Initializing dataLoader. This may take a few moments for large datasets. Please wait patiently...")
         only_val = self.config_manager.core["only_val"]
 
         # train dataloader
         if self.train_dir and not only_val:
-            self.train_dataloader = self.build_dataloader(world_size, mode="train")
+            self.train_dataloader = self.build_dataloader(mode="train")
 
         # validate dataloader
         if self.val_dir:
-            self.val_dataloader = self.build_dataloader(world_size, mode="val")
+            self.val_dataloader = self.build_dataloader(mode="val")
 
         if self.val_dataloader is None:
             if only_val:
                 raise RuntimeError("only_val is True, but valid directory is not provided.")
         else:
-            self.validator = self.get_validator(world_size)
+            self.validator = self.get_validator()
             if only_val:
                 if self.validator is None:
                     raise RuntimeError("only_val is True, but validator engine is not bound.")
@@ -552,11 +533,11 @@ class TTBaseTrainer:
 
         # test dataloader
         if self.test_dir:
-            self.test_dataloader = self.build_dataloader(world_size, mode="test")
+            self.test_dataloader = self.build_dataloader(mode="test")
 
         LOGGER.info(f"DataLoader initialization completed ✅")
 
-    def build_dataloader(self, world_size: int, mode: str = "train", shuffle_val=False, shuffle_test=False, dist_val=False, dist_test=False):
+    def build_dataloader(self, mode: str = "train", shuffle_val=False, shuffle_test=False, dist_val=False, dist_test=False):
         """
         构建 PyTorch 的 DataLoader，支持以下高级特性：
         1. 分布式训练（DDP）自动适配；
@@ -568,8 +549,6 @@ class TTBaseTrainer:
         7. 自动选择 pinned memory、prefetch_factor、multiprocessing_context 等性能优化参数。
 
         Args:
-            world_size (int):
-                当前分布式训练的总进程数（即 GPU 数）。单卡训练时传入 1。
             mode (str, optional):
                 数据加载模式，可选值为：
                 - "train" : 训练模式，默认 shuffle=True，drop_last=True；
@@ -581,10 +560,10 @@ class TTBaseTrainer:
                 仅在 mode="test" 时生效，控制是否打乱测试集。默认 False，保证测试推理结果可复现。
             dist_val (bool, optional):
                 是否在验证阶段启用分布式采样（DistributedSampler）。默认 False。
-                当 world_size > 1 且 dist_val=True 时，每张卡只加载部分验证数据。
+                当 WORLD_SIZE > 1 且 dist_val=True 时，每张卡只加载部分验证数据。
             dist_test (bool, optional):
                 是否在测试阶段启用分布式采样。默认 False。
-                当 world_size > 1 且 dist_test=True 时，每张卡只加载部分测试数据。
+                当 WORLD_SIZE > 1 且 dist_test=True 时，每张卡只加载部分测试数据。
 
         Returns:
             torch.utils.data.DataLoader:
@@ -598,24 +577,24 @@ class TTBaseTrainer:
                 2. 自动调整后的 batch_size < 2 时（BatchNorm 需要至少 2 个样本计算统计量）。
 
         Notes:
-            - 当 world_size > 1 且模式满足分布式条件时，会自动使用 `DistributedSampler`，
+            - 当 WORLD_SIZE > 1 且模式满足分布式条件时，会自动使用 `DistributedSampler`，
               并强制 `drop_last=True`，确保所有卡样本数一致，防止 all_gather 永久阻塞。
             - 在 Linux 平台会自动检测 `/dev/shm` 共享内存剩余空间，
               若不足会自适应下调 num_workers，防止 DataLoader 因共享内存不足而崩溃。
             - 验证/测试阶段会自动将 batch_size 和 num_workers 减半，降低显存与 CPU 占用。
-            - 最终 num_workers 还会再按 world_size 均摊一次，防止单节点进程数过多。
+            - 最终 num_workers 还会再按 WORLD_SIZE 均摊一次，防止单节点进程数过多。
             - 使用 `spawn` 启动子进程（非 Windows）以兼容 CUDA 多进程要求。
             - 通过 `persistent_workers=True` 减少 epoch 之间 worker 重建开销。
             - 通过 `pin_memory=True` 与 `pin_memory_device` 加速 GPU 传输。
-            - 通过 `prefetch_factor` 控制预加载批次数，根据 CPU 核心数与 world_size 自动调整。
+            - 通过 `prefetch_factor` 控制预加载批次数，根据 CPU 核心数与 WORLD_SIZE 自动调整。
 
         Examples:
             >>> # 单卡训练
-            >>> train_loader = self.build_dataloader(world_size=1, mode="train")
-            >>> # 4 卡分布式验证，启用分布式采样
-            >>> val_loader = self.build_dataloader(world_size=4, mode="val", dist_val=True)
-            >>> # 8 卡测试，不 shuffle，启用分布式采样
-            >>> test_loader = self.build_dataloader(world_size=8, mode="test", dist_test=True)
+            >>> train_loader = self.build_dataloader(mode="train")
+            >>> # 多卡分布式验证，启用分布式采样
+            >>> val_loader = self.build_dataloader(mode="val", dist_val=True)
+            >>> # 多卡测试，不 shuffle，启用分布式采样
+            >>> test_loader = self.build_dataloader(mode="test", dist_test=True)
         """
 
         assert mode in ["train", "val", "test"], "build dataloader mode must be 'train' or 'val' or 'test'"
@@ -633,7 +612,7 @@ class TTBaseTrainer:
             raise TypeError(f"build dataloader mode must be 'train' or 'val' or 'test'")
 
         # 计算每个 rank 实际分到的样本数
-        if world_size > 1 and (mode == "train" or (mode == "val" and dist_val) or (mode == "val" and dist_test)):
+        if WORLD_SIZE > 1 and (mode == "train" or (mode == "val" and dist_val) or (mode == "val" and dist_test)):
             from torch.utils.data.distributed import DistributedSampler
             sampler = DistributedSampler(dataset, drop_last=True)  # drop_last为True保证每张卡样本数量一致，避免all_gather永久阻塞
             effective_samples = len(sampler)
@@ -672,11 +651,11 @@ class TTBaseTrainer:
             num_workers = max(0, num_workers // 2)
 
         # DDP均摊 num_workers
-        # if world_size > 1:
-        #     num_workers = max(0, num_workers // world_size)
+        # if WORLD_SIZE > 1:
+        #     num_workers = max(0, num_workers // WORLD_SIZE)
 
         # should pin memory
-        can_pin_memory = self._should_pin_memory(world_size)
+        can_pin_memory = self._should_pin_memory()
 
         # 创建 DataLoader
         dataloader = DataLoader(
@@ -690,22 +669,19 @@ class TTBaseTrainer:
             persistent_workers=num_workers > 0,
             drop_last=True,
             pin_memory=can_pin_memory,
-            prefetch_factor=min(4, max(2, os.cpu_count() // max(world_size, 1))) if num_workers > 0 else None,
+            prefetch_factor=min(4, max(2, os.cpu_count() // max(WORLD_SIZE, 1))) if num_workers > 0 else None,
             multiprocessing_context='spawn' if os.name != 'nt' and num_workers > 0 else None,
         )
         return dataloader
 
-    def set_model(self, world_size: int):
+    def set_model(self):
         """
         设置模型，包括移动到设备、启用 SyncBatchNorm、封装 DDP 和 EMA。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
         """
         LOGGER.info(f"Setting up model...")
 
         # freeze layers
-        self.freeze_layers(self.model, world_size)
+        self.freeze_layers(self.model)
 
         # bind loss
         if self.model.criterion is None:
@@ -720,33 +696,30 @@ class TTBaseTrainer:
 
         # check AMP
         if not self.config_manager.core["only_val"]:
-            self.check_amp(world_size)
+            self.check_amp()
 
         # convert to DDP model
-        self.convert_ddp_model(world_size)
+        self.convert_ddp_model()
 
         # EMA
         if self.config_manager.core["ema"]:
-            self.ema = ModelEMA(self.get_model_instance(world_size))
+            self.ema = ModelEMA(self.get_model_instance())
             LOGGER.info("EMA(Exponential Moving Average) is enabled.")
 
         LOGGER.info(f"Model setup completed ✅")
 
-    def convert_ddp_model(self, world_size: int) -> None:
+    def convert_ddp_model(self) -> None:
         """
         将单卡模型转换为分布式训练模型（SyncBN + DDP）。
 
-        当 world_size > 1 时，本函数会：
+        当 WORLD_SIZE > 1 时，本函数会：
         1. 把普通 BN 层替换为 SyncBatchNorm；
         2. 用 DistributedDataParallel 封装模型，并绑定到 LOCAL_RANK。
-
-        Args:
-            world_size (int): 当前分布式进程总数。
 
         Returns:
             None
         """
-        if world_size <= 1:
+        if WORLD_SIZE <= 1:
             return
 
         # 多卡情况下：先转 SyncBN，再封装 DDP
@@ -757,12 +730,11 @@ class TTBaseTrainer:
             gradient_as_bucket_view=True
         )
 
-    def set_optimizer(self, world_size: int, optimizer=None):
+    def set_optimizer(self, optimizer=None):
         """
         构建优化器，支持参数分组、学习率缩放、多种优化器选择。
 
         Args:
-            world_size (int): 当前分布式进程总数。
             optimizer : 支持传入指定的优化器。
         """
         LOGGER.info(f"Setting optimizer...")
@@ -778,8 +750,8 @@ class TTBaseTrainer:
         weight_decay = self.config_manager.core["weight_decay"]
 
         # 线性缩放 LR
-        if world_size > 1:
-            lr_scaled = lr0 * max(world_size, 1) * self.accumulate
+        if WORLD_SIZE > 1:
+            lr_scaled = lr0 * max(WORLD_SIZE, 1) * self.accumulate
             LOGGER.info(f"DDP LR scaled from {lr0} -> {lr_scaled} ")
         else:
             lr_scaled = lr0
@@ -1091,15 +1063,12 @@ class TTBaseTrainer:
     # ------------------------------------------------------------------
     # 4. 训练主循环
     # ------------------------------------------------------------------
-    def _do_train(self, world_size: int):
+    def _do_train(self):
         """
         执行模型训练主循环，包括前向、反向、验证、保存等。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
         """
         # 训练前检查
-        self._before_train(world_size)
+        self._before_train()
 
         current_epoch = self.start_epoch  # 一个epoch有几个batch
         num_batch = len(self.train_dataloader)  # 整个训练所有epoch一共有多少个batch
@@ -1111,7 +1080,7 @@ class TTBaseTrainer:
 
         # 设置数据精度类型
         dtype = torch.bfloat16 if self.device.type == "cuda" and torch.cuda.is_bf16_supported() and self.config_manager.core["bf16"] else torch.float16
-        if world_size > 1:
+        if WORLD_SIZE > 1:
             # 同步AMP dtype
             dtype_list = [dtype] if RANK == 0 else [None]
             dist.broadcast_object_list(dtype_list, src=0)
@@ -1126,7 +1095,7 @@ class TTBaseTrainer:
             self.model.train()
 
             # dataloader sampler
-            if world_size > 1:
+            if WORLD_SIZE > 1:
                 self.train_dataloader.sampler.set_epoch(current_epoch)
 
             # 设置打印进度条
@@ -1207,12 +1176,12 @@ class TTBaseTrainer:
                     self.train_result.add(loss_name, loss_value.item())
 
             # validation
-            if world_size > 1:
+            if WORLD_SIZE > 1:
                 dist.barrier()
             self.fitness = self.do_validate()  # 不可设置RANK in {-1, 0}，存在多卡验证情况
 
             # DDP同步fitness
-            if world_size > 1:
+            if WORLD_SIZE > 1:
                 fitness_tensor = torch.tensor(self.fitness, dtype=torch.float32, device=self.device)
                 dist.broadcast(fitness_tensor, src=0)
                 self.fitness = fitness_tensor.item()
@@ -1225,7 +1194,7 @@ class TTBaseTrainer:
                 self.train_result.add("fitness", self.fitness)
 
             # save model
-            self.save_model(world_size, current_epoch)
+            self.save_model(current_epoch)
             self.callbacks.run_callback(Events.ON_MODEL_SAVE, self)
 
             # save train result to csv file
@@ -1234,7 +1203,7 @@ class TTBaseTrainer:
 
             self.callbacks.run_callback(Events.ON_TRAIN_EPOCH_END, self)
 
-            if world_size > 1:
+            if WORLD_SIZE > 1:
                 dist.barrier()
 
             # stop training
@@ -1253,13 +1222,13 @@ class TTBaseTrainer:
 
             # --- 广播 stop 标志 ---
             stop_tensor = torch.tensor(stop_flag, device=self.device)
-            if world_size > 1:
+            if WORLD_SIZE > 1:
                 dist.broadcast(stop_tensor, src=0)
             self.stop = stop_tensor.item()
 
             if self.stop:
                 # DDP synchronize
-                if world_size > 1:
+                if WORLD_SIZE > 1:
                     dist.barrier()
                 break
 
@@ -1271,7 +1240,7 @@ class TTBaseTrainer:
             current_epoch += 1
 
             # DDP synchronize
-            if world_size > 1:
+            if WORLD_SIZE > 1:
                 dist.barrier()
 
         self._clear_memory()
@@ -1288,14 +1257,14 @@ class TTBaseTrainer:
             LOGGER.info(f"Since EMA has been enabled, the saved model is EMA model, and its actual prediction results may differ from the true results.")
         LOGGER.info(f"current best epoch: {self.best_epoch}, Load best.pt model to final validate...")
         checkpoint = torch.load(self.best_pt, map_location=self.device, weights_only=False)
-        self.load_model_to_final_eval(world_size, checkpoint)
+        self.load_model_to_final_eval(checkpoint)
 
-        if world_size > 1:
+        if WORLD_SIZE > 1:
             dist.barrier()
         self.do_validate()
 
         # export simplified model
-        self.simplified_model(world_size)
+        self.simplified_model()
 
         self.callbacks.run_callback(Events.ON_TRAIN_END, self)
         LOGGER.info(f"train results saved at {self.save_dir}")
@@ -1372,7 +1341,7 @@ class TTBaseTrainer:
 
         # 5. EMA 更新
         if LOCAL_RANK in {-1, 0} and self.ema is not None:
-            self.ema.update(self.get_model_instance(WORLD_SIZE))
+            self.ema.update(self.get_model_instance())
 
     def do_grad_clip(self, model: TTBaseModel) -> None:
         """
@@ -1409,12 +1378,11 @@ class TTBaseTrainer:
                 else:
                     self.scheduler.step()
 
-    def save_model(self, world_size: int, current_epoch: int):
+    def save_model(self, current_epoch: int):
         """
         保存模型 checkpoint，包括 last.pt、best.pt、epoch_X.pt。
 
         Args:
-            world_size (int): 分布式训练中的进程数量。
             current_epoch (int): 当前训练轮次。
         """
 
@@ -1423,7 +1391,7 @@ class TTBaseTrainer:
 
         try:
             # 获取要保存的模型
-            model = self.get_model_instance(world_size)
+            model = self.get_model_instance()
             model.eval()
 
             # 构建检查点
@@ -1457,12 +1425,9 @@ class TTBaseTrainer:
             LOGGER.error(f"Error occurred while saving model: {e}")
             raise e
 
-    def simplified_model(self, world_size: int):
+    def simplified_model(self):
         """
         导出精简模型pt文件（如 fp16）用于部署。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
         """
         if LOCAL_RANK not in {-1, 0}:
             return
@@ -1470,7 +1435,7 @@ class TTBaseTrainer:
         LOGGER.info(f"start export simplified model...")
 
         # 获取要保存的模型
-        model = self.get_model_instance(world_size)
+        model = self.get_model_instance()
 
         fp16_pt = self.config_manager.core["fp16_pt"]
         if fp16_pt:
@@ -1490,32 +1455,28 @@ class TTBaseTrainer:
 
         torch.save(checkpoint, self.simplified_pt.as_posix())
 
-    def get_model_instance(self, world_size: int) -> TTBaseModel:
+    def get_model_instance(self) -> TTBaseModel:
         """
         获取用于保存的模型实例（EMA 或原始模型）。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
 
         Returns:
             nn.Module: 模型实例。
         """
-        return self.model.module if world_size > 1 else self.model
+        return self.model.module if WORLD_SIZE > 1 else self.model
 
-    def load_model_to_final_eval(self, world_size, checkpoint) -> None:
+    def load_model_to_final_eval(self, checkpoint) -> None:
         """
         将 best.pt/last.pt 中的模型权重加载到当前网络。
 
         根据是否启用 DDP 自动决定加载 model 还是 model.module。
 
         Args:
-            world_size (int): 分布式进程数，用于判断是否为 DDP 模式。
             checkpoint (dict): torch.load 返回的 checkpoint，必须包含 key="model"。
 
         Returns:
             None
         """
-        if world_size > 1:
+        if WORLD_SIZE > 1:
             self.model.module.load_model_state_dict(checkpoint["model"])
         else:
             self.model.load_model_state_dict(checkpoint["model"])
@@ -1523,19 +1484,16 @@ class TTBaseTrainer:
     # ------------------------------------------------------------------
     # 5. 验证/测试
     # ------------------------------------------------------------------
-    def get_validator(self, world_size: int):
+    def get_validator(self):
         """
         获取验证器实例。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
 
         Returns:
             TTBaseValidator: 验证器实例。
         """
 
         validator_cls = TTEngineRegistry.get(self.config_manager, "validator")
-        return validator_cls(self, world_size) if validator_cls else None
+        return validator_cls(self) if validator_cls else None
 
     def do_validate(self) -> float:
         """
@@ -1549,7 +1507,7 @@ class TTBaseTrainer:
     # ------------------------------------------------------------------
     # 6. 分布式环境管理
     # ------------------------------------------------------------------
-    def set_ddp(self):
+    def setup_ddp_environment(self):
         """
         初始化分布式训练环境（DDP）。
         """
@@ -1564,7 +1522,7 @@ class TTBaseTrainer:
         )
 
     @staticmethod
-    def destroy_ddp():
+    def destroy_ddp_environment():
         """
         销毁分布式训练环境（DDP）。
         """
@@ -1629,7 +1587,7 @@ class TTBaseTrainer:
         else:
             raise NotImplementedError("not support device type: {}".format(self.device.type))
 
-    def _should_pin_memory(self, world_size: int, fallback: bool = True) -> bool:
+    def _should_pin_memory(self, fallback: bool = True) -> bool:
         """
         智能决定是否启用 pin_memory。
         规则：
@@ -1646,7 +1604,7 @@ class TTBaseTrainer:
             # 保守阈值：每 GPU 预留 1 GiB 给 pinned memory
             # 可根据实际调大/调小
             safety_per_gpu = 1024 ** 3  # 1 GiB
-            needed = safety_per_gpu * world_size
+            needed = safety_per_gpu * WORLD_SIZE
             avail = psutil.virtual_memory().available
             if avail < needed:
                 print(f"[WARN] available RAM {avail / 1024 ** 3:.1f} GiB < "
@@ -1659,18 +1617,15 @@ class TTBaseTrainer:
     # ------------------------------------------------------------------
     # 8. 优雅退出
     # ------------------------------------------------------------------
-    def _graceful_shutdown(self, world_size):
+    def _graceful_shutdown(self):
         """
         训练结束或中断时进行优雅退出，清理资源并保存结果。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
         """
         try:
             # 1.摧毁DDP
-            if world_size > 1 and dist.is_initialized():
+            if WORLD_SIZE > 1 and dist.is_initialized():
                 LOGGER.info("Destroying DDP...")
-                self.destroy_ddp()
+                self.destroy_ddp_environment()
 
             # 2.触发 DataLoaderIter.__del__()，从而安全地关闭 worker 和线程
             self.train_dataloader = None

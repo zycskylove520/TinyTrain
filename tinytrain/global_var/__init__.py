@@ -87,7 +87,6 @@ def localization(font: str = None):
         local_font = font_dir / font
 
     if local_font.exists():
-        print(f"Using font: {font_path.name}")
         font_prop = FontProperties(fname=local_font)
     else:
         print(f"Localizing font Loading: {font_path.name}")
@@ -111,7 +110,7 @@ def localization(font: str = None):
 
     # 强制生成缓存
     buf = io.BytesIO()
-    plt.figure().text(0.5, 0.5, "中文测试", ha='center')
+    plt.figure().text(0.5, 0.5, "test", ha='center')
     plt.savefig(buf, format='png')  # 直接写内存
     plt.close()
     buf.close()  # 立即释放内存

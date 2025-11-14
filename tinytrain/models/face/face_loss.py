@@ -47,7 +47,7 @@ class PartialFCLoss(TTBaseLoss):
 
     要求
     ----
-    - 必须已初始化 `torch.distributed`，且 world_size ≥ 2（否则断言失败）。
+    - 必须已初始化 `torch.distributed`，且 WORLD_SIZE ≥ 2（否则断言失败）。
     - 每张卡输入的 `batch_size` 必须完全相同（all_gather 对齐）。
     - 标签 -1 会被忽略（与 margin 模块约定一致）。
 

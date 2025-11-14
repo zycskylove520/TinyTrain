@@ -28,7 +28,7 @@ from torch import nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from tinytrain.data.data_format import ClassifyBatchDataInfo
-from tinytrain.engine import TTBaseModel, TTBaseModel
+from tinytrain.engine import TTBaseModel
 from tinytrain.engine.trainer import TTBaseTrainer
 from tinytrain.global_var import LOCAL_RANK, WORLD_SIZE
 from tinytrain.models.face.face_dataset import FaceRecognitionTrainDataset, FaceRecognitionValidDataset
@@ -60,11 +60,11 @@ class FaceRecognitionTrainer(TTBaseTrainer):
 
         return batch_samples
 
-    def convert_ddp_model(self, world_size: int):
+    def convert_ddp_model(self):
         """
         转换模型成DDP模型，criterion部分不转换，PartialFCLoss在分布式情况不同device上的weight大小可能不一致。
         """
-        if world_size <= 1:
+        if WORLD_SIZE <= 1:
             return
 
         # 多卡情况下：先转 SyncBN，再封装 DDP
@@ -73,8 +73,8 @@ class FaceRecognitionTrainer(TTBaseTrainer):
         for i in range(len(self.model.module_list)):
             self.model.module_list[i] = DDP(self.model.module_list[i], device_ids=[LOCAL_RANK], gradient_as_bucket_view=True)
 
-    def get_model_instance(self, world_size: int) -> TTBaseModel:
-        if world_size > 1:
+    def get_model_instance(self) -> TTBaseModel:
+        if WORLD_SIZE > 1:
             model: TTBaseModel = deepcopy(self.model)
             for i in range(len(model.module_list)):
                 if isinstance(model.module_list[i], torch.nn.parallel.DistributedDataParallel):
@@ -82,18 +82,17 @@ class FaceRecognitionTrainer(TTBaseTrainer):
 
             return model
         else:
-            return super().get_model_instance(world_size)
+            return super().get_model_instance()
 
-    def save_model(self, world_size: int, current_epoch: int):
+    def save_model(self, current_epoch: int):
         """
         保存模型 checkpoint，包括 last.pt、best.pt、epoch_X.pt。
 
         Args:
-            world_size (int): 分布式训练中的进程数量。
             current_epoch (int): 当前训练轮次。
         """
         # 保存当前模型的DDP模式下的参数
-        if world_size > 1:
+        if WORLD_SIZE > 1:
             self.ddp_model_state_dict = deepcopy(self.model.state_dict())
 
         try:
@@ -101,7 +100,7 @@ class FaceRecognitionTrainer(TTBaseTrainer):
             loss_weight_dir.mkdir(parents=True, exist_ok=True)
 
             # 保存模型参数
-            model: TTBaseModel = self.get_model_instance(world_size)
+            model: TTBaseModel = self.get_model_instance()
             model.eval()
 
             # 剔除criterion.weight参数
@@ -153,18 +152,15 @@ class FaceRecognitionTrainer(TTBaseTrainer):
             LOGGER.error(f"Error occurred while saving model: {e}")
             raise e
 
-    def simplified_model(self, world_size: int):
+    def simplified_model(self):
         """
         导出精简模型pt文件（如 fp16）用于部署。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
         """
 
         LOGGER.info(f"start export simplified model...")
 
         # 保存非DDP模型参数
-        model: TTBaseModel = self.get_model_instance(world_size)
+        model: TTBaseModel = self.get_model_instance()
         model.eval()
 
         fp16_pt = self.config_manager.core["fp16_pt"]
@@ -253,8 +249,8 @@ class FaceRecognitionTrainer(TTBaseTrainer):
             LOGGER.warning(f"Unknown model file type: {model_pt_stem}, skip loading extra parameters.")
             return
 
-    def load_model_to_final_eval(self, world_size, checkpoint):
-        if world_size > 1:
+    def load_model_to_final_eval(self, checkpoint):
+        if WORLD_SIZE > 1:
             self.model.load_state_dict(self.ddp_model_state_dict)
         else:
-            super().load_model_to_final_eval(world_size, checkpoint)
+            super().load_model_to_final_eval(checkpoint)

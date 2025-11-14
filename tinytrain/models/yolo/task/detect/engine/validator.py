@@ -38,8 +38,8 @@ if TYPE_CHECKING:
 
 
 class YOLODetectionValidator(TTBaseValidator):
-    def __init__(self, trainer: TTBaseTrainer, world_size: int):
-        super().__init__(trainer, world_size)
+    def __init__(self, trainer: TTBaseTrainer):
+        super().__init__(trainer)
         self.num_classes = self.config_manager.dataset["nc"]
         self.class_names = {int(k): v for k, v in self.config_manager.dataset["names"].items()}
 

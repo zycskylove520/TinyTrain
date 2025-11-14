@@ -31,15 +31,13 @@ from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Generator, Any, Dict
 
-from torch.fx.experimental.symbolic_shapes import lru_cache
-
-from tinytrain.cfg import TTEngineRegistry, TTConfigManager
+from tinytrain.cfg import TTConfigManager
 from tinytrain.utils import LOGGER
 from tinytrain.utils.callback import Callback
 from tinytrain.utils.checks import check_file
 from tinytrain.global_var import NUM_THREADS, LOCAL_RANK, WORLD_SIZE
-from .. import TTModuleRegistry
-from ..utils.dist import DDPLauncher
+from tinytrain import TTEngineRegistry, TTModuleRegistry
+from tinytrain.utils.dist import DDPLauncher
 
 if TYPE_CHECKING:
     from .model import TTBaseModel

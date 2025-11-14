@@ -35,13 +35,13 @@ class ModelEMA:
     主要功能
     --------
     1. 维护一份与原始模型同结构的 FP32 EMA 权重副本。
-    2. 支持 DDP 场景（world_size > 1）。
+    2. 支持 DDP 场景（WORLD_SIZE > 1）。
     3. 使用指数升温策略 `decay = decay * (1 - exp(-updates / tau))` 缓解训练初期抖动。
     4. 自动缓存 decay 值，避免重复计算。
 
     用法示例
     --------
-    >>> ema = ModelEMA(model, world_size=2, decay=0.9999, tau=2000)
+    >>> ema = ModelEMA(model, decay=0.9999, tau=2000)
     >>> for batch in dataloader:
     ...     loss = train_step(batch)
     ...     ema.update(model)

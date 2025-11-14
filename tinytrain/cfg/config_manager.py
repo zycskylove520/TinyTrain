@@ -57,6 +57,7 @@ class TTConfigManager(SimpleNamespace):
         """
         super().__init__(link_file=link_file, **kwargs)
         self.link = None
+
         self.register_name = self._infer_register_name()
         self.parse_link_file(link_file)
 
@@ -80,9 +81,15 @@ class TTConfigManager(SimpleNamespace):
             data = self.load_config_file("./core.toml")
             setattr(self, "core", data)
 
+        # 不允许与已存在成员冲突
+        for key in {"link", "register_name"}:
+            if key in self.link:
+                raise ValueError(f" key: '{key}' cannot use in link file")
+
         for key, value in self.link.items():
             if not isinstance(value, str):
-                raise ValueError(f"{key} must be a valid file")
+                raise ValueError(f"key: '{key}' must be a file path")
+
             value = check_file(value)
             self.link[key] = value
             data = self.load_config_file(value)

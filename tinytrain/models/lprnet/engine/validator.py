@@ -37,8 +37,8 @@ if TYPE_CHECKING:
 
 
 class LPRValidator(TTBaseValidator):
-    def __init__(self, trainer: TTBaseTrainer, world_size: int):
-        super().__init__(trainer, world_size)
+    def __init__(self, trainer: TTBaseTrainer):
+        super().__init__(trainer)
         self.num_classes = self.config_manager.dataset["nc"]
         self.chars = list(self.config_manager.dataset["names"].values())
 
@@ -104,7 +104,8 @@ class LPRValidator(TTBaseValidator):
     def get_fitness(self) -> float:
         return self.acc
 
-    def greedy_decode_ctc(self, outputs: torch.Tensor, blank_id: int) -> list[list[int]]:
+    @staticmethod
+    def greedy_decode_ctc(outputs: torch.Tensor, blank_id: int) -> list[list[int]]:
         """
         对 CTC 输出做贪心解码：去 blank + 去重复
         Args:

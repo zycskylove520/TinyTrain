@@ -133,7 +133,7 @@ optimizer = "SGD"
 lr0 = 0.01
 # type: float
 # 训练开始时的初始学习率。必须 >0。
-# 分布式训练时，初始学习率=lr0 * world_size * accumulate。
+# 分布式训练时，初始学习率=lr0 * WORLD_SIZE * accumulate。
 # 参考起点：
 #   SGD       0.01
 #   AdamW     0.001

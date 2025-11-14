@@ -20,9 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-from typing import Dict, Any
-
 import torch
+
 from torch import nn
 
 from tinytrain.data.data_format import BaseBatchDataInfo
@@ -34,8 +33,8 @@ from tinytrain.utils.progress_bar import TTProgressBar
 
 
 class FaceRecognitionValidator(TTBaseValidator):
-    def __init__(self, trainer: TTBaseTrainer, world_size: int):
-        super().__init__(trainer, world_size)
+    def __init__(self, trainer: TTBaseTrainer):
+        super().__init__(trainer)
         self.metrics = FaceRecognitionMetrics()
 
     def preprocess(self, batch_samples: BaseBatchDataInfo) -> BaseBatchDataInfo:

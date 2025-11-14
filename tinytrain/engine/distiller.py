@@ -131,20 +131,12 @@ class TTBaseDistiller(TTBaseTrainer):
     # ------------------------------------------------------------------
     # 3. 训练流程钩子（不建议重写）
     # ------------------------------------------------------------------
-    def freeze_layers(self, model: TTBaseModel, world_size: int):
+    def freeze_layers(self, model: TTBaseModel):
         """
         蒸馏场景下仅冻结教师模型参数（学生模型照常训练）。
 
         Args:
             model: 此处实际传入的是学生模型（TTBaseTrainer.model）。
-            world_size: DDP 进程数。
-        """
-
-        """
-        冻结教师模型模型，防止其参数在训练中被更新。
-
-        Args:
-            world_size (int): 分布式训练中的进程数量。
         """
 
         for param in self.teacher_model.parameters():

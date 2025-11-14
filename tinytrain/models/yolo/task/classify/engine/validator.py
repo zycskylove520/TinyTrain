@@ -46,8 +46,8 @@ class YOLOClassificationValidator(TTBaseValidator):
     YOLO分类模型的验证器。
     """
 
-    def __init__(self, trainer: TTBaseTrainer, world_size: int):
-        super().__init__(trainer, world_size)
+    def __init__(self, trainer: TTBaseTrainer):
+        super().__init__(trainer)
         self.loss_names = ["cls_loss"]
         self.num_classes = self.config_manager.dataset["nc"]
         self.class_names = list(self.config_manager.dataset["names"].values())

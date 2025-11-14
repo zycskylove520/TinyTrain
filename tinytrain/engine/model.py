@@ -26,7 +26,7 @@ import torch
 
 from torch import nn
 from copy import deepcopy
-from typing import Any, Dict, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from tinytrain.cfg import TTConfigManager, TTModuleRegistry
 from tinytrain.data.data_format import BaseBatchDataInfo

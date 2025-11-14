@@ -39,8 +39,8 @@ from tinytrain.utils.segment_utils import decode_pred_masks
 
 
 class YOLOSegmentValidator(TTBaseValidator):
-    def __init__(self, trainer: TTBaseTrainer, world_size: int):
-        super().__init__(trainer, world_size)
+    def __init__(self, trainer: TTBaseTrainer):
+        super().__init__(trainer)
         self.class_names = {int(k): v for k, v in self.config_manager.dataset["names"].items()}
         self.num_classes: int = self.config_manager.dataset["nc"]
 

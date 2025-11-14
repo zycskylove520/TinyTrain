@@ -31,6 +31,7 @@ from torch import nn
 from tinytrain.data.data_format import BaseBatchDataInfo
 from tinytrain.utils.progress_bar import TTProgressBar
 from tinytrain.cfg import TTConfigManager
+from .. import WORLD_SIZE
 from ..utils.callback import Events
 
 if TYPE_CHECKING:
@@ -61,17 +62,15 @@ class TTBaseValidator:
     # ------------------------------------------------------------------
     # 1. 构造与入口
     # ------------------------------------------------------------------
-    def __init__(self, trainer: TTBaseTrainer, world_size: int):
+    def __init__(self, trainer: TTBaseTrainer):
         """
         初始化验证器。
 
         Args:
             trainer (TTBaseTrainer): 训练器实例，用于获取配置、模型、数据加载器等。
-            world_size (int): 分布式训练中的总进程数（用于 DDP）。
         """
 
         self.trainer: TTBaseTrainer = trainer
-        self.world_size = world_size
         self.config_manager: TTConfigManager = trainer.config_manager
         self.save_dir = trainer.save_dir
 
@@ -144,7 +143,7 @@ class TTBaseValidator:
         fitness = self.get_fitness()
         self.callbacks.run_callback(Events.ON_VAL_END, self)
 
-        if self.world_size > 1:
+        if WORLD_SIZE > 1:
             dist.barrier()
         return fitness
 
@@ -259,7 +258,7 @@ class TTBaseValidator:
         if self.trainer.ema:
             model = self.trainer.ema.ema_model
         else:
-            model = self.trainer.model.module if self.world_size > 1 else self.trainer.model
+            model = self.trainer.model.module if WORLD_SIZE > 1 else self.trainer.model
         return model
 
     @classmethod
