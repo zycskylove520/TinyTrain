@@ -115,7 +115,8 @@ from tinytrain.models.yolo.task.detect import (
     YOLODetectionValidator,
     YOLODetectionPredictor,
     YOLODetectionTrainer,
-    YOLODetectionTuner
+    YOLODetectionTuner,
+    YOLODetectionDistiller
 )
 from tinytrain.models.yolo.task.pose import (
     YOLOPoseModel,
@@ -129,7 +130,8 @@ from tinytrain.models.yolo.task.segment import (
     YOLOSegmentTrainer,
     YOLOSegmentValidator,
     YOLOSegmentTuner,
-    YOLOSegmentPredictor, YOLOSegmentOnnxInferenceServer
+    YOLOSegmentPredictor,
+    YOLOSegmentOnnxInferenceServer
 )
 from tinytrain.server.export_server import TTBaseOnnxExportServer
 from tinytrain.server.inference_server import TTBaseOnnxInferenceServer
@@ -159,6 +161,7 @@ class YOLOCore(TTBaseCore):
         TTEngineRegistry.register(cls, "detect", "exporter")(TTBaseExporter)
         TTEngineRegistry.register(cls, "detect", "export_server", "onnx")(TTBaseOnnxExportServer)
         TTEngineRegistry.register(cls, "detect", "track_server", "bytetrack")(ByteTrackServer)
+        TTEngineRegistry.register(cls, "detect", "distiller")(YOLODetectionDistiller)
 
         # ---------- pose ----------
         TTEngineRegistry.register(cls, "pose", "model")(YOLOPoseModel)

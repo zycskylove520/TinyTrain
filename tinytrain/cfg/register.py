@@ -72,18 +72,18 @@ class TTEngineRegistry:
         >>> assert cls is MyClassificationOnnxInferenceServer
     """
 
-    ENGINE_ASSERT = (
-        "model",
-        "trainer",
-        "validator",
-        "predictor",
-        "exporter",
-        "tuner",
-        "distiller",
-        "inference_server",
-        "export_server",
-        "track_server"
-    )
+    # ENGINE_ASSERT = (
+    #     "model",
+    #     "trainer",
+    #     "validator",
+    #     "predictor",
+    #     "exporter",
+    #     "tuner",
+    #     "distiller",
+    #     "inference_server",
+    #     "export_server",
+    #     "track_server"
+    # )
 
     """已注册的核心名称集合。"""
     _cores: ClassVar[Set[str]] = set()
@@ -138,7 +138,7 @@ class TTEngineRegistry:
         Returns:
             Callable[[Type], Type]: 装饰器函数，返回被装饰的类本身。
         """
-        assert engine_type in TTEngineRegistry.ENGINE_ASSERT, f"engine_type {engine_type} is not supported, must be one of {TTEngineRegistry.ENGINE_ASSERT}"
+        # assert engine_type in TTEngineRegistry.ENGINE_ASSERT, f"engine_type {engine_type} is not supported, must be one of {TTEngineRegistry.ENGINE_ASSERT}"
 
         core_name = core.__name__
 

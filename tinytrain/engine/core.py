@@ -381,7 +381,7 @@ class TTBaseCore:
                     checkpoint = torch.load(teacher_model.as_posix(), map_location="cpu", weights_only=False)
                     teacher_cfg = deepcopy(self.config_manager)
                     teacher_cfg.model = checkpoint["model_args"]
-                    teacher_model_ins = TTEngineRegistry.get(teacher_cfg, "model")(teacher_cfg)
+                    teacher_model_ins = TTEngineRegistry.get(teacher_cfg, "model")(teacher_cfg, self.device)
                     teacher_model_ins.load_model_state_dict(checkpoint["model"], force_load=True)
                 elif Path(teacher_model).suffix in {".onnx"}:
                     import onnxruntime as ort
@@ -397,8 +397,8 @@ class TTBaseCore:
             if self.distiller is None:
                 self._bind_distiller(teacher_model_ins)
 
-            # train
-            self.distiller.train()
+            # distill
+            self.distiller.distill()
 
     # ------------------------------------------------------------------
     # 4. 模型获取
@@ -787,13 +787,16 @@ class TTBaseCore:
         - 教师模型必须提前加载并传参，本函数不再负责权重加载。
         - 若注册表未找到对应蒸馏器，将抛出 AttributeError。
         """
-        self.distiller = TTEngineRegistry.get(self.config_manager, "distiller")(
+        trainer = TTEngineRegistry.get(self.config_manager, "trainer")(
             config_manager=self.config_manager,
             device=self.device,
-            student_model=self.model,
-            teacher_model=teacher_model,
-            callback=self.callback,
-            main_script_path=self.main_script_path
+            model=self.model,
+            callback=self.callback
+        )
+
+        self.distiller = TTEngineRegistry.get(self.config_manager, "distiller")(
+            trainer=trainer,
+            teacher_model=teacher_model
         )
 
     # ------------------------------------------------------------------

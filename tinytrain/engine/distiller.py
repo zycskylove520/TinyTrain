@@ -30,13 +30,12 @@ from torch import nn
 from tinytrain.cfg import TTConfigManager
 from tinytrain.utils.callback import Callback
 
-from .trainer import TTBaseTrainer
-
 if TYPE_CHECKING:
+    from .trainer import TTBaseTrainer
     from .model import TTBaseModel
 
 
-class TTBaseDistiller(TTBaseTrainer):
+class TTBaseDistiller:
     """
     通用知识蒸馏训练器基类。
 
@@ -53,20 +52,21 @@ class TTBaseDistiller(TTBaseTrainer):
     # ------------------------------------------------------------------
     # 1. 构造与入口
     # ------------------------------------------------------------------
-    def __init__(self, config_manager: TTConfigManager, device: torch.device, student_model: TTBaseModel, teacher_model: TTBaseModel, callback: Callback):
+    def __init__(self, trainer: TTBaseTrainer, teacher_model: TTBaseModel):
         """
         初始化蒸馏器。
 
         Args:
-            config_manager: 全局配置管理器。
-            device: 当前进程设备。
-            student_model: 学生模型（可训练）。
+            trainer: 训练器。
             teacher_model: 教师模型（仅推理）。
-            callback: 训练生命周期钩子。
         """
-        super().__init__(config_manager=config_manager, device=device, model=student_model, callback=callback)
-        self.teacher_model = teacher_model
-        self.teacher_model.eval()
+        self.trainer = trainer
+        self.config_manager = trainer.config_manager
+        self.device = trainer.device
+        self.callbacks = trainer.callbacks
+
+        self.student_model = self.trainer.model
+        self.teacher_model = teacher_model.to(self.device)
 
     # ------------------------------------------------------------------
     # 2. 前向传播+损失计算（要求子类必须重写）
@@ -184,7 +184,7 @@ class TTBaseDistiller(TTBaseTrainer):
             >>>
             >>>     return distill_loss, loss_items
         """
-        return super().execute_forward(batch_samples)
+        return self.trainer.execute_forward(batch_samples)
 
     # ------------------------------------------------------------------
     # 3. 训练流程钩子
@@ -194,9 +194,13 @@ class TTBaseDistiller(TTBaseTrainer):
         蒸馏场景下仅冻结教师模型参数（学生模型照常训练）。
 
         Args:
-            model: 此处实际传入的是学生模型（TTBaseTrainer.model）。
+            model: 此处实际传入的是学生模型（self.model）。
         """
-        super().freeze_layers(model)
+        self.trainer.freeze_layers(model)
 
         for param in self.teacher_model.parameters():
             param.requires_grad = False
+
+    def distill(self):
+        self.trainer.execute_forward = self.execute_forward
+        return self.trainer.train()
