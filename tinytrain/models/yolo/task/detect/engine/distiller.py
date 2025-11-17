@@ -33,15 +33,11 @@ class YOLODetectionDistiller(TTBaseDistiller):
         super().__init__(trainer, teacher_model)
 
         self.nc = self.config_manager.dataset["nc"]
-        self.distill_weight = 1.0
-        self.temperature = 4.0  # 增加温度参数，软化分布
+        self.distill_weight = self.config_manager.loss["distill_loss_gain"]
+        self.temperature = self.config_manager.loss["distill_temperature"]  # 增加温度参数，软化分布
 
         self.use_dfl = self.student_model.reg_max > 1
         self.proj = torch.arange(self.student_model.reg_max, dtype=torch.float, device=self.device)
-
-        # 添加损失权重配置
-        self.cls_weight = 1.0
-        self.reg_weight = 1.0
 
     def execute_forward(self, batch_samples):
         student_outputs = self.student_model.inference(batch_samples.data)
@@ -50,7 +46,7 @@ class YOLODetectionDistiller(TTBaseDistiller):
         anchor_points, stride_tensor = make_anchors(student_outputs[0], self.student_model.strides, 0.5)
 
         # 原始loss
-        # total_student_loss_with_weight, student_loss_items = self.student_model.loss(student_outputs, batch_samples)
+        total_student_loss_with_weight, student_loss_items = self.student_model.loss(student_outputs, batch_samples)
 
         # 将多个头的输出拼接起来
         s_cat = torch.cat([s_out.flatten(2) for s_out in student_outputs[0]], dim=2)
@@ -75,20 +71,13 @@ class YOLODetectionDistiller(TTBaseDistiller):
 
         total_distill_loss = cls_loss + reg_loss + feat_loss
 
-        # student_loss_items.update({
-        #     'cls_distill': cls_loss,
-        #     'reg_distill': reg_loss,
-        #     'feat_distill': feat_loss
-        # })
-
-        distill_loss_items = {
+        student_loss_items.update({
             'cls_distill': cls_loss,
             'reg_distill': reg_loss,
             'feat_distill': feat_loss
-        }
+        })
 
-        return total_distill_loss * self.distill_weight, distill_loss_items
-        # return total_student_loss_with_weight + total_distill_loss * self.distill_weight, student_loss_items
+        return total_student_loss_with_weight + total_distill_loss * self.distill_weight, student_loss_items
 
     def _cls_distill_loss(self, student_logits, teacher_logits):
         """
