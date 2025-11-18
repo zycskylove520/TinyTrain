@@ -60,7 +60,7 @@ warnings.filterwarnings("ignore", module="albumentations.*")
 cv2.setNumThreads(NUM_THREADS)  # 在模块初始化时设置一次
 
 # font
-DEFAULT_FONT = os.getenv("TINYTRAIN_FONT", "LXGWWenKai-Regular.ttf")
+DEFAULT_FONT = os.getenv("TINYTRAIN_FONT", None)
 
 
 def localization(font: str = None):
