@@ -39,6 +39,22 @@ from tinytrain.utils.nms import detect_nms_with_keypoint
 class YOLOPoseValidator(TTBaseValidator):
     def __init__(self, trainer: TTBaseTrainer):
         super().__init__(trainer)
+
+        # 获取配置参数
+        mean = self.config_manager.augment["mean"]
+        std = self.config_manager.augment["std"]
+
+        # 转换为 tensor 并确保在正确的设备上
+        if isinstance(mean, (int, float)):
+            self.mean_tensor = torch.tensor([mean], device=self.device)
+        else:
+            self.mean_tensor = torch.tensor(mean, device=self.device)
+
+        if isinstance(std, (int, float)):
+            self.std_tensor = torch.tensor([std], device=self.device) + 1e-8
+        else:
+            self.std_tensor = torch.tensor(std, device=self.device) + 1e-8
+
         self.class_names = {int(k): v for k, v in self.config_manager.dataset["names"].items()}
         self.num_classes: int = self.config_manager.dataset["nc"]
         self.keypoint_shape: list[int] = self.config_manager.dataset["keypoint_shape"]
@@ -64,9 +80,18 @@ class YOLOPoseValidator(TTBaseValidator):
 
     def preprocess(self, batch_samples: PoseBatchDataInfo) -> PoseBatchDataInfo:
         # 在这里做归一化速度提升
-        mean = self.config_manager.augment["mean"]
-        std = self.config_manager.augment["std"] + 1e-8
-        batch_samples.data = ((batch_samples.data.to(self.device, non_blocking=True).float() / 255.0) - mean) / std
+        # 调整维度以匹配输入数据
+        if batch_samples.data.dim() == 4:  # [B, C, H, W]
+            # 为 mean/std 添加合适的维度以便广播
+            mean_tensor = self.mean_tensor.view(1, -1, 1, 1)
+            std_tensor = self.std_tensor.view(1, -1, 1, 1)
+        else:
+            mean_tensor = self.mean_tensor
+            std_tensor = self.std_tensor
+
+        # 执行归一化
+        batch_samples.data = batch_samples.data.to(self.device, non_blocking=True).float()
+        batch_samples.data = (batch_samples.data / 255.0 - mean_tensor) / std_tensor
         batch_samples.target = batch_samples.target.to(self.device, non_blocking=True)
         batch_samples.bboxes = batch_samples.bboxes.to(self.device, non_blocking=True)
         batch_samples.bboxes_idx = batch_samples.bboxes_idx.to(self.device, non_blocking=True)
