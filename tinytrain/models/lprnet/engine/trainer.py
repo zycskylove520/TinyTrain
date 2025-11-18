@@ -28,15 +28,17 @@ from tinytrain.models.lprnet.dataset import LPRNetDataset
 class LPRTrainer(TTBaseTrainer):
     def build_dataset(self, mode="train"):
         if mode == "train":
-            return LPRNetDataset(config_manager=self.config_manager,
-                                           img_path=self.train_dir,
-                                           mode="train"
-                                           )
+            return LPRNetDataset(
+                config_manager=self.config_manager,
+                img_path=self.train_dir,
+                mode="train"
+            )
         elif mode == "val":
-            return LPRNetDataset(config_manager=self.config_manager,
-                                           img_path=self.val_dir,
-                                           mode="val"
-                                           )
+            return LPRNetDataset(
+                config_manager=self.config_manager,
+                img_path=self.val_dir,
+                mode="val"
+            )
         else:
             raise NotImplementedError
 

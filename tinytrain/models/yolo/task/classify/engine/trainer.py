@@ -21,16 +21,39 @@ SOFTWARE.
 """
 
 import numpy as np
+import torch
 
+from tinytrain.cfg import TTConfigManager
 from tinytrain.data.data_format import ClassifyBatchDataInfo, ClassifyDataInfo
 from tinytrain.data.dataset import TTClassificationDataset
+from tinytrain.engine import TTBaseModel
 from tinytrain.global_var import RANK
 from tinytrain.metrics.classify_metrics import ClassesLabelHistogram
 from tinytrain.models.yolo.yolo_trainer import YOLOTrainer
 from tinytrain.utils import LOGGER
+from tinytrain.utils.callback import Callback
 
 
 class YOLOClassificationTrainer(YOLOTrainer):
+
+    def __init__(self, config_manager: TTConfigManager, device: torch.device, model: TTBaseModel, callback: Callback):
+        super().__init__(config_manager, device, model, callback)
+
+        # 获取配置参数
+        mean = self.config_manager.augment["mean"]
+        std = self.config_manager.augment["std"]
+
+        # 转换为 tensor 并确保在正确的设备上
+        if isinstance(mean, (int, float)):
+            self.mean_tensor = torch.tensor([mean], device=self.device)
+        else:
+            self.mean_tensor = torch.tensor(mean, device=self.device)
+
+        if isinstance(std, (int, float)):
+            self.std_tensor = torch.tensor([std], device=self.device) + 1e-8
+        else:
+            self.std_tensor = torch.tensor(std, device=self.device) + 1e-8
+
     def build_dataset(self, mode="train"):
         if mode == "train":
             return TTClassificationDataset(config_manager=self.config_manager,
@@ -46,11 +69,19 @@ class YOLOClassificationTrainer(YOLOTrainer):
             raise NotImplementedError
 
     def preprocess_data(self, batch_samples: ClassifyBatchDataInfo) -> ClassifyBatchDataInfo:
-        # 在这里做归一化速度提升
-        mean = self.config_manager.augment["mean"]
-        std = self.config_manager.augment["std"] + 1e-8
-        batch_samples.data = ((batch_samples.data.to(self.device, non_blocking=True).float() / 255.0) - mean) / std
-        batch_samples.target = batch_samples.target.to(self.device, non_blocking=True)
+        # 调整维度以匹配输入数据
+        if batch_samples.data.dim() == 4:  # [B, C, H, W]
+            # 为 mean/std 添加合适的维度以便广播
+            mean_tensor = self.mean_tensor.view(1, -1, 1, 1)
+            std_tensor = self.std_tensor.view(1, -1, 1, 1)
+        else:
+            mean_tensor = self.mean_tensor
+            std_tensor = self.std_tensor
+
+        # 执行归一化
+        batch_samples.data = batch_samples.data.to(self.device, non_blocking=True).float()
+        batch_samples.data = (batch_samples.data / 255.0 - mean_tensor) / std_tensor
+
         return batch_samples
 
     def plot_something_before_train(self):
