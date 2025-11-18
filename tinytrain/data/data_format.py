@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Dict, Any
+from typing import TYPE_CHECKING, Dict, Any
 
 from tinytrain.global_var.types import BoxFormat
 
@@ -53,13 +53,13 @@ class BaseDataInfo:
             **kwargs: 任意键值对，将动态绑定为成员变量。
         """
         super().__init__()
-        self._exclude_from_deepcopy = set()  # 定义不参与深拷贝的字段集合
+        self.__exclude_from_deepcopy = set()  # 定义不参与深拷贝的字段集合
         for key, value in kwargs.items():
             setattr(self, key, value)
 
     def __deepcopy__(self, memodict: Dict[int, Any]) -> 'BaseDataInfo':
         """
-        自定义深拷贝，跳过 _exclude_from_deepcopy 中的字段。
+        自定义深拷贝，跳过 __exclude_from_deepcopy 中的字段。
 
         Args:
             memodict: deepcopy 内部缓存字典。
@@ -69,7 +69,7 @@ class BaseDataInfo:
         """
         new_instance = self.__class__.__new__(self.__class__)  # 创建一个新的实例
         for key, value in self.__dict__.items():
-            if key in self._exclude_from_deepcopy:
+            if key in self.__exclude_from_deepcopy:
                 # 如果字段在排除列表中，直接赋值
                 setattr(new_instance, key, value)
             else:
@@ -125,17 +125,15 @@ class ImgDataInfo(BaseDataInfo):
                  origin_shape: tuple[int, int] | None = None,
                  target_shape: tuple[int, int] | None = None,
                  img_file: Path | None = None,
-                 next_ImgDataInfo=None,
                  **kwargs
                  ) -> None:
         """
         Args:
-            frame_id: 视频帧序号（文件/摄像头场景下可设为 0）。
+            frame_id: 视频帧序号（图像文件/摄像头场景下可设为 0）。
             img: HWC 格式的 numpy 数组。
             origin_shape: 原始宽高 (W, H)。
             target_shape: 最终模型输入宽高 (W, H)。
             img_file: 图像文件路径。
-            next_ImgDataInfo: 下一张图（用于 Mosaic 等融合增强）。
             **kwargs: 透传给父类。
         """
         super().__init__(**kwargs)
@@ -144,9 +142,7 @@ class ImgDataInfo(BaseDataInfo):
         self.origin_shape = origin_shape
         self.target_shape = target_shape
         self.img_file = img_file
-        self.next_ImgDataInfo = next_ImgDataInfo
 
-        # self._exclude_from_deepcopy.add('next_ImgDataInfo')  # dataloader多进程拷贝存在问题，暂时不开放
 
 
 class ClassifyDataInfo(ImgDataInfo):

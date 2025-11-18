@@ -152,14 +152,6 @@ class YOLODetectionDataset(TTYOLOVisionDataset):
         for msg in messages:
             LOGGER.warning(msg)
 
-        # 添加last DetectDataInfo，用于多图像融合增强等操作
-        samples_len = len(samples)  # 提前计算长度
-        for i, sample in enumerate(samples):
-            # 计算下一个元素的索引，使用模运算实现循环
-            next_index = (i + 1) % samples_len
-            # sample.next_ImgDataInfo = samples[next_index]   # dataloader多进程拷贝存在问题，暂时不开放
-            sample.next_ImgDataInfo = None
-
         return samples
 
     def set_transform(self):
@@ -348,14 +340,6 @@ class YOLOPoseDataset(TTYOLOVisionDataset):
 
         for msg in messages:
             LOGGER.warning(msg)
-
-        # 添加last PoseDataInfo，用于多图像融合增强等操作
-        samples_len = len(samples)  # 提前计算长度
-        for i, sample in enumerate(samples):
-            # 计算下一个元素的索引，使用模运算实现循环
-            next_index = (i + 1) % samples_len
-            # sample.next_ImgDataInfo = samples[next_index]   # dataloader多进程拷贝存在问题，暂时不开放
-            sample.next_ImgDataInfo = None
 
         return samples
 
@@ -548,14 +532,6 @@ class YOLOSegmentDataset(TTYOLOVisionDataset):
 
         for msg in messages:
             LOGGER.warning(msg)
-
-        # 添加last SegmentDataInfo，用于多图像融合增强等操作
-        samples_len = len(samples)  # 提前计算长度
-        for i, sample in enumerate(samples):
-            # 计算下一个元素的索引，使用模运算实现循环
-            next_index = (i + 1) % samples_len
-            # sample.next_ImgDataInfo = samples[next_index]   # dataloader多进程拷贝存在问题，暂时不开放
-            sample.next_ImgDataInfo = None
 
         return samples
 
