@@ -23,6 +23,7 @@ SOFTWARE.
 # ---------- 全局注册器 ----------
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 from torch import nn
 from typing import Dict, Iterable, Set, Type, List, Tuple, Optional, ClassVar, Callable, Union, Final
