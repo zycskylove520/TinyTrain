@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import inspect
 import os
+import sys
+
 import setproctitle
 import torch
 
@@ -133,7 +135,7 @@ class TTBaseCore:
                 if k in config:
                     update_dict[k] = v
                 else:
-                    LOGGER.warning(f"{k} is not in {link_type} config. Please use this key with caution!")
+                    LOGGER.warning(f"{k} is not in {link_type} config. This parameter will be ignored!")
             config = {**config, **update_dict}
             setattr(self.config_manager, link_type, config)
         except AttributeError:
@@ -220,6 +222,9 @@ class TTBaseCore:
             ValueError: 当 use_last_pt 和 use_best_pt 同时为 True 时抛出
             FileNotFoundError: 当指定的权重文件不存在时抛出
         """
+        # 解析命令行参数
+        self._auto_command_parser()
+
         # 单机或DDP执行训练
         if self._setup_ddp(process_name=process_name):
             # 根据优先级自动选择权重文件
@@ -252,6 +257,9 @@ class TTBaseCore:
         Returns:
             Generator[Any, None, None]: 推理结果生成器。
         """
+        # 解析命令行参数
+        self._auto_command_parser()
+
         # 指定设备
         if self.device is None:
             self._set_device()
@@ -283,6 +291,9 @@ class TTBaseCore:
             use_best_pt (bool): 当 model 为 None 时，是否自动寻找最近一次训练的 best.pt。
             **kwargs: 透传给 exporter。
         """
+        # 解析命令行参数
+        self._auto_command_parser()
+
         # 指定设备
         if self.device is None:
             self._set_device()
@@ -322,6 +333,9 @@ class TTBaseCore:
         Raises:
             ValueError: 若任务未在注册表中注册对应 Tuner。
         """
+        # 解析命令行参数
+        self._auto_command_parser()
+
         # 指定设备
         if self.device is None:
             self._set_device()
@@ -366,6 +380,8 @@ class TTBaseCore:
             FileNotFoundError: 当指定的模型文件不存在时抛出
             AttributeError: 当蒸馏器未在注册表中注册时抛出
         """
+        # 解析命令行参数
+        self._auto_command_parser()
 
         if self._setup_ddp(process_name=process_name):
             # bind student model
@@ -916,3 +932,218 @@ class TTBaseCore:
             return self._find_best_pt_file()  # 假设有对应的查找最佳权重文件的方法
         else:
             return None
+
+    # ------------------------------------------------------------------
+    # 8. 命令行解析（内部工具）
+    # ------------------------------------------------------------------
+    def _auto_command_parser(self):
+        """
+        自动解析命令行参数并更新配置管理器中的参数覆盖。
+
+        该方法解析命令行参数，支持以下格式：
+        - 组指定：以单个 '-' 开头（如：-data）
+        - 参数指定：以 '--' 开头（如：--device, --batch_size）
+        - 参数值格式：
+            - 键值对：--key=value
+            - 空格分隔：--key value
+            - 布尔标志：--flag（无值参数，自动设为 True）
+            - 列表值：支持逗号分隔的值（如：--device=0,1,2,3）
+
+        命令行参数结构示例：
+            python script.py -core --device 0,1,2 --batch_size 32 -model --name MyNet
+
+        解析流程：
+        1. 检查帮助参数 --help，如果存在则显示帮助信息并退出
+        2. 遍历命令行参数，识别组和参数
+        3. 将参数按组分类存储
+        4. 应用参数覆盖到配置管理器
+
+        参数分组机制：
+        - 每个参数必须属于一个组
+        - 组以 '-' 开头（如：-data）
+        - 参数以 '--' 开头（如：--device）
+        - 参数会应用到其前面的组中
+
+        异常处理：
+        - 未知组名：抛出 ValueError
+        - 未分组的参数：显示错误信息并退出
+        - 无效参数：显示帮助信息并退出
+
+        返回值：
+            None
+
+        异常：
+            ValueError: 当遇到未知的组名或参数应用失败时抛出
+
+        示例：
+            >>> # 命令行：python script.py -core --device 0,1,2 --batch_size 32
+            >>> # 结果：core 组的 device 参数设置为 [0, 1, 2]，batch_size 参数设置为 32
+
+        注意：
+            - 参数值会自动进行类型转换（int, float, bool, list, str）
+            - 逗号分隔的值会自动转换为列表
+            - 布尔标志参数只需指定参数名，值自动设为 True
+        """
+        # 检查是否是 --help
+        if len(sys.argv) > 1 and sys.argv[1] == '--help':
+            self._show_help()
+            sys.exit(0)
+
+        # 允许无参数
+        if len(sys.argv) <= 1:
+            return
+
+        groups = {key: {} for key in self.config_manager.link.keys()}  # 空字典
+        current_group = None
+
+        i = 1  # 跳过脚本名
+        while i < len(sys.argv):
+            arg = sys.argv[i]
+
+            # 检查是否是 --help（可能在中间位置）
+            if arg == '--help':
+                self._show_help()
+                sys.exit(0)
+
+            # 以 - 开头（但不是 --）的是组
+            if arg.startswith('-') and not arg.startswith('--'):
+                group_name = arg[1:]  # 去掉开头的 -
+                current_group = group_name
+
+                # 初始化组
+                if group_name not in groups:
+                    raise ValueError(f"Unknown group name: {group_name}, available groups: {list(groups.keys())}")
+
+                i += 1
+                continue
+
+            # 以 -- 开头的是参数
+            elif arg.startswith('--'):
+                if current_group is None:
+                    print(f"Error: Parameter '{arg}' is not preceded by a group specification!")
+                    self._show_help()
+                    sys.exit(1)
+
+                # 处理 --key=value 格式
+                if '=' in arg:
+                    key_value = arg[2:]  # 去掉开头的 --
+                    key, value = key_value.split('=', 1)
+                    groups[current_group][key] = self._convert_value(value)
+                    i += 1
+                else:
+                    # 处理 --key value 格式
+                    key = arg[2:]  # 去掉开头的 --
+
+                    # 检查下一个参数是否是值（不是组且不是参数）
+                    if i + 1 < len(sys.argv):
+                        next_arg = sys.argv[i + 1]
+                        if not next_arg.startswith('-'):
+                            value = next_arg
+                            groups[current_group][key] = self._convert_value(value)
+                            i += 2
+                        else:
+                            # 下一个参数是组或参数，当前参数作为布尔标志
+                            groups[current_group][key] = True
+                            i += 1
+                    else:
+                        # 最后一个参数，作为布尔标志
+                        groups[current_group][key] = True
+                        i += 1
+            else:
+                print(f"Error: Ungrouped parameter '{arg}'!")
+                print("All parameters must belong to a group (starting with -)")
+                self._show_help()
+                sys.exit(1)
+
+        # 应用参数覆盖到配置管理器
+        for group_name, params in groups.items():
+            if params:  # 只覆盖有参数的组
+                try:
+                    self.set_config_overrides(link_type=group_name, **params)
+                    LOGGER.info(f"command override {group_name} group params: {params}")
+                except Exception as e:
+                    raise ValueError(f"command override {group_name} group params error: {e}")
+
+        # 验证至少有一个组有参数（如果有命令行参数的话）
+        has_any_params = any(params for params in groups.values())
+        if len(sys.argv) > 1 and not has_any_params:
+            print("Error: No valid group parameters provided in command line arguments!")
+            self._show_help()
+            sys.exit(1)
+
+    @staticmethod
+    def _convert_value(value):
+        """
+        转换参数值，支持将逗号分隔的字符串转换为列表
+
+        Args:
+            value: 原始字符串值
+
+        Returns:
+            转换后的值，可能是基本类型或列表
+        """
+        # 如果是逗号分隔的字符串，转换为列表
+        if isinstance(value, str) and ',' in value:
+            # 分割字符串并去除每个元素的首尾空格
+            parts = [part.strip() for part in value.split(',')]
+
+            # 尝试将每个部分转换为适当的数据类型
+            converted_parts = []
+            for part in parts:
+                if part:
+                    converted_parts.append(TTBaseCore._convert_single_value(part))
+
+            return converted_parts
+
+        # 单个值的正常转换
+        return TTBaseCore._convert_single_value(value)
+
+    @staticmethod
+    def _convert_single_value(value):
+        """
+        转换单个参数值
+
+        Args:
+            value: 原始字符串值
+
+        Returns:
+            转换后的值（int, float, bool 或 str）
+        """
+        if not isinstance(value, str):
+            return value
+
+        # 布尔值转换
+        if value.lower() in ('true', 'false'):
+            return value.lower() == 'true'
+
+        # 整数转换
+        try:
+            return int(value)
+        except ValueError:
+            pass
+
+        # 浮点数转换
+        try:
+            return float(value)
+        except ValueError:
+            pass
+
+        # 保持原字符串
+        return value
+
+    @staticmethod
+    def _show_help():
+        """显示帮助信息"""
+        print("用法: python script.py [--help] [组] [参数] [组] [参数] ...")
+        print("\n选项:")
+        print("  --help                显示此帮助信息")
+        print("\n规则:")
+        print("  - 以 - 开头的为组（如: -core, -dataset）")
+        print("  - 以 -- 开头的为参数（如: --project_name, --workers=4）")
+        print("  - 布尔类型值支持: true/false、yes/no、on/off，（如： -core --ema false）")
+        print("  - 参数必须跟在组后面")
+        print("\n示例:")
+        print("  python script.py --help")
+        print("  python script.py -core --epochs 10 --batch_size 16 -dataset --cache")
+        print("  python script.py -core --epochs=10 --batch_size=16 -dataset --cache=false")
+        print("  python script.py                      # 无参数运行")
