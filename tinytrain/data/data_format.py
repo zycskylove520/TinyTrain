@@ -25,13 +25,13 @@ from __future__ import annotations
 from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Any
-
-from tinytrain.data.base.base_dataset import TTBaseDataset
 from tinytrain.global_var.types import BoxFormat
 
 if TYPE_CHECKING:
     import torch
     import numpy as np
+
+    from tinytrain.data.base.base_dataset import TTBaseDataset
 
 
 # region
