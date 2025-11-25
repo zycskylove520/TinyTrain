@@ -14,7 +14,7 @@ REG = {
     "C3": "tinytrain.modules.block.yolo.C3",
     "C3Ghost": "tinytrain.modules.block.yolo.C3Ghost",
     "C3k": "tinytrain.modules.block.yolo.C3k",
-    "C3k2": "tinytrain.modules.block.yolo.C3k2",
+    "C3k2": "tinytrain.modules.block.new_block.C3k2",
     "CBA": "tinytrain.modules.conv.CBA",
     "ClassifyHead": "tinytrain.modules.head.common.ClassifyHead",
     "Combine": "tinytrain.modules.joint.Combine",
