@@ -40,11 +40,11 @@ from tinytrain.utils.checks import check_image_and_label, check_image, IMG_FORMA
 from tinytrain.utils.data_utils import save_dict_cache_file, cv_imread, get_hash, load_dict_cache_file, save_image_cache_file
 
 from .augment import ClassificationAugmentation
-from .base.base_dataset import TTBaseMapDataset
+from .base.base_dataset import TTMapDataset
 from .data_format import ClassifyDataInfo, ClassifyBatchDataInfo
 
 
-class TTYOLOVisionDataset(TTBaseMapDataset):
+class TTYOLOVisionDataset(TTMapDataset):
     """
     YOLO目录格式视觉数据集 **通用基类**。
     YOLO格式数据集目录如下：
