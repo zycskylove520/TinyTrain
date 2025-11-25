@@ -28,7 +28,7 @@ from pathlib import Path
 from torch import nn
 from typing import Dict, Iterable, Set, Type, List, Tuple, Optional, ClassVar, Callable, Union, Final
 
-from tinytrain.global_var import ASSETS_PATH
+from tinytrain.global_var import ASSETS_PATH, RANK
 from tinytrain.utils import LOGGER
 
 
@@ -521,7 +521,9 @@ class TTModuleRegistry:
                 importlib.import_module(root)
 
             cls.write_cache()
-            LOGGER.info(f"Registry snapshot saved to: {cls._CACHE_FILE}")
+
+            if RANK == -1:
+                LOGGER.info(f"Registry snapshot saved to: {cls._CACHE_FILE}")
 
     @classmethod
     def write_cache(cls):
