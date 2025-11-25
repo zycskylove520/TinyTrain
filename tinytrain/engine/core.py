@@ -116,30 +116,85 @@ class TTBaseCore:
     # ------------------------------------------------------------------
     def set_config_overrides(self, link_type: str = 'core', **kwargs):
         """
-        在运行时动态覆盖指定配置段（link 除外）。
+        在运行时动态覆盖指定配置段的参数，支持所有配置类型。
+
+        支持覆盖核心配置、模型配置、数据集配置等，也支持动态切换配置文件链接。
 
         Args:
-            link_type (str): 配置段名称，如 "core"、"model"、"dataset" 等。
-            **kwargs: 需要覆盖的键值对。
+            link_type (str): 配置段名称，如 "core", "model", "dataset" 等。
+                - 使用 'link' 可以动态切换配置文件路径
+                - 其他类型直接覆盖对应配置段的参数
+            **kwargs: 需要覆盖的键值对参数。
 
         Raises:
-            KeyError: 试图覆盖 link 段。
-            AttributeError: 不存在的配置段。
+            ValueError: 当尝试覆盖 register_name 字段时。
+            AttributeError: 当指定的配置段不存在时。
+
+        Example:
+            >>> # 覆盖核心配置参数
+            >>> set_config_overrides('core', learning_rate=0.001, batch_size=32)
+            >>> # 动态切换模型配置文件
+            >>> set_config_overrides('link', model='path/to/new_model.toml')
         """
-        if link_type in {'link', "register_name"}:
-            raise KeyError(f"The 'set_config_overrides' function does not support setting link_type: {link_type}. Please set them manually.")
+        # 安全检查：禁止覆盖 register_name
+        if link_type == "register_name":
+            raise ValueError(
+                f"Cannot override 'register_name' field via set_config_overrides(). "
+                f"Please set it manually during initialization."
+            )
+
+        # 处理链接文件重配置
+        if link_type == 'link':
+            LOGGER.warning(
+                "When modifying link configurations, ensure changes are applied "
+                "before parameters in subordinate configuration files are overwritten."
+            )
+            self.config_manager.rebuild_link_type(**kwargs)
+            LOGGER.info(
+                f"Successfully updated {len(kwargs)} parameters in '{link_type}': "
+                f"{list(kwargs.keys())}"
+            )
+            return
+
+        # 处理普通配置段参数覆盖
         try:
-            config = getattr(self.config_manager, link_type)
-            update_dict = {}
-            for k, v in kwargs.items():
-                if k in config:
-                    update_dict[k] = v
+            config_section = getattr(self.config_manager, link_type)
+
+            # 分离有效参数和无效参数
+            valid_updates = {}
+            ignored_params = []
+
+            for key, value in kwargs.items():
+                if key in config_section:
+                    valid_updates[key] = value
                 else:
-                    LOGGER.warning(f"{k} is not in {link_type} config. This parameter will be ignored!")
-            config = {**config, **update_dict}
-            setattr(self.config_manager, link_type, config)
+                    ignored_params.append(key)
+
+            # 记录警告信息
+            if ignored_params:
+                LOGGER.warning(
+                    f"Ignored {len(ignored_params)} unrecognized parameters in '{link_type}': "
+                    f"{ignored_params}. Available parameters: {list(config_section.keys())}"
+                )
+
+            # 更新配置（保持字典顺序）
+            updated_config = {**config_section, **valid_updates}
+            setattr(self.config_manager, link_type, updated_config)
+
+            # 记录成功更新的参数
+            if valid_updates:
+                LOGGER.info(
+                    f"Successfully updated {len(valid_updates)} parameters in '{link_type}': "
+                    f"{list(valid_updates.keys())}"
+                )
+
         except AttributeError:
-            raise AttributeError(f"Config type '{link_type}' is not supported.")
+            available_sections = [attr for attr in dir(self.config_manager)
+                                  if not attr.startswith('_') and attr not in ['link', 'register_name']]
+            raise AttributeError(
+                f"Config section '{link_type}' not found. "
+                f"Available sections: {available_sections}"
+            )
 
     @staticmethod
     def exclude_from_resume():
@@ -466,8 +521,6 @@ class TTBaseCore:
                     raise KeyError(f"{self.config_manager.link['model']} not support scale:{self.config_manager.model['scale']}")
 
                 self.config_manager.model["scale"] = model_scale
-            else:
-                self.config_manager.model["scale"] = scales[0]
 
             self.model = TTEngineRegistry.get(self.config_manager, "model")(self.config_manager, self.device)
 
@@ -993,7 +1046,7 @@ class TTBaseCore:
         if len(sys.argv) <= 1:
             return
 
-        groups = {key: {} for key in self.config_manager.link.keys()}  # 空字典
+        groups = {"link": {}, **{key: {} for key in self.config_manager.link.keys()}}  # 空字典
         current_group = None
 
         i = 1  # 跳过脚本名
@@ -1056,11 +1109,11 @@ class TTBaseCore:
                 sys.exit(1)
 
         # 应用参数覆盖到配置管理器
+        LOGGER.info(f"Command line arguments override...")
         for group_name, params in groups.items():
             if params:  # 只覆盖有参数的组
                 try:
                     self.set_config_overrides(link_type=group_name, **params)
-                    LOGGER.info(f"command override {group_name} group params: {params}")
                 except Exception as e:
                     raise ValueError(f"command override {group_name} group params error: {e}")
 

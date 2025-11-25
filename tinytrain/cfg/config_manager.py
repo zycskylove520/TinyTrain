@@ -123,6 +123,15 @@ class TTConfigManager(SimpleNamespace):
         else:
             raise ValueError(f"TTConfigManager unsupported file type: {config_file.suffix}")
 
+    def rebuild_link_type(self, **kwargs):
+        """
+        重新构建link文件内部指向文件。
+        """
+        for link_file_name, link_file_path in kwargs.items():
+            self.link[link_file_name] = check_file(link_file_path)
+            data = self.load_config_file(link_file_path)
+            setattr(self, link_file_name, data)
+
     @staticmethod
     def load_toml(toml_file: str | Path) -> Dict:
         """
