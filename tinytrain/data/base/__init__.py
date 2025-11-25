@@ -20,7 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-from .base_dataset import TTBaseMapDataset, TTBaseIterableDataset
+from .base_dataset import TTMapDataset, TTIterableDataset
 from .base_augment import TTBaseAugmentation
 
-__all__ = ['TTBaseMapDataset', 'TTBaseIterableDataset', 'TTBaseAugmentation']
+__all__ = ['TTMapDataset', 'TTIterableDataset', 'TTBaseAugmentation']
