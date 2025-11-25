@@ -1,7 +1,7 @@
 # Copyright (c) 2025 zycskylove520 - MIT License
 
 core = "cfg/core.toml"
-model = "cfg/yolo11-cls.toml"
+model = "cfg/yolov11-cls.toml"
 loss = "cfg/loss-cls.toml"
 dataset = "cfg/dataset-cls.toml"
 augment = "cfg/augment-cls.toml"

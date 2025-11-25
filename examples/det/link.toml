@@ -1,9 +1,9 @@
 # Copyright (c) 2025 zycskylove520 - MIT License
 
-core = "cfg\\core.toml"
-model = "cfg\\yolo11-det.toml"
-loss = "cfg\\loss-det.toml"
-dataset = "cfg\\dataset-det.toml"
-augment = "cfg\\augment-det.toml"
-inference = "cfg\\inference-det.toml"
-tracker = "cfg\\byte_tracker.toml"
+core = "cfg/core.toml"
+model = "cfg/yolov11-det.toml"
+loss = "cfg/loss-det.toml"
+dataset = "cfg/dataset-det.toml"
+augment = "cfg/augment-det.toml"
+inference = "cfg/inference-det.toml"
+tracker = "cfg/byte_tracker.toml"
