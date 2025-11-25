@@ -25,7 +25,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from tinytrain.modules.conv import CBA
-
 from tinytrain.cfg import TTModuleRegistry
 
 
