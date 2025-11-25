@@ -26,6 +26,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Any
 
+from tinytrain.data.base.base_dataset import TTBaseDataset
 from tinytrain.global_var.types import BoxFormat
 
 if TYPE_CHECKING:
@@ -47,12 +48,17 @@ class BaseDataInfo:
     - **智能深拷贝**：通过 __deepcopy__ 跳过指定字段，避免多进程/多线程拷贝大对象或共享资源。
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self,
+                 dataset: TTBaseDataset | None = None,
+                 **kwargs
+                 ):
         """
         Args:
+            dataset (TTBaseDataset): 一个指向使用该数据结构的类的引用，用于在数据增强时做Mosic、CopyPaste等操作。
             **kwargs: 任意键值对，将动态绑定为成员变量。
         """
         super().__init__()
+        self.dataset = dataset
         self.__exclude_from_deepcopy = set()  # 定义不参与深拷贝的字段集合
         for key, value in kwargs.items():
             setattr(self, key, value)
@@ -142,7 +148,6 @@ class ImgDataInfo(BaseDataInfo):
         self.origin_shape = origin_shape
         self.target_shape = target_shape
         self.img_file = img_file
-
 
 
 class ClassifyDataInfo(ImgDataInfo):
