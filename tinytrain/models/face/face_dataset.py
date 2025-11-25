@@ -32,7 +32,7 @@ FaceRecognitionTrainDataset
     4. 返回 ClassifyDataInfo 结构体，collate 后得到 ClassifyBatchDataInfo
 
 FaceRecognitionValidDataset
-    继承自 TTBaseMapDataset，用于“配对”验证（verification）。
+    继承自 TTMapDataset，用于“配对”验证（verification）。
     支持：
     1. 读取 *.txt 列表，每行格式：img1_path img2_path is_same(0/1)
     2. 返回 (sample1, sample2, is_pair) 三元组
@@ -50,7 +50,7 @@ from PIL import Image
 from torchvision.datasets.folder import ImageFolder
 from torchvision.transforms import transforms
 
-from tinytrain.data.base import TTBaseMapDataset
+from tinytrain.data.base import TTMapDataset
 from tinytrain.data.data_format import ClassifyDataInfo, ClassifyBatchDataInfo, BaseBatchDataInfo
 from tinytrain.utils import LOGGER
 from tinytrain.utils.any_utils import make_N_tuple
@@ -172,7 +172,7 @@ class FaceRecognitionTrainDataset(ImageFolder):
         )
 
 
-class FaceRecognitionValidDataset(TTBaseMapDataset):
+class FaceRecognitionValidDataset(TTMapDataset):
     """
     人脸识别验证数据集（配对任务）
     列表文件格式（txt）：
