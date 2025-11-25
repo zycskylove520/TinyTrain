@@ -1,10 +1,11 @@
-# <div align="center">TinyTrain: 轻量级AI框架</div>
+<p align="center">
+  <img src="tinytrain/assets/images/logo.png" alt="TinyTrain Logo"/>
+</p>
 
-<div align="center">轻量级 · 高效 · 易用的AI模型开发全流程框架</div>
 
+<h3 align="center">开源全栈AI框架 · 开启AI思想的无限可能</h3>
 ***
-
-<div align="center">
+<div>
 
 ![visitors](https://visitor-badge.laobi.icu/badge?page_id=zycskylove520/TinyTrain)
 [![GitHub Repo stars](https://img.shields.io/github/stars/zycskylove520/TinyTrain)](https://github.com/zycskylove520/TinyTrain/stargazers)
