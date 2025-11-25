@@ -20,12 +20,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import torch.nn as nn
+from torch import nn
+
 from ptflops import get_model_complexity_info
 
-def get_model_info(model: nn.Module,
-                   input_shape=(3, 224, 224),
-                   print_table=False):
+
+def get_any_model_info(model: nn.Module,
+                       input_shape=(3, 224, 224),
+                       print_table=False):
     """
     返回一个 dict，包含：
         layers       : int   – 网络总层数（可训练+不可训练）
@@ -54,9 +56,53 @@ def get_model_info(model: nn.Module,
     )
 
 
+def get_tt_model_info(core, scale='nsmlx', input_shape=(3, 224, 224)):
+    info_dict = {}
+    for i in scale:
+        model = core.get_model(model_scale=i)
+        info = get_any_model_info(model, input_shape=input_shape)
+        info_dict[i] = f"{info['layers']} layers, {info['parameters']} parameters, {info['gradients']} gradients, {info['gflops']} GFLOPs"
+
+    print("summary: \n")
+    for k, v in info_dict.items():
+        print(f"{k}: {v}")
+
+
+# ==================================================================
+# 下面开始 pytest 用例
+# ==================================================================
+try:
+    import pytest
+except ImportError as e:
+    raise ImportError(
+        "TinyTrain 的测试依赖 pytest，请先安装：\n"
+        "  pip install -U pytest\n"
+    )
+
+
+# ------------------------------------------------------------------
+# 1. 获取任意模型信息
+# ------------------------------------------------------------------
+def test_get_any_model_info():
+    from torchvision.models import resnet18
+
+    net = resnet18(pretrained=False)
+    info = get_any_model_info(net, input_shape=(3, 224, 224))
+    print(f"{info['layers']} layers, {info['parameters']} parameters, {info['gradients']} gradients, {info['gflops']} GFLOPs")
+
+
+def test_get_tt_model_info():
+    import os
+
+    from tinytrain.models.yolo import YOLOCore
+    from tinytrain import ROOT
+
+    os.chdir(ROOT.parent / "examples/cls")  # Tinytrain/examples/cls
+
+    yolo = YOLOCore(link_file="link.toml")
+    get_tt_model_info(yolo, scale="nsmlx", input_shape=(3, 640, 640))
+
+
 # ------------------- 使用示例 -------------------
 if __name__ == "__main__":
-    from torchvision.models import resnet18
-    net = resnet18(pretrained=False)
-    info = get_model_info(net, input_shape=(3, 224, 224))
-    print(f"{info['layers']} layers, {info['parameters']} parameters, {info['gradients']} gradients, {info['gflops']} GFLOPs")
+    pytest.main([__file__, "-v"])

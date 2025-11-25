@@ -21,12 +21,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-# test_progress.py
 import time
 import random
 import threading
+
 from tinytrain.utils.progress_bar import TTProgressBar
 
+
+# ==================================================================
+# 下面开始 pytest 用例
+# ==================================================================
+try:
+    import pytest
+except ImportError as e:
+    raise ImportError(
+        "TinyTrain 的测试依赖 pytest，请先安装：\n"
+        "  pip install -U pytest\n"
+    )
 
 # ---------- 1 ~ 12 号测试函数 ----------
 def test_01_simple_for():
@@ -141,22 +152,8 @@ def test_12_set_title():
         bar.set_title("【阶段 3】完成")
 
 
-# ---------- 统一入口 ----------
+# ==================================================================
+# pytest 入口
+# ==================================================================
 if __name__ == "__main__":
-    tests = [
-        test_01_simple_for,
-        test_02_disable,
-        test_03_disable_color,
-        test_04_with_manual_update,
-        test_05_update_bulk,
-        test_06_random_color,
-        test_07_show_percent,
-        test_08_custom_title,
-        test_09_dynamic_desc,
-        test_10_multithread_nested,
-        test_11_set_description,
-        test_12_set_title,
-    ]
-    for t in tests:
-        t()
-    print("\n✅ 所有测试完成！")
+    pytest.main([__file__, "-v"])
