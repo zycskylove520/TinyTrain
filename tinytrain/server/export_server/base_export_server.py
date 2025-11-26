@@ -36,7 +36,8 @@ class TTBaseExportServer:
 
     子类需要实现 `export` 方法，完成从 PyTorch 模型到指定后端格式的转换。
     """
-    def __init__(self, model: nn.Module, device: torch.device):
+
+    def __init__(self, model: nn.Module, device: torch.device, export_dir: Path):
         """
         初始化导出服务器基类。
 
@@ -46,32 +47,28 @@ class TTBaseExportServer:
             已加载权重的 PyTorch 模型。
         device : torch.device
             模型所在的计算设备（cpu / cuda）。
+        export_dir : Path
+            导出目录。
         """
         from torch import nn
 
         assert isinstance(model, nn.Module)
         self.model = model
         self.device = device
+        self.export_dir = export_dir
 
-    def __call__(self, export_dir: Path):
+    def validate_and_set_kwargs(self, kwargs):
+        pass
+
+    def __call__(self):
         """
         允许实例像函数一样被直接调用，内部转发到 `export` 方法。
-
-        Args
-        ----
-        export_dir : Path
-            导出目录。
         """
-        self.export(export_dir)
+        self.export()
 
-    def export(self, export_dir:Path) -> None:
+    def export(self) -> None:
         """
         执行模型导出流程，由子类实现。
-
-        Args
-        ----
-        export_dir : Path
-            导出目录。
 
         Raises
         ----

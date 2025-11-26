@@ -22,3 +22,4 @@ SOFTWARE.
 
 from .base_export_server import TTBaseExportServer
 from .onnx_export_server import TTBaseOnnxExportServer
+from .tensorrt_export_server import TTBaseTensorRTExportServer
