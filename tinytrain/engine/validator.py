@@ -83,11 +83,11 @@ class TTBaseValidator:
         # callback
         self.callbacks = trainer.callbacks
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self):
         """
-        使验证器实例可调用，等价于 self.validate(*args, **kwargs)。
+        使验证器实例可调用，等价于 self.validate()。
         """
-        self.validate(*args, **kwargs)
+        return self.validate()
 
     # ------------------------------------------------------------------
     # 2. 主验证流程（唯一公开主链）

@@ -45,22 +45,17 @@ class YOLOSegmentPredictor(TTBasePredictor):
     输出：SegmentDataInfo（含 img + bboxes + mask）
     """
 
-    def __init__(self,
-                 config_manager,
-                 device: torch.device,
-                 model,
-                 callback,
-                 backend=None,
-                 **kwargs):
+    def __init__(self, config_manager, device: torch.device, model, callback, backend=None, **kwargs):
         super().__init__(config_manager=config_manager, device=device, model=model, callback=callback, backend=backend, **kwargs)
 
-        self.img_shape = kwargs.get("img_shape")
+        self.img_shape = kwargs.pop("img_shape", None)
 
         # 绑定跟踪服务
         self.tracker_server = None
-        if kwargs.get("track", False):
-            assert isinstance(kwargs["track"], bool)
-            track_backend = kwargs.get("track_backend", "bytetrack")
+        track = kwargs.pop("track", False)
+        assert isinstance(track, bool)
+        if track:
+            track_backend = kwargs.pop("track_backend", "bytetrack")
             self.tracker_server = TTEngineRegistry.get(self.config_manager, "track_server", track_backend)(config_manager=self.config_manager, callback=self.callback)
 
     # ---------- 前处理 ----------

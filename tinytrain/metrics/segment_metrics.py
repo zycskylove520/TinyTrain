@@ -96,7 +96,7 @@ class SegmentImgResult(BaseImgResult):
         bboxes = cxcywh_2_lxlyrxry(pred[:, :4])
         confs = pred[:, 4].cpu().numpy()
         labels = pred[:, 5].cpu().numpy()
-        proto = kwargs['proto']
+        proto = kwargs.pop('proto')
         pred_mask_vec = pred[:, 6:]
         pred_masks = decode_pred_masks(proto, bboxes, pred_mask_vec,
                                        self.target_shape,

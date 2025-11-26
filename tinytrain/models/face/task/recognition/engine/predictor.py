@@ -61,7 +61,7 @@ class FaceRecognitionPredictor(TTBasePredictor):
         """
         super().__init__(config_manager=config_manager, device=device, model=model, callback=callback, backend=backend, **kwargs)
 
-        self.img_shape = kwargs.get("img_shape")
+        self.img_shape = kwargs.pop("img_shape", None)
         if self.img_shape is None:
             raise ValueError("img_shape must be set")
 

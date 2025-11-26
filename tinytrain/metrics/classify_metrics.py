@@ -200,7 +200,7 @@ class ClassifyImgResult(BaseImgResult):
     def __init__(self, save_dir: Path, plot_count: int = 4, mode: str = "val", max_sub_len: int = 3, rgb=True, **kwargs):
         super().__init__(save_dir, plot_count, mode, max_sub_len, rgb)
         # 额外存一份 class_names
-        self.class_names = kwargs.get('class_names_dict', {})
+        self.class_names = kwargs.pop('class_names_dict', {})
         self.title = None
 
     def _prepare_imgs(self, batch_samples):

@@ -255,7 +255,7 @@ class TTBaseTrainer:
         """
         pass
 
-    def make_param_groups(self, model: TTBaseModel, lr, weight_decay, **kwargs) -> dict:
+    def make_param_groups(self, model: TTBaseModel, lr, weight_decay) -> dict:
         """
         将模型参数划分为不同的优化组（parameter group），用于后续构造优化器。
 

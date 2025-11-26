@@ -43,24 +43,19 @@ class YOLOPosePredictor(TTBasePredictor):
     输出：PoseDataInfo（含 img + bboxes + keypoints）
     """
 
-    def __init__(self,
-                 config_manager,
-                 device: torch.device,
-                 model,
-                 callback,
-                 backend=None,
-                 **kwargs):
+    def __init__(self, config_manager, device: torch.device, model, callback, backend=None, **kwargs):
         super().__init__(config_manager=config_manager, device=device, model=model, callback=callback, backend=backend, **kwargs)
 
-        self.img_shape = kwargs.get("img_shape")
+        self.img_shape = kwargs.pop("img_shape", None)
         self.keypoint_shape = self.config_manager.dataset["keypoint_shape"]
         self.mask_threshold = self.config_manager.inference["predict_mask_threshold"]
 
         # 绑定跟踪服务
         self.tracker_server = None
-        if kwargs.get("track", False):
-            assert isinstance(kwargs["track"], bool)
-            track_backend = kwargs.get("track_backend", "bytetrack")
+        track = kwargs.pop("track", False)
+        assert isinstance(track, bool)
+        if track:
+            track_backend = kwargs.pop("track_backend", "bytetrack")
             self.tracker_server = TTEngineRegistry.get(self.config_manager, "track_server", track_backend)(config_manager=self.config_manager, callback=self.callback)
 
     # ---------- 前处理 ----------
@@ -148,7 +143,7 @@ class YOLOPosePredictor(TTBasePredictor):
         bboxes = result.bboxes
         labels = result.label.astype(np.int32)  # 类别索引
         scores = result.scores  # 置信度
-        keypoints = result.keypoints # 关键点
+        keypoints = result.keypoints  # 关键点
         for idx, box in enumerate(bboxes):
             # 画框
             x1, y1, x2, y2 = map(int, box)

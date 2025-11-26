@@ -37,14 +37,7 @@ class LPRPredictor(TTBasePredictor):
     输出：每张图片的 logits 或 softmax 概率
     """
 
-    def __init__(self,
-                 config_manager,
-                 device,
-                 model,
-                 callback,
-                 backend=None,
-                 **kwargs
-                 ):
+    def __init__(self,config_manager,device,model,callback,backend=None,**kwargs):
         super().__init__(config_manager=config_manager, device=device, model=model, callback=callback, backend=backend, **kwargs)
         self.chars_dict = {int(idx): char for idx, char in self.config_manager.dataset["names"].items()}
 

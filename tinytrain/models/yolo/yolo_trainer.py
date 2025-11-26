@@ -27,7 +27,7 @@ from tinytrain.engine.trainer import TTBaseTrainer
 
 
 class YOLOTrainer(TTBaseTrainer):
-    def make_param_groups(self, model: TTBaseModel, lr, weight_decay, **kwargs) -> dict:
+    def make_param_groups(self, model: TTBaseModel, lr, weight_decay) -> dict:
         # 所有可训练参数，按 name 排序保证 DDP 一致性
         named_params = sorted(
             [(n, p) for n, p in self.model.named_parameters() if p.requires_grad],

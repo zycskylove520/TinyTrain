@@ -44,7 +44,7 @@ class ByteTrackServer(TTBaseTrackServer):
     在预测器运行期间，实时更新轨迹、绘制结果并支持保存图片 / 视频 / 实时显示。
     """
 
-    def __init__(self, config_manager: TTConfigManager, callback: Callback, **kwargs):
+    def __init__(self, config_manager: TTConfigManager, callback: Callback):
         """
         初始化 ByteTrack 跟踪服务器。
 
@@ -54,10 +54,8 @@ class ByteTrackServer(TTBaseTrackServer):
             全局配置管理器，用于读取 tracker 超参（min_box_area、save_img 等）。
         callback : Callback
             回调注册器，用于挂载 on_predict_start / on_predict_batch_end / on_predict_end 钩子。
-        **kwargs
-            透传给 BYTETracker 的初始化参数。
         """
-        super().__init__(config_manager, callback, **kwargs)
+        super().__init__(config_manager, callback)
         self.img_shape = None
         self.tracker = BYTETracker(config_manager)
         self.stop_show_window = False
@@ -81,7 +79,7 @@ class ByteTrackServer(TTBaseTrackServer):
         callback.add_callback(Events.ON_PREDICT_BATCH_END, self.update_track_results)
         callback.add_callback(Events.ON_PREDICT_END, self.on_predict_end)
 
-    def logger_record(self, predictor: TTBasePredictor):
+    def logger_record(self, _):
         """预测开始时记录日志。"""
         LOGGER.info("start tracking...")
 
@@ -127,13 +125,13 @@ class ByteTrackServer(TTBaseTrackServer):
 
         self.track_results = track_results
 
-    def on_predict_end(self, predictor: TTBasePredictor):
+    def on_predict_end(self, _):
         """
         预测结束后整理跟踪结果并生成视频。
 
         Args
         ----
-        predictor : TTBasePredictor
+        _
             预测器实例，用于获取输出目录等信息。
         """
         if self.video_writer is not None:

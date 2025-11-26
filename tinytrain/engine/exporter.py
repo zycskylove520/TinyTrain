@@ -79,14 +79,16 @@ class TTBaseExporter:
         # select device
         self.device = device
 
+        # save dir
+        core = self.config_manager.core
+        save_dir = Path(core["save_dir"]).resolve() / (core["project_name"] or "default_project") / core["task"] / "export"
+        self.output_dir = create_iter_directory(save_dir, start_string="export_")
+
         # 根据模型类型初始化导出服务
         self.export_server = self._setup_export_server(model=model, **kwargs)
 
         # callback
         self.callback = callback
-
-        # save dir
-        self.output_dir = None
 
     # ------------------------------------------------------------------
     # 2. 唯一公开主链
@@ -100,13 +102,9 @@ class TTBaseExporter:
         """
         import torch
 
-        core = self.config_manager.core
-        save_dir = Path(core["save_dir"]).resolve() / (core["project_name"] or "default_project") / core["task"] / "export"
-        self.output_dir = create_iter_directory(save_dir, start_string="export_")
-
         self.callback.run_callback(Events.ON_EXPORT_START, self)
         with torch.inference_mode():
-            self.export_server.export(self.output_dir)
+            self.export_server.export()
         self.callback.run_callback(Events.ON_EXPORT_END, self)
 
         LOGGER.info(f"Export result saved in directory -> {self.output_dir}")
@@ -133,6 +131,6 @@ class TTBaseExporter:
         if isinstance(model, nn.Module):
             model = model.to(self.device)
             model.eval()
-            return TTEngineRegistry.get(self.config_manager, "export_server", self.backend)(model=model, device=self.device, **kwargs)
+            return TTEngineRegistry.get(self.config_manager, "export_server", self.backend)(model=model, device=self.device, export_dir=self.output_dir, **kwargs)
         else:
             raise TypeError(f"only supported pytorch model!")

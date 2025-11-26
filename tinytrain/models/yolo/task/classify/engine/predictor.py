@@ -38,16 +38,9 @@ class YOLOClassificationPredictor(TTBasePredictor):
     输出：每张图片的 logits 或 softmax 概率
     """
 
-    def __init__(self,
-                 config_manager,
-                 device,
-                 model,
-                 callback,
-                 backend=None,
-                 **kwargs
-                 ):
+    def __init__(self, config_manager, device, model, callback, backend=None, **kwargs):
         super().__init__(config_manager=config_manager, device=device, model=model, callback=callback, backend=backend, **kwargs)
-        self.img_shape = kwargs.get("img_shape")
+        self.img_shape = kwargs.pop("img_shape", None)
 
         if self.img_shape is None:
             raise ValueError("img_shape must be set")

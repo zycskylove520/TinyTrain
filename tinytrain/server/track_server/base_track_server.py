@@ -44,7 +44,7 @@ class TTBaseTrackServer:
     3. 提供统一的接口 `update`，将检测框更新为跟踪轨迹。
     """
 
-    def __init__(self, config_manager: TTConfigManager, callback: Callback, **kwargs):
+    def __init__(self, config_manager: TTConfigManager, callback: Callback):
         """
         初始化跟踪服务器。
 
@@ -54,8 +54,6 @@ class TTBaseTrackServer:
             全局配置，用于读取跟踪器超参。
         callback : Callback
             回调注册器，用于在 predictor 生命周期钩子中挂载自定义逻辑。
-        **kwargs
-            透传给具体跟踪器的额外参数，如 track_thresh、match_thresh 等。
         """
         self.config_manager = config_manager
         self.tracker = None
