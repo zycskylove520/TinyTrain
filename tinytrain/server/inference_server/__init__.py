@@ -22,3 +22,4 @@ SOFTWARE.
 
 from .base_inference_server import TTBaseInferenceServer
 from .onnx_inference_server import TTBaseOnnxInferenceServer
+from .tensorrt_inference_server import TTBaseTensorRTInferenceServer
