@@ -97,7 +97,6 @@ class YOLOClassificationTrainer(YOLOTrainer):
             train_dataset: list[ClassifyDataInfo] = self.train_dataloader.dataset
             labels = []
             for sample in train_dataset:
-                print(f"sample: {sample.label}")
                 labels.append(sample.label)
             labels = np.array(labels)
 
